@@ -75,6 +75,11 @@ export default function App() {
   const [rankGroup, setRankGroup] = useState<'all' | ClassGroup>('all');
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
+  // Học sinh đang chờ duyệt: chọn lớp của mình ở màn hình chờ duyệt.
+  const [pendingClassId, setPendingClassId] = useState('');
+  const [pendingBusy, setPendingBusy] = useState(false);
+  const [pendingMsg, setPendingMsg] = useState('');
+  const [pendingErr, setPendingErr] = useState('');
 
   useEffect(() => { localStorage.setItem(LS_KEY, JSON.stringify(state)); }, [state]);
   useEffect(() => { if (session) localStorage.setItem(LS_SESSION, JSON.stringify(session)); else localStorage.removeItem(LS_SESSION); }, [session]);
@@ -120,6 +125,8 @@ export default function App() {
   // Từ tài khoản Supabase -> hồ sơ (profiles) -> vai trò trong app.
   // Hồ sơ chưa có (đăng ký / đăng nhập lần đầu) thì tự tạo theo quy tắc
   // khởi tạo trong ensureProfile: hồ sơ đầu tiên thành admin, còn lại chờ duyệt.
+  // Chỉ tài khoản đã duyệt mới có phiên làm việc (session); tài khoản
+  // đang chờ duyệt / bị khóa thì session = null để hiện màn hình chờ duyệt.
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     if (!authUser) { setProfile(null); setSession(null); setProfileErr(''); return; }
@@ -128,7 +135,8 @@ export default function App() {
       .then(p => {
         if (!alive) return;
         setProfile(p);
-        setSession({ role: p.role, name: p.full_name, id: p.id, email: p.email });
+        if (p.status === 'active') setSession({ role: p.role, name: p.full_name, id: p.id, email: p.email });
+        else setSession(null);
         setProfileErr('');
       })
       .catch(e => { if (alive) setProfileErr(`Không tải được hồ sơ: ${e instanceof Error ? e.message : 'lỗi không rõ'}. Kiểm tra xem đã chạy supabase/schema.sql chưa.`); });
@@ -141,17 +149,19 @@ export default function App() {
     listProfiles().then(setProfiles).catch(() => { /* hiển thị trống, lỗi sẽ thấy khi thao tác */ });
   }, [profile]);
 
-  // Tải dữ liệu dùng chung từ Supabase sau khi đăng nhập (tài khoản đã duyệt).
-  // Chưa có dòng dữ liệu trên Supabase thì đẩy dữ liệu đang có trên máy này lên.
+  // Tải dữ liệu dùng chung từ Supabase sau khi đăng nhập.
+  // Tài khoản chưa duyệt chỉ tải về để xem danh sách lớp (điền thông tin
+  // ở màn hình chờ duyệt), không đẩy dữ liệu máy này lên; chỉ tài khoản
+  // đã duyệt mới đẩy lên khi chưa có dòng dữ liệu trên Supabase.
   useEffect(() => {
-    if (!isSupabaseConfigured || profile?.status !== 'active' || remoteLoaded || remoteLoadingRef.current) return;
+    if (!isSupabaseConfigured || !profile || remoteLoaded || remoteLoadingRef.current) return;
     remoteLoadingRef.current = true;
     fetchSharedState()
       .then(async row => {
         if (row.data) {
           setState(row.data);
           remoteUpdatedAtRef.current = row.updatedAt;
-        } else {
+        } else if (profile.status === 'active') {
           const at = await saveSharedState(loadState(), profile.full_name);
           remoteUpdatedAtRef.current = at;
           lastSavedAtRef.current = at;
@@ -246,6 +256,23 @@ export default function App() {
     } catch {
       setErrs(['Không cập nhật được tài khoản. Kiểm tra lại Supabase (đã chạy schema.sql chưa).']);
     }
+  }
+
+  // Học sinh đang chờ duyệt tự lưu lớp của mình (màn hình chờ duyệt).
+  async function savePendingClass() {
+    if (!profile) return;
+    const cid = pendingClassId || profile.assigned_class_id || '';
+    if (!cid) { setPendingErr('Bạn chọn lớp của mình trước nhé.'); return; }
+    setPendingBusy(true); setPendingErr(''); setPendingMsg('');
+    try {
+      await updateProfile(profile.id, { assigned_class_id: cid });
+      setProfile({ ...profile, assigned_class_id: cid });
+      setPendingClassId(cid);
+      setPendingMsg(`Đã lưu lớp của bạn: ${state.classes.find(c => c.id === cid)?.name ?? ''}. Ban thi đua duyệt tài khoản là bạn vào nhập điểm được ngay.`);
+    } catch (e) {
+      setPendingErr(`Chưa lưu được: ${e instanceof Error ? e.message : 'lỗi không rõ'}. Bạn thử lại nhé.`);
+    }
+    setPendingBusy(false);
   }
 
   // Ban thi đua xóa tài khoản: gỡ hồ sơ khỏi bảng profiles, người đó không vào app được nữa.
@@ -395,7 +422,29 @@ export default function App() {
           <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1></div></div></div></header>
           <main className="wrap"><div className="card"><h2>{profile.status === 'pending' ? 'Tài khoản đang chờ Ban thi đua duyệt' : 'Tài khoản đã bị khóa'}</h2>
           <p>Xin chào <b>{profile.full_name}</b> ({profile.email}). {profile.status === 'pending' ? 'Tài khoản của bạn đang chờ Ban thi đua duyệt. Sau khi được duyệt, bạn đăng nhập lại là vào được hệ thống.' : 'Tài khoản của bạn đã bị Ban thi đua khóa. Bạn liên hệ Ban thi đua để được mở lại.'}</p>
-          <div className="row"><button className="btn grey" type="button" onClick={handleSignOut}>Đăng xuất</button></div></div></main></div>
+          <div className="row"><button className="btn grey" type="button" onClick={handleSignOut}>Đăng xuất</button></div></div>
+          {profile.status === 'pending' && profile.role === 'codo' && (
+            <div className="card"><h2>Hoàn thiện thông tin của bạn</h2>
+            <p>Trong lúc chờ duyệt, bạn chọn sẵn lớp mình đang học để Ban thi đua khỏi phải hỏi lại nhé. Tuần trực thì Ban thi đua sẽ gán cho bạn khi duyệt.</p>
+            <label>Lớp của bạn</label>
+            {state.classes.length === 0 ? (
+              <p>Chưa có lớp nào trong hệ thống — Ban thi đua sẽ gán lớp cho bạn sau khi duyệt.</p>
+            ) : (
+              <select value={pendingClassId || profile.assigned_class_id || ''} onChange={e => setPendingClassId(e.target.value)}>
+                <option value="">— Chọn lớp —</option>
+                {state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            )}
+            {state.classes.length > 0 && (
+              <div className="row" style={{ marginTop: 10 }}>
+                <button className="btn" type="button" disabled={pendingBusy} onClick={savePendingClass}>{pendingBusy ? 'Đang lưu…' : 'Lưu lớp của tôi'}</button>
+              </div>
+            )}
+            {pendingMsg && <div className="ok">{pendingMsg}</div>}
+            {pendingErr && <div className="err">{pendingErr}</div>}
+            </div>
+          )}
+          </main></div>
         );
       }
       if (authUser && !profile) {
