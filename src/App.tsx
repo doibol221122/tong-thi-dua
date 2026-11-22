@@ -546,6 +546,7 @@ export default function App() {
   });
   return (
     <div>
+      <div className="top-sticky">
       {updateAvailable && !updateDismissed && (
         <div className="update-banner">
           <span>Đã có bản cập nhật mới của app.</span>
@@ -563,6 +564,7 @@ export default function App() {
           <button type="button" className="btn logout" onClick={handleSignOut}>{isSupabaseConfigured ? 'Đăng xuất' : 'Đổi vai trò'}</button>
         </div>
       </div></header>
+      </div>
       <main className="wrap">
         <div className="tabs">{tabs.map(([k, l]) => <button key={k} type="button" className={tab === k ? 'on' : ''} onClick={() => switchTab(k)}>{l}</button>)}</div>
         {msg && <div className="ok">{msg}</div>}
