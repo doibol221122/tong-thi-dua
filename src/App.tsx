@@ -59,9 +59,33 @@ export default function App() {
   const [returnReason, setReturnReason] = useState('');
   const [showPhieu, setShowPhieu] = useState(false);
   const [rankGroup, setRankGroup] = useState<'all' | ClassGroup>('all');
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [updateDismissed, setUpdateDismissed] = useState(false);
 
   useEffect(() => { localStorage.setItem(LS_KEY, JSON.stringify(state)); }, [state]);
   useEffect(() => { if (session) localStorage.setItem(LS_SESSION, JSON.stringify(session)); else localStorage.removeItem(LS_SESSION); }, [session]);
+
+  // Tự kiểm tra bản mới: khi mở app, mỗi lần quay lại app và mỗi 5 phút,
+  // so version.json trên máy chủ với số hiệu bản đang chạy (__BUILD_V__).
+  // Chỉ hiện thông báo, không tự tải lại để không mất phiếu đang nhập dở.
+  useEffect(() => {
+    let stopped = false;
+    const check = async () => {
+      if (!navigator.onLine) return;
+      try {
+        const r = await fetch('/version.json', { cache: 'no-store' });
+        if (!r.ok) return;
+        const j = await r.json() as { v?: number };
+        if (typeof j.v !== 'number' || j.v === 0) return;
+        if (__BUILD_V__ !== 0 && j.v !== __BUILD_V__ && !stopped) setUpdateAvailable(true);
+      } catch { /* ngoại tuyến hoặc chưa có version.json: bỏ qua */ }
+    };
+    check();
+    const id = window.setInterval(check, 5 * 60 * 1000);
+    const onVisible = () => { if (document.visibilityState === 'visible') check(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { stopped = true; window.clearInterval(id); document.removeEventListener('visibilitychange', onVisible); };
+  }, []);
 
   // Theo dõi phiên Supabase (đăng nhập / đăng xuất / làm mới token).
   useEffect(() => {
@@ -384,6 +408,13 @@ export default function App() {
   const tabs: [string, string][] = [['tong-quan', 'Tổng quan'], ['nhap-diem', 'Nhập điểm'], ['xep-hang', 'Xếp hạng'], ['tong-hop', 'Tổng hợp'], ['quan-ly', 'Quản lý'], ['lich-su', 'Lịch sử']];
   return (
     <div>
+      {updateAvailable && !updateDismissed && (
+        <div className="update-banner">
+          <span>Đã có bản cập nhật mới của app.</span>
+          <button type="button" onClick={() => { if (dirty && !window.confirm('Phiếu đang nhập dở chưa lưu — cập nhật ngay sẽ mất phần chưa lưu. Cập nhật luôn?')) return; window.location.reload(); }}>Cập nhật ngay</button>
+          <button type="button" className="ghost" onClick={() => setUpdateDismissed(true)}>Để sau</button>
+        </div>
+      )}
       <header className="top"><div className="top-inner">
         <div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1></div></div>
         <div className="userbox">

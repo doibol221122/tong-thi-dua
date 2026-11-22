@@ -73,3 +73,6 @@ th{background:#f8fafc}
 .extra-row{display:grid;grid-template-columns:130px 1fr;gap:8px;margin-bottom:8px}
 .extra-row input[type=number]{text-align:center;font-weight:700}
 @media(max-width:480px){.extra-row{grid-template-columns:110px 1fr}}
+.update-banner{position:sticky;top:0;z-index:60;display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;background:#7f1d1d;color:#fff;padding:10px 12px;font-weight:700;text-align:center}
+.update-banner button{background:#fff;color:#7f1d1d;border:none;border-radius:8px;padding:8px 14px;font-weight:800;min-height:36px;cursor:pointer}
+.update-banner button.ghost{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.7)}

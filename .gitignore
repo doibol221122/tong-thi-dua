@@ -29,3 +29,6 @@ public/logo-512.png
 public/logo-512-maskable.png
 public/apple-touch-icon.png
 public/logo.jpg
+
+# Số hiệu bản build, tạo tự động lúc build (scripts/gen-version.mjs)
+public/version.json
