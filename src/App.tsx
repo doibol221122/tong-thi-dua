@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, ClassGroup, ClassItem, Details, ExtraLine, Role, Score, Week } from './lib';
-import { calcScore, classAvg, classGroup, clsOf, currentMonth, downloadBlob, emptyDetails, emptyState, groupLabel, hocTapLines, monthLabel, monthOfWeek, neNepLines, nowStr, sectionSums, toCsv, uid, validateDetails } from './lib';
+import { calcScore, classAvg, classGroup, clsOf, currentMonth, downloadBlob, emptyDetails, emptyState, groupLabel, hocTapLines, monthLabel, monthOfWeek, neNepLines, nowStr, sectionSums, toCsv, uid, validateDetails, violationStats } from './lib';
 import { exportClassDocx, exportWeekDocx } from './docxExport';
 import { LOGO_DATA_URI } from './logoData';
 import AuthScreen from './AuthScreen';
@@ -570,7 +570,7 @@ export default function App() {
         {session.role === 'codo' && assignment && <div className="warn">Bạn đang nhập cho lớp {state.classes.find(c => c.id === assignment.classId)?.name} — {state.weeks.find(w => w.id === assignment.weekId)?.label}. Chỉ nhập và nộp được lớp này.</div>}
         {currentScore?.status === 'returned' && <div className="err">Phiếu bị trả lại — lý do: {currentScore.returnReason}. Sửa lại rồi nộp lại nhé.</div>}
 
-        {tab === 'tong-quan' && <Overview state={state} week={week} role={session.role} assignment={assignment?.classId && assignment?.weekId ? { classId: assignment.classId, weekId: assignment.weekId } : undefined} onEnterScores={() => { if (assignment) { setWeekId(assignment.weekId); setClassId(assignment.classId); switchTab('nhap-diem'); } }} />}
+        {tab === 'tong-quan' && <Overview state={state} week={week} role={session.role} assignment={assignment?.classId && assignment?.weekId ? { classId: assignment.classId, weekId: assignment.weekId } : undefined} onEnterScores={() => { if (assignment) { setWeekId(assignment.weekId); setClassId(assignment.classId); switchTab('nhap-diem'); } }} onGoTab={switchTab} onOpenClass={(cid: string) => { if (confirmDirty()) { setWeekId(effectiveWeekId); setClassId(cid); setTab('nhap-diem'); setDirty(false); } }} />}
         {tab === 'nhap-diem' && (!week ? (
           <div className="card"><h2>Nhập điểm</h2><p>Chưa có tuần nào nên chưa nhập điểm được.</p>{session.role === 'admin' ? <><p>Tạo tuần đầu tiên để bắt đầu chấm thi đua nhé.</p><div className="row"><button className="btn" type="button" onClick={() => setTab('quan-ly')}>Sang tab Quản lý tạo tuần</button></div></> : <p>Nhờ Ban thi đua tạo tuần nhé.</p>}</div>
         ) : session.role === 'codo' && !assignment ? (
@@ -609,19 +609,23 @@ export default function App() {
   );
 }
 
-function Overview({ state, week, role, assignment, onEnterScores }: {
+function Overview({ state, week, role, assignment, onEnterScores, onGoTab, onOpenClass }: {
   state: AppState; week?: Week;
   role: Role;
   assignment?: { classId: string; weekId: string };
   onEnterScores: () => void;
+  onGoTab?: (tab: string) => void;
+  onOpenClass?: (classId: string) => void;
 }) {
-  // Cờ đỏ: chỉ thấy phần việc của mình — lớp, tuần, trạng thái phiếu của mình.
-  // Không thấy số liệu toàn trường, danh sách lớp cần nhắc hay cảnh báo duyệt (việc của Ban thi đua).
+  // Cờ đỏ: chỉ thấy phần việc của mình — lớp, tuần, trạng thái phiếu và
+  // vi phạm của chính lớp mình. Không thấy số liệu toàn trường, danh sách
+  // lớp cần nhắc hay cảnh báo duyệt (việc của Ban thi đua).
   if (role === 'codo') {
     const clsName = assignment ? state.classes.find(c => c.id === assignment.classId)?.name : undefined;
     const wk = assignment ? state.weeks.find(w => w.id === assignment.weekId) : undefined;
     const myScore = assignment ? state.scores.find(s => s.weekId === assignment.weekId && s.classId === assignment.classId) : undefined;
     const myCalc = myScore ? calcScore(myScore.details) : undefined;
+    const myViol = myScore ? violationStats([myScore], state.classes) : null;
     return (
       <div>
         <div className="card"><h2>Lớp của bạn</h2>
@@ -637,6 +641,18 @@ function Overview({ state, week, role, assignment, onEnterScores }: {
             </>
           )}
         </div>
+        {myViol && (
+          <div className="card"><h2>Vi phạm của lớp bạn{wk ? ` — ${wk.label}` : ''}</h2>
+            {myViol.topViolations.length === 0 ? <p>Phiếu tuần này của lớp bạn chưa ghi nhận vi phạm nào.</p> : (
+              <>
+                <p>Tổng {myViol.totalCount} lượt vi phạm theo phiếu tuần này.</p>
+                {myViol.topViolations.map(v => (
+                  <div key={v.key} className="vbar-row"><span className="vbar-label">{v.label}</span><div className="vbar"><div style={{ width: `${Math.max(4, Math.round((v.count / myViol.topViolations[0].count) * 100))}%` }} /></div><b>{v.count} lượt</b></div>
+                ))}
+              </>
+            )}
+          </div>
+        )}
         <div className="card"><h2>Quy trình làm việc</h2>
           <div className="steps"><span>1. Nháp</span><i>→</i><span>2. Cờ đỏ nộp</span><i>→</i><span>3. Ban thi đua duyệt</span><i>→</i><span>4. Chốt tuần</span></div>
           <p>Chỉ phiếu đã duyệt mới vào xếp hạng chính thức. Trả lại phải kèm lý do.</p>
@@ -644,24 +660,50 @@ function Overview({ state, week, role, assignment, onEnterScores }: {
       </div>
     );
   }
-  // Ban thi đua / Chỉ xem: bảng tổng hợp toàn trường như cũ.
+  // Ban thi đua / Chỉ xem: bảng tổng hợp toàn trường.
   const total = state.classes.length;
   const approved = week ? state.scores.filter(s => s.weekId === week.id && s.status === 'approved').length : 0;
   const submitted = week ? state.scores.filter(s => s.weekId === week.id && s.status === 'submitted').length : 0;
   const missing = state.classes.filter(c => !week || !state.scores.some(s => s.weekId === week.id && s.classId === c.id));
   const anomalies = week ? state.scores.filter(s => s.weekId === week.id && (calcScore(s.details).final > 150 || calcScore(s.details).final < 50)) : [];
+  // Vi phạm: chỉ tính phiếu đã duyệt của tuần hiện tại.
+  const approvedWeek = week ? state.scores.filter(s => s.weekId === week.id && s.status === 'approved') : [];
+  const viol = violationStats(approvedWeek, state.classes);
+  const violMax = viol.topViolations.length ? viol.topViolations[0].count : 0;
   return (
     <div>
       <div className="kpi">
         <div><b>{state.weeks.length}</b>Tuần</div><div><b>{total}</b>Lớp</div>
-        <div><b>{approved}/{total}</b>Đã duyệt</div><div><b>{submitted}</b>Chờ duyệt</div>
+        <button type="button" className="kpi-btn" onClick={() => onGoTab?.('xep-hang')}><b>{approved}/{total}</b>Đã duyệt</button>
+        <button type="button" className="kpi-btn" onClick={() => onGoTab?.('nhap-diem')}><b>{submitted}</b>Chờ duyệt</button>
       </div>
+      {week && <p>Tuần hiện tại: <b>{week.label}</b> {week.dateRange} {week.submittedAt ? `— Đã nộp ${week.submittedAt}` : '— Chưa chốt'}</p>}
+      <div className="card"><h2>Vi phạm thường gặp{week ? ` — ${week.label}` : ''}</h2>
+        {!week ? <p>Chưa có tuần nào nên chưa có thống kê vi phạm. Tạo tuần ở tab Quản lý để bắt đầu.</p> : viol.topViolations.length === 0 ? <p>Chưa ghi nhận lượt vi phạm nào trong các phiếu đã duyệt của tuần này.</p> : (
+          <>
+            <p>Chỉ tính phiếu đã duyệt — tổng {viol.totalCount} lượt vi phạm.</p>
+            {viol.topViolations.map(v => (
+              <div key={v.key} className="vbar-row"><span className="vbar-label">{v.label}</span><div className="vbar"><div style={{ width: `${Math.max(4, Math.round((v.count / violMax) * 100))}%` }} /></div><b>{v.count} lượt</b></div>
+            ))}
+          </>
+        )}
+      </div>
+      <div className="card"><h2>Cảnh báo lớp vi phạm{week ? ` — ${week.label}` : ''}</h2>
+        {!week ? <p>Chưa có tuần nào nên chưa có cảnh báo.</p> : viol.classWarnings.length === 0 ? <p>Chưa ghi nhận lượt vi phạm nào trong các phiếu đã duyệt của tuần này.</p> : (
+          <div>{viol.classWarnings.map(c => (
+            <div key={c.classId} className="warn-row">
+              <div><b>{c.name}</b> — {c.total} lượt vi phạm</div>
+              <div>Hay vi phạm: {c.top.map(t => `${t.label} ×${t.count}`).join(', ')}</div>
+              <div className="row">{c.total >= 5 && <span className="badge warn">Cần nhắc nhở</span>}{onOpenClass && <button className="btn ghost" type="button" onClick={() => onOpenClass(c.classId)}>Xem phiếu</button>}</div>
+            </div>
+          ))}</div>
+        )}
+      </div>
+      <div className="card"><h2>Lớp cần nhắc</h2>{!week ? <p>Chưa có tuần nào — tạo tuần ở tab Quản lý để bắt đầu chấm.</p> : missing.length === 0 ? <p>Tất cả các lớp đã có phiếu.</p> : <p>{missing.map(c => <span key={c.id} className="chip-mini">{c.name}</span>)}</p>}</div>
+      {anomalies.length > 0 && <div className="card"><h2>Cảnh báo bất thường</h2>{anomalies.map(s => <p key={s.id}>Lớp {state.classes.find(c => c.id === s.classId)?.name}: {calcScore(s.details).final}đ — kiểm tra lại số liệu trước khi duyệt.</p>)}</div>}
       <div className="card"><h2>Quy trình làm việc</h2>
         <div className="steps"><span>1. Nháp</span><i>→</i><span>2. Cờ đỏ nộp</span><i>→</i><span>3. Ban thi đua duyệt</span><i>→</i><span>4. Chốt tuần</span></div>
-        <p>Chỉ phiếu đã duyệt mới vào xếp hạng chính thức. Trả lại phải kèm lý do.</p>
-        {week && <p>Tuần hiện tại: <b>{week.label}</b> {week.dateRange} {week.submittedAt ? `— Đã nộp ${week.submittedAt}` : '— Chưa chốt'}</p>}</div>
-      <div className="card"><h2>Lớp cần nhắc</h2>{missing.length === 0 ? <p>Tất cả các lớp đã có phiếu.</p> : <p>{missing.map(c => <span key={c.id} className="chip-mini">{c.name}</span>)}</p>}</div>
-      {anomalies.length > 0 && <div className="card"><h2>Cảnh báo bất thường</h2>{anomalies.map(s => <p key={s.id}>Lớp {state.classes.find(c => c.id === s.classId)?.name}: {calcScore(s.details).final}đ — kiểm tra lại số liệu trước khi duyệt.</p>)}</div>}
+        <p>Chỉ phiếu đã duyệt mới vào xếp hạng chính thức. Trả lại phải kèm lý do.</p></div>
     </div>
   );
 }
