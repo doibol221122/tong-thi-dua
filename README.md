@@ -20,6 +20,30 @@ Hệ thống tổng kết thi đua tuần cho Ban thi đua. Chấm điểm theo 
 Bản deploy tĩnh trên Vercel, dữ liệu lưu trong trình duyệt (localStorage).
 Dùng **Quản lý → Sao lưu dữ liệu** để xuất/nhập file JSON, tránh mất dữ liệu khi đổi máy.
 
+## Đăng nhập dùng chung cho mọi máy (Supabase, miễn phí)
+Chưa cấu hình Supabase thì app chạy chế độ cũ: mở lên chọn vai trò,
+dữ liệu chỉ lưu trên máy đó. Để có đăng nhập + dữ liệu dùng chung:
+1. Tạo project miễn phí tại https://supabase.com/dashboard → **New project**
+   (chọn region gần nhất, đặt mật khẩu database rồi giữ lại).
+2. Vào project → **SQL Editor** → **New query**, dán toàn bộ nội dung file
+   `supabase/schema.sql` trong repo này rồi bấm **Run**. File này tạo 2 bảng
+   `profiles` (hồ sơ tài khoản) và `app_state` (dữ liệu tuần/lớp/phiếu dùng chung)
+   kèm Row Level Security.
+3. Vào **Project Settings → API**, copy **Project URL** và **anon public key**.
+4. Vào Vercel → project `tong-thi-dua` → **Settings → Environment Variables**,
+   thêm `VITE_SUPABASE_URL` = Project URL và `VITE_SUPABASE_ANON_KEY` = anon key
+   (chỉ dùng anon key, KHÔNG dùng service_role key), rồi **Redeploy**.
+   Chạy tại chỗ thì copy `.env.example` thành `.env` rồi điền 2 giá trị trên.
+5. Mở app, bấm **Đăng ký**: tài khoản **đầu tiên** đăng ký sẽ thành **Ban thi đua**
+   (quản trị, được vào ngay). Các tài khoản sau đăng ký vai trò **Cờ đỏ trực**
+   hoặc **Chỉ xem**, đều ở trạng thái **chờ duyệt** và chỉ vào được sau khi
+   Ban thi đua bấm **Duyệt** ở **Quản lý → Tài khoản**. Ban thi đua cũng gán
+   lớp/tuần cho cờ đỏ, đổi vai trò, khóa/mở tài khoản ở đó.
+6. Quên mật khẩu: bấm **Quên mật khẩu** ở màn hình đăng nhập, Supabase gửi
+   email đặt lại (cần bật email trong Supabase Auth; mặc định đã bật).
+Lưu ý: tài khoản và dữ liệu dùng chung nằm trên Supabase, không còn trong
+file JSON sao lưu cũ. Xuất JSON trong app vẫn dùng được để sao lưu dự phòng.
+
 ## Chạy tại chỗ
 ```bash
 npm install
