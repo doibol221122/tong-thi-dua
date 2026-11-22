@@ -67,3 +67,9 @@ th{background:#f8fafc}
 @media(max-width:760px){.rolecard{grid-template-columns:1fr}}
 .rolecard button{padding:16px;border-radius:14px;border:2px solid #d7dce6;background:#fff;text-align:left}
 .rolecard button:hover{border-color:#991b1b}
+.extra-head{display:inline-block;padding:4px 12px;border-radius:999px;font-weight:800;font-size:13px;color:#fff;margin:6px 0 8px}
+.extra-head.plus{background:#15803d}
+.extra-head.minus{background:#dc2626}
+.extra-row{display:grid;grid-template-columns:130px 1fr;gap:8px;margin-bottom:8px}
+.extra-row input[type=number]{text-align:center;font-weight:700}
+@media(max-width:480px){.extra-row{grid-template-columns:110px 1fr}}

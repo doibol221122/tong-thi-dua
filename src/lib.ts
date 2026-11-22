@@ -11,6 +11,8 @@ export interface Settings {
 export interface Week { id: string; label: string; dateRange: string; month?: string; submittedAt?: string | null; submittedBy?: string | null; }
 export interface ClassItem { id: string; name: string; }
 export interface Roster { id: string; name: string; classId: string; weekId: string; active: boolean; }
+export interface ExtraLine { points: number; note: string; }
+
 export interface Details {
   hoursTot: number; hoursKha: number; hoursTb: number; hoursYeu: number;
   allGood?: boolean; // Tích tay: 100% giờ Tốt (+20đ)
@@ -21,6 +23,8 @@ export interface Details {
   food: number; dress: number; skip: number; dishonest: number; parking: number;
   phone: number; traffic: number; fight: number;
   bonusYouth: number; bonusSweep: number; bonusNtvt: number;
+  extraPlus?: ExtraLine[]; // Cộng đột xuất: tối đa 5 dòng, mỗi dòng điểm + nội dung
+  extraMinus?: ExtraLine[]; // Trừ đột xuất: tối đa 5 dòng, mỗi dòng điểm + nội dung
   names: string; opinionClass: string; opinionCodo: string;
 }
 export interface Score {
@@ -88,6 +92,7 @@ export function emptyDetails(): Details {
     food: 0, dress: 0, skip: 0, dishonest: 0, parking: 0,
     phone: 0, traffic: 0, fight: 0,
     bonusYouth: 0, bonusSweep: 0, bonusNtvt: 0,
+    extraPlus: [], extraMinus: [],
     names: '', opinionClass: '', opinionCodo: '',
   };
 }
@@ -106,17 +111,19 @@ export function isNoAbsentLate(d: Details): boolean {
   return d.noAbsLate === true || (d.noAbsLate === undefined && d.absentTotal === 0 && d.late === 0);
 }
 
+const extraSum = (list?: ExtraLine[]) => (list ?? []).reduce((a, x) => a + Math.max(0, x.points || 0), 0);
+
 export function calcScore(d: Details): Calc {
   const totalHours = d.hoursTot + d.hoursKha + d.hoursTb + d.hoursYeu;
   const autoGood = totalHours > 0 && d.hoursKha === 0 && d.hoursTb === 0 && d.hoursYeu === 0;
   const is100Tot = d.allGood === true || (d.allGood === undefined && autoGood);
   const noAbsentLate = isNoAbsentLate(d);
-  const plus = (is100Tot ? 20 : 0) + d.goodHigh * 1 + d.bonusYouth * 20 + d.bonusSweep * 10 + d.bonusNtvt * 10 + (noAbsentLate ? 10 : 0);
+  const plus = (is100Tot ? 20 : 0) + d.goodHigh * 1 + d.bonusYouth * 20 + d.bonusSweep * 10 + d.bonusNtvt * 10 + (noAbsentLate ? 10 : 0) + extraSum(d.extraPlus);
   const minus = d.hoursKha * 1 + d.hoursTb * 3 + d.hoursYeu * 5
     + d.goodLow * 1 + d.studyViol * 1 + d.cheating * 10
     + d.absentNoPermit * 5 + d.late * 2 + d.noisy * 5 + d.privateWork * 2
     + d.lateDuty * 2 + d.dirty * 5 + d.food * 2 + d.dress * 1 + d.skip * 5
-    + d.dishonest * 5 + d.parking * 5 + d.phone * 10 + d.traffic * 10 + d.fight * 20;
+    + d.dishonest * 5 + d.parking * 5 + d.phone * 10 + d.traffic * 10 + d.fight * 20 + extraSum(d.extraMinus);
   const final = 100 + plus - minus;
   const cls = final >= 80 ? 'A' : final >= 65 ? 'B' : final >= 50 ? 'C' : 'D';
   return { plus, minus, final, cls, totalHours, is100Tot, noAbsentLate };
@@ -149,6 +156,7 @@ export function hocTapLines(d: Details): string[] {
   if (d.bonusYouth) out.push(`Công trình thanh niên: +${d.bonusYouth * 20}đ`);
   if (d.bonusSweep) out.push(`Quét sân: +${d.bonusSweep * 10}đ`);
   if (d.bonusNtvt) out.push(`NTVT: +${d.bonusNtvt * 10}đ`);
+  (d.extraPlus ?? []).filter(x => x.points > 0 || x.note.trim()).forEach(x => out.push(`${x.note.trim() || 'Cộng khác'}: +${Math.max(0, x.points || 0)}đ`));
   return out.length ? out : ['—'];
 }
 export function neNepLines(d: Details): string[] {
@@ -170,6 +178,7 @@ export function neNepLines(d: Details): string[] {
   if (d.phone) out.push(`Dùng điện thoại trong giờ học: ${d.phone} lượt (-${d.phone * 10})`);
   if (d.traffic) out.push(`Vi phạm ATGT: ${d.traffic} lượt (-${d.traffic * 10})`);
   if (d.fight) out.push(`Đánh nhau, vô lễ với GV: ${d.fight} lượt (-${d.fight * 20})`);
+  (d.extraMinus ?? []).filter(x => x.points > 0 || x.note.trim()).forEach(x => out.push(`${x.note.trim() || 'Trừ khác'}: -${Math.max(0, x.points || 0)}đ`));
   if (d.names.trim()) out.push(`HS vi phạm: ${d.names.trim()}`);
   return out.length ? out : ['—'];
 }

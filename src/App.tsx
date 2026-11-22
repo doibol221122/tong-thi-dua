@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { AppState, ClassGroup, ClassItem, Details, Role, Score, Week } from './lib';
+import type { AppState, ClassGroup, ClassItem, Details, ExtraLine, Role, Score, Week } from './lib';
 import { calcScore, classAvg, classGroup, clsOf, currentMonth, downloadBlob, emptyDetails, emptyState, groupLabel, hocTapLines, monthLabel, monthOfWeek, neNepLines, nowStr, toCsv, uid, validateDetails } from './lib';
 import { exportClassDocx, exportWeekDocx } from './docxExport';
 import { LOGO_DATA_URI } from './logoData';
@@ -513,6 +513,22 @@ function ScoreForm(props: {
   returnReason: string; setReturnReason: (s: string) => void; onReopen: () => void; onCopyPrev: () => void;
   onShowPhieu: () => void; showPhieu: boolean; onExportClass: () => void; sessionRole: Role;
 }) {
+  const extraRow = (key: 'extraPlus' | 'extraMinus', i: number) => {
+    const list = (props.draft[key] ?? []) as ExtraLine[];
+    const row = list[i] ?? { points: 0, note: '' };
+    const setRow = (patch: Partial<ExtraLine>) => {
+      const next = [...list];
+      while (next.length <= i) next.push({ points: 0, note: '' });
+      next[i] = { ...row, ...patch };
+      props.setD(key, next);
+    };
+    return (
+      <div className="extra-row" key={i}>
+        <input type="number" min={0} value={row.points || ''} placeholder={key === 'extraPlus' ? '+ Điểm' : '− Điểm'} disabled={!props.canEdit} onChange={e => setRow({ points: Math.max(0, Number(e.target.value) || 0) })} aria-label={`${key === 'extraPlus' ? 'Cộng' : 'Trừ'} khác ${i + 1} — điểm`} />
+        <input type="text" value={row.note} placeholder={`Nội dung ${i + 1}...`} disabled={!props.canEdit} onChange={e => setRow({ note: e.target.value })} aria-label={`${key === 'extraPlus' ? 'Cộng' : 'Trừ'} khác ${i + 1} — nội dung`} />
+      </div>
+    );
+  };
   const { state, week, draft, calc, canEdit } = props;
   const d = draft;
   const f = (key: keyof Details, label: string, pts: string) => <Stepper label={label} pts={pts} value={d[key] as number} onChange={v => props.setD(key, v as never)} disabled={!canEdit} />;
@@ -569,6 +585,17 @@ function ScoreForm(props: {
               {f('fight', 'Đánh nhau, vô lễ với GV', '-20đ/lượt')}
               <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 700, marginTop: 6 }}><input type="checkbox" checked={calc.noAbsentLate} disabled={!canEdit} onChange={e => props.setD('noAbsLate', e.target.checked)} style={{ width: 22, height: 22 }} /> 100% không vắng, không đi muộn (+10đ)</label>
               {calc.noAbsentLate && (d.absentTotal > 0 || d.late > 0) && <p>Lưu ý: đã tích 100% không vắng, không đi muộn nhưng vẫn có vắng/đi muộn — kiểm tra lại nhé.</p>}
+            </div>
+          </div>
+          <h3>Cộng / trừ đột xuất</h3>
+          <div className="grid2">
+            <div>
+              <span className="extra-head plus">⊕ + CỘNG KHÁC</span>
+              {[0, 1, 2, 3, 4].map(i => extraRow('extraPlus', i))}
+            </div>
+            <div>
+              <span className="extra-head minus">⊖ − TRỪ KHÁC</span>
+              {[0, 1, 2, 3, 4].map(i => extraRow('extraMinus', i))}
             </div>
           </div>
           <label>Tên HS vi phạm (bắt buộc khi có vi phạm)</label>
