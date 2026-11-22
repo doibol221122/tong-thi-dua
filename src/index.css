@@ -45,6 +45,8 @@ label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px}
 .scorebar{position:sticky;bottom:0;background:#111827;color:#fff;border-radius:12px;padding:10px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
 .scorebar b{font-size:20px}
 table{width:100%;border-collapse:collapse;font-size:14px}
+.tablewrap{overflow-x:auto;margin-top:8px}
+.tablewrap table{min-width:560px}
 th,td{border-bottom:1px solid #e5e7eb;padding:8px 6px;text-align:left;vertical-align:top}
 th{background:#f8fafc}
 .podium{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center}
