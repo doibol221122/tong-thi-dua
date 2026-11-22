@@ -548,6 +548,7 @@ function ScoreForm(props: {
               {f('phone', 'Dùng điện thoại trong giờ học', '-10đ/lượt')}
               {f('traffic', 'Vi phạm ATGT', '-10đ/lượt')}
               {f('fight', 'Đánh nhau, vô lễ với GV', '-20đ/lượt')}
+              {calc.noAbsentLate && <p>Đạt 100% không vắng, không đi muộn (+10đ).</p>}
             </div>
           </div>
           <label>Tên HS vi phạm (bắt buộc khi có vi phạm)</label>

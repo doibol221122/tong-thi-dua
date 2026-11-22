@@ -121,7 +121,7 @@ export function validateDetails(d: Details, standardHours: number): string[] {
   else if (standardHours > 0 && total !== standardHours)
     errs.push(`Tổng giờ học là ${total} giờ, lệch so với giờ chuẩn ${standardHours} giờ/tuần. Kiểm tra lại giờ Tốt/Khá/Trung bình/Yếu.`);
   if (d.absentNoPermit > d.absentTotal) errs.push('Số vắng không phép không được lớn hơn tổng số vắng.');
-  if (d.absentPermit + d.absentNoPermit > d.absentTotal && d.absentTotal > 0)
+  if (d.absentPermit + d.absentNoPermit > d.absentTotal)
     errs.push('Số vắng có phép + không phép đang lớn hơn tổng số vắng.');
   const conductViol = d.late + d.noisy + d.privateWork + d.lateDuty + d.dirty + d.food + d.dress + d.skip + d.dishonest + d.parking + d.phone + d.traffic + d.fight;
   if (conductViol > 0 && d.names.trim() === '')
