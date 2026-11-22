@@ -49,7 +49,7 @@ export default function AuthScreen() {
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
-      options: { data: { full_name: fullName.trim(), requested_role: requestedRole } },
+      options: { data: { full_name: fullName.trim(), requested_role: requestedRole }, emailRedirectTo: window.location.origin },
     });
     setBusy(false);
     if (error) { setErr(friendlyError(error.message)); return; }
@@ -58,6 +58,20 @@ export default function AuthScreen() {
     } else {
       setMsg('Đã tạo tài khoản. Tài khoản đang chờ Ban thi đua duyệt.');
     }
+  }
+
+  async function onResend() {
+    if (!supabase) return;
+    if (!email.trim()) { setErr('Bạn nhập email đã đăng ký để gửi lại email xác nhận.'); return; }
+    setBusy(true); setErr(''); setMsg('');
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: email.trim(),
+      options: { emailRedirectTo: window.location.origin },
+    });
+    setBusy(false);
+    if (error) { setErr(friendlyError(error.message)); return; }
+    setMsg('Đã gửi lại email xác nhận. Bạn mở email, bấm link xác nhận rồi quay lại đăng nhập nhé.');
   }
 
   async function onForgot() {
@@ -110,6 +124,7 @@ export default function AuthScreen() {
         {mode !== 'login' && <button className="btn ghost" type="button" onClick={() => { setMode('login'); setErr(''); setMsg(''); }}>Đã có tài khoản — Đăng nhập</button>}
         {mode !== 'register' && <button className="btn ghost" type="button" onClick={() => { setMode('register'); setErr(''); setMsg(''); }}>Chưa có tài khoản — Đăng ký</button>}
         {mode !== 'forgot' && <button className="btn ghost" type="button" onClick={() => { setMode('forgot'); setErr(''); setMsg(''); }}>Quên mật khẩu</button>}
+        {mode === 'login' && <button className="btn ghost" type="button" disabled={busy} onClick={onResend}>{busy ? 'Đang gửi…' : 'Chưa nhận được email? Gửi lại email xác nhận'}</button>}
       </div>
     </div>
   );
