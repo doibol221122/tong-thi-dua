@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Icon PWA tạo tự động lúc build từ logo trong src/logoData.ts (scripts/gen-icons.mjs)
+public/logo-192.png
+public/logo-512.png
+public/logo-512-maskable.png
+public/apple-touch-icon.png
+public/logo.jpg
