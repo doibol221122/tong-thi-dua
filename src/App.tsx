@@ -705,7 +705,6 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
         {!isSupabaseConfigured && <p>Chưa cấu hình Supabase — quản lý tài khoản chỉ dùng được sau khi cấu hình Supabase (xem README).</p>}
         {isSupabaseConfigured && (
           <>
-            <p>Tài khoản đăng ký mới đều ở trạng thái <b>chờ duyệt</b>. Ban thi đua bấm <b>Duyệt</b> để cho vào hệ thống, gán lớp/tuần cho cờ đỏ, đổi vai trò, khóa hoặc xóa tài khoản vi phạm. Xóa tài khoản gỡ hồ sơ khỏi hệ thống (người đó không vào được nữa); muốn xóa hẳn tài khoản đăng nhập thì xóa thêm trong Supabase → Authentication → Users. Tài khoản đầu tiên đăng ký là Ban thi đua.</p>
             <div className="row"><button className="btn ghost" type="button" onClick={onRefreshProfiles}>Làm mới danh sách</button></div>
             {profiles.length === 0 && <p>Chưa có tài khoản nào.</p>}
             {profiles.map(p => (
