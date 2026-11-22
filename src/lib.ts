@@ -110,15 +110,34 @@ export interface Calc { plus: number; minus: number; final: number; cls: string;
 export function isNoAbsentLate(d: Details): boolean {
   return d.noAbsLate === true || (d.noAbsLate === undefined && d.absentTotal === 0 && d.late === 0);
 }
+export function is100Tot(d: Details): boolean {
+  return d.allGood === true || (d.allGood === undefined && d.hoursTot > 0 && d.hoursKha === 0 && d.hoursTb === 0 && d.hoursYeu === 0);
+}
 
 const extraSum = (list?: ExtraLine[]) => (list ?? []).reduce((a, x) => a + Math.max(0, x.points || 0), 0);
 
+export interface SectionSums { hoursPlus: number; hoursMinus: number; hocTapPlus: number; hocTapMinus: number; neNepPlus: number; neNepMinus: number; extraPlus: number; extraMinus: number; }
+
+// Điểm cộng/trừ theo từng mục, dùng cùng quy tắc với calcScore
+// (để tiêu đề mục thu gọn hiển thị đúng số điểm của mục đó).
+export function sectionSums(d: Details): SectionSums {
+  return {
+    hoursPlus: is100Tot(d) ? 20 : 0,
+    hoursMinus: d.hoursKha * 1 + d.hoursTb * 3 + d.hoursYeu * 5,
+    hocTapPlus: d.goodHigh * 1 + d.bonusYouth * 20 + d.bonusSweep * 10 + d.bonusNtvt * 10,
+    hocTapMinus: d.goodLow * 1 + d.studyViol * 1 + d.cheating * 10,
+    neNepPlus: isNoAbsentLate(d) ? 10 : 0,
+    neNepMinus: d.absentNoPermit * 5 + d.late * 2 + d.noisy * 5 + d.privateWork * 2 + d.lateDuty * 2 + d.dirty * 5 + d.food * 2 + d.dress * 1 + d.skip * 5 + d.dishonest * 5 + d.parking * 5 + d.phone * 10 + d.traffic * 10 + d.fight * 20,
+    extraPlus: extraSum(d.extraPlus),
+    extraMinus: extraSum(d.extraMinus),
+  };
+}
+
 export function calcScore(d: Details): Calc {
   const totalHours = d.hoursTot + d.hoursKha + d.hoursTb + d.hoursYeu;
-  const autoGood = totalHours > 0 && d.hoursKha === 0 && d.hoursTb === 0 && d.hoursYeu === 0;
-  const is100Tot = d.allGood === true || (d.allGood === undefined && autoGood);
+  const tot100 = is100Tot(d);
   const noAbsentLate = isNoAbsentLate(d);
-  const plus = (is100Tot ? 20 : 0) + d.goodHigh * 1 + d.bonusYouth * 20 + d.bonusSweep * 10 + d.bonusNtvt * 10 + (noAbsentLate ? 10 : 0) + extraSum(d.extraPlus);
+  const plus = (tot100 ? 20 : 0) + d.goodHigh * 1 + d.bonusYouth * 20 + d.bonusSweep * 10 + d.bonusNtvt * 10 + (noAbsentLate ? 10 : 0) + extraSum(d.extraPlus);
   const minus = d.hoursKha * 1 + d.hoursTb * 3 + d.hoursYeu * 5
     + d.goodLow * 1 + d.studyViol * 1 + d.cheating * 10
     + d.absentNoPermit * 5 + d.late * 2 + d.noisy * 5 + d.privateWork * 2
@@ -126,7 +145,7 @@ export function calcScore(d: Details): Calc {
     + d.dishonest * 5 + d.parking * 5 + d.phone * 10 + d.traffic * 10 + d.fight * 20 + extraSum(d.extraMinus);
   const final = 100 + plus - minus;
   const cls = final >= 80 ? 'A' : final >= 65 ? 'B' : final >= 50 ? 'C' : 'D';
-  return { plus, minus, final, cls, totalHours, is100Tot, noAbsentLate };
+  return { plus, minus, final, cls, totalHours, is100Tot: tot100, noAbsentLate };
 }
 export function validateDetails(d: Details): string[] {
   const errs: string[] = [];

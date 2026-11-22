@@ -44,7 +44,9 @@ label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px}
 .field{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #f0f2f6}
 .field .nm{flex:1;min-width:0}.field .pts{font-size:12px;color:#6b7280}
 @media(max-width:480px){.field{flex-wrap:wrap}.field .nm{flex:1 1 100%}.stepper{margin-left:auto}}
-.scorebar{position:sticky;bottom:0;background:#111827;color:#fff;border-radius:12px;padding:10px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.scorebar{position:sticky;bottom:0;background:#111827;color:#fff;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.scorebar-scores{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.scorebar-btns{display:flex;gap:8px;flex-wrap:wrap}
 .scorebar b{font-size:20px}
 table{width:100%;border-collapse:collapse;font-size:14px}
 .tablewrap{overflow-x:auto;margin-top:8px}
@@ -76,3 +78,39 @@ th{background:#f8fafc}
 .update-banner{position:sticky;top:0;z-index:60;display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;background:#7f1d1d;color:#fff;padding:10px 12px;font-weight:700;text-align:center}
 .update-banner button{background:#fff;color:#7f1d1d;border:none;border-radius:8px;padding:8px 14px;font-weight:800;min-height:36px;cursor:pointer}
 .update-banner button.ghost{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.7)}
+.sec-head{display:flex;gap:8px;align-items:center;justify-content:space-between;width:100%;background:#f8fafc;border:1px solid #e3e7ef;border-radius:10px;padding:10px 12px;margin:12px 0 4px;font-weight:800;font-size:15px;text-align:left}
+.sec-head .sec-sum{margin-left:auto;font-size:13px;font-weight:700;color:#991b1b;white-space:nowrap}
+.sec-body{padding:2px 2px 6px}
+.steps{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:4px 0 8px}
+.steps span{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:999px;padding:4px 10px;font-weight:700;font-size:13px;white-space:nowrap}
+.steps i{color:#9ca3af;font-style:normal}
+.chip-mini{display:inline-block;padding:3px 10px;margin:2px;border:1px solid #fca5a5;color:#991b1b;border-radius:999px;font-size:13px;font-weight:700}
+@media(max-width:760px){
+.top{padding:8px 12px}
+.top-inner{gap:8px}
+.brand .logo{width:42px;height:42px}
+.top h1{font-size:16px}
+.top .school{font-size:11px}
+.userbox{gap:6px}
+.chip{padding:4px 9px;font-size:12px}
+.btn.logout{padding:6px 12px}
+.tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin:10px 0}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex-shrink:0;padding:9px 13px;min-height:40px}
+.row.stack-m{flex-direction:column;align-items:stretch}
+.scorebar{padding:8px 10px}
+.scorebar b{font-size:18px}
+.scorebar-btns .btn{flex:1;padding:8px 10px;min-height:40px;font-size:14px;white-space:nowrap}
+}
+@media(max-width:480px){
+.field{flex-wrap:nowrap;align-items:center;padding:6px 0}
+.field .nm{flex:1 1 auto;min-width:0}
+.stepper button{width:40px;height:40px}
+.stepper input{width:64px}
+}
+.card{padding:12px}
+.card h2{font-size:16px}
+.card h3{margin:10px 0 6px}
+.wrap{padding-bottom:72px}
+.field{padding:6px 0}
+@media(min-width:761px){.scorebar-btns{justify-content:flex-end}.scorebar-btns .btn{flex:0 0 auto}}

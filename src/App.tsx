@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, ClassGroup, ClassItem, Details, ExtraLine, Role, Score, Week } from './lib';
-import { calcScore, classAvg, classGroup, clsOf, currentMonth, downloadBlob, emptyDetails, emptyState, groupLabel, hocTapLines, monthLabel, monthOfWeek, neNepLines, nowStr, toCsv, uid, validateDetails } from './lib';
+import { calcScore, classAvg, classGroup, clsOf, currentMonth, downloadBlob, emptyDetails, emptyState, groupLabel, hocTapLines, monthLabel, monthOfWeek, neNepLines, nowStr, sectionSums, toCsv, uid, validateDetails } from './lib';
 import { exportClassDocx, exportWeekDocx } from './docxExport';
 import { LOGO_DATA_URI } from './logoData';
 import AuthScreen from './AuthScreen';
@@ -28,6 +28,20 @@ function Stepper({ label, pts, value, onChange, disabled }: { label: string; pts
         <input type="number" min={0} value={value} disabled={disabled} onChange={e => onChange(Math.max(0, Number(e.target.value) || 0))} aria-label={label} />
         <button type="button" disabled={disabled} onMouseDown={() => start(1)} onMouseUp={stop} onMouseLeave={stop} onTouchStart={() => start(1)} onTouchEnd={stop} aria-label="Tăng">+</button>
       </div>
+    </div>
+  );
+}
+
+// Một mục trong phiếu nhập điểm: tiêu đề gọn kèm tổng điểm của mục,
+// bấm để thu gọn / mở ra.
+function Section({ title, sum, children }: { title: string; sum: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div>
+      <button type="button" className="sec-head" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span>{title}</span><span className="sec-sum">{sum}</span><span aria-hidden>{open ? '▾' : '▸'}</span>
+      </button>
+      {open && <div className="sec-body">{children}</div>}
     </div>
   );
 }
@@ -471,9 +485,11 @@ function Overview({ state, week }: { state: AppState; week?: Week }) {
         <div><b>{state.weeks.length}</b>Tuần</div><div><b>{total}</b>Lớp</div>
         <div><b>{approved}/{total}</b>Đã duyệt</div><div><b>{submitted}</b>Chờ duyệt</div>
       </div>
-      <div className="card"><h2>Quy trình làm việc</h2><p>1. Nháp → 2. Cờ đỏ nộp → 3. Ban thi đua duyệt / trả lại kèm lý do → 4. Nộp &amp; chốt tuần. Chỉ phiếu đã duyệt mới vào xếp hạng chính thức.</p>
-      {week && <p>Tuần hiện tại: <b>{week.label}</b> {week.dateRange} {week.submittedAt ? `— Đã nộp ${week.submittedAt}` : '— Chưa chốt'}</p>}</div>
-      <div className="card"><h2>Lớp cần nhắc</h2>{missing.length === 0 ? <p>Tất cả các lớp đã có phiếu.</p> : <p>{missing.map(c => c.name).join(', ')}</p>}</div>
+      <div className="card"><h2>Quy trình làm việc</h2>
+        <div className="steps"><span>1. Nháp</span><i>→</i><span>2. Cờ đỏ nộp</span><i>→</i><span>3. Ban thi đua duyệt</span><i>→</i><span>4. Chốt tuần</span></div>
+        <p>Chỉ phiếu đã duyệt mới vào xếp hạng chính thức. Trả lại phải kèm lý do.</p>
+        {week && <p>Tuần hiện tại: <b>{week.label}</b> {week.dateRange} {week.submittedAt ? `— Đã nộp ${week.submittedAt}` : '— Chưa chốt'}</p>}</div>
+      <div className="card"><h2>Lớp cần nhắc</h2>{missing.length === 0 ? <p>Tất cả các lớp đã có phiếu.</p> : <p>{missing.map(c => <span key={c.id} className="chip-mini">{c.name}</span>)}</p>}</div>
       {anomalies.length > 0 && <div className="card"><h2>Cảnh báo bất thường</h2>{anomalies.map(s => <p key={s.id}>Lớp {state.classes.find(c => c.id === s.classId)?.name}: {calcScore(s.details).final}đ — kiểm tra lại số liệu trước khi duyệt.</p>)}</div>}
     </div>
   );
@@ -562,11 +578,13 @@ function ScoreForm(props: {
   };
   const { state, week, draft, calc, canEdit } = props;
   const d = draft;
+  const sec = sectionSums(d);
+  const pm = (plus: number, minus: number) => [plus ? `+${plus}đ` : '', minus ? `−${minus}đ` : ''].filter(Boolean).join(' • ') || '0đ';
   const f = (key: keyof Details, label: string, pts: string) => <Stepper label={label} pts={pts} value={d[key] as number} onChange={v => props.setD(key, v as never)} disabled={!canEdit} />;
   return (
     <div>
       <div className="card">
-        <div className="row">
+        <div className="row stack-m">
           <div style={{ flex: 1, minWidth: 160 }}><label>Tuần</label><select value={props.weekId} onChange={e => props.setWeekId(e.target.value)}>{state.weeks.map(w => <option key={w.id} value={w.id}>{w.label} {w.dateRange}</option>)}</select></div>
           <div style={{ flex: 1, minWidth: 160 }}><label>Tìm lớp</label><input type="text" placeholder="Nhập tên lớp, vd 10B1" value={props.search} onChange={e => props.setSearch(e.target.value)} /></div>
         </div>
@@ -579,7 +597,7 @@ function ScoreForm(props: {
           <div className="row"><button className="btn ghost" type="button" onClick={props.onCopyPrev}>Chép số liệu tuần trước</button><button className="btn ghost" type="button" onClick={props.onShowPhieu}>Xem phiếu tổng kết</button>{props.currentScore && <button className="btn ghost" type="button" onClick={props.onExportClass}>Xuất .docx phiếu này</button>}</div>
           <div className="grid2">
             <div>
-              <h3>Giờ học</h3>
+              <Section title="Giờ học" sum={`Tổng ${calc.totalHours} giờ${calc.is100Tot ? ' • +20đ' : ''}${sec.hoursMinus ? ` • −${sec.hoursMinus}đ` : ''}`}>
               {f('hoursTot', 'Giờ Tốt', '')}
               {f('hoursKha', 'Giờ Khá', '-1đ/giờ')}
               {f('hoursTb', 'Giờ Trung bình', '-3đ/giờ')}
@@ -587,7 +605,8 @@ function ScoreForm(props: {
               <p>Tổng giờ: {calc.totalHours} giờ.</p>
               <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 700, marginTop: 6 }}><input type="checkbox" checked={calc.is100Tot} disabled={!canEdit} onChange={e => props.setD('allGood', e.target.checked)} style={{ width: 22, height: 22 }} /> 100% giờ Tốt (+20đ)</label>
               {calc.is100Tot && (d.hoursKha + d.hoursTb + d.hoursYeu > 0) && <p>Lưu ý: đã tích 100% giờ Tốt nhưng vẫn có giờ Khá/Trung bình/Yếu — kiểm tra lại nhé.</p>}
-              <h3>Về học tập</h3>
+              </Section>
+              <Section title="Về học tập" sum={pm(sec.hocTapPlus, sec.hocTapMinus)}>
               {f('goodHigh', 'Tổng điểm tốt (≥5)', '+1đ/điểm')}
               {f('goodLow', 'Tổng điểm tốt (<5)', '-1đ/điểm')}
               {f('studyViol', 'Vi phạm học tập', '-1đ/lượt: không học bài, không soạn bài, không mang tài liệu')}
@@ -595,9 +614,10 @@ function ScoreForm(props: {
               {f('bonusYouth', 'Công trình thanh niên', '+20đ/lần')}
               {f('bonusSweep', 'Quét sân', '+10đ/lần')}
               {f('bonusNtvt', 'NTVT', '+10đ/lần')}
+              </Section>
             </div>
             <div>
-              <h3>Về nề nếp</h3>
+              <Section title="Về nề nếp" sum={pm(sec.neNepPlus, sec.neNepMinus)}>
               {f('absentTotal', 'Vắng học (tổng)', 'K phép -5đ/lượt')}
               {f('absentPermit', 'Trong đó: có phép', '')}
               {f('absentNoPermit', 'Trong đó: không phép', '-5đ/lượt')}
@@ -616,9 +636,10 @@ function ScoreForm(props: {
               {f('fight', 'Đánh nhau, vô lễ với GV', '-20đ/lượt')}
               <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 700, marginTop: 6 }}><input type="checkbox" checked={calc.noAbsentLate} disabled={!canEdit} onChange={e => props.setD('noAbsLate', e.target.checked)} style={{ width: 22, height: 22 }} /> 100% không vắng, không đi muộn (+10đ)</label>
               {calc.noAbsentLate && (d.absentTotal > 0 || d.late > 0) && <p>Lưu ý: đã tích 100% không vắng, không đi muộn nhưng vẫn có vắng/đi muộn — kiểm tra lại nhé.</p>}
+              </Section>
             </div>
           </div>
-          <h3>Cộng / trừ đột xuất</h3>
+          <Section title="Cộng / trừ đột xuất" sum={pm(sec.extraPlus, sec.extraMinus)}>
           <div className="grid2">
             <div>
               <span className="extra-head plus">⊕ + CỘNG KHÁC</span>
@@ -629,6 +650,7 @@ function ScoreForm(props: {
               {[0, 1, 2, 3, 4].map(i => extraRow('extraMinus', i))}
             </div>
           </div>
+          </Section>
           <label>Tên HS vi phạm (bắt buộc khi có vi phạm)</label>
           <input type="text" placeholder="Vd: Lan Anh, Sang, Ngân…" value={d.names} disabled={!canEdit} onChange={e => props.setD('names', e.target.value)} />
           <label>Ý kiến của lớp theo dõi</label>
@@ -636,9 +658,12 @@ function ScoreForm(props: {
           <label>Ý kiến của cờ đỏ</label>
           <textarea value={d.opinionCodo} disabled={!canEdit} onChange={e => props.setD('opinionCodo', e.target.value)} />
           {!canEdit && <div className="warn">Phiếu này bạn không được sửa (xem phân quyền / phiếu đã nộp hoặc đã duyệt / tuần đã chốt).</div>}
-          <div className="scorebar"><span>(1) Cộng: <b>+{calc.plus}đ</b></span><span>(2) Trừ: <b>-{calc.minus}đ</b></span><span>Điểm thi đua: <b>{calc.final}đ</b></span><span className={`badge ${calc.cls}`}>Loại {calc.cls}</span><span style={{ flex: 1 }} />
-            <button className="btn ghost" type="button" disabled={!canEdit} onClick={props.onSaveDraft}>Lưu nháp</button>
-            <button className="btn" type="button" disabled={!canEdit} onClick={props.onSubmit}>Lưu &amp; nộp phiếu từng lớp</button>
+          <div className="scorebar">
+            <div className="scorebar-scores"><span>(1) Cộng: <b>+{calc.plus}đ</b></span><span>(2) Trừ: <b>-{calc.minus}đ</b></span><span>Điểm thi đua: <b>{calc.final}đ</b></span><span className={`badge ${calc.cls}`}>Loại {calc.cls}</span></div>
+            <div className="scorebar-btns">
+              <button className="btn ghost" type="button" disabled={!canEdit} onClick={props.onSaveDraft}>Lưu nháp</button>
+              <button className="btn" type="button" disabled={!canEdit} onClick={props.onSubmit}>Lưu &amp; nộp phiếu từng lớp</button>
+            </div>
           </div>
           {props.sessionRole === 'admin' && props.currentScore && (
             <div className="card" style={{ marginTop: 12 }}><h3>Duyệt phiếu (Ban thi đua)</h3>
