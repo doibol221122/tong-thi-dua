@@ -114,8 +114,11 @@ export default function App() {
       setAuthUser(u ? { id: u.id, email: u.email ?? '', user_metadata: (u.user_metadata ?? {}) as Record<string, unknown> } : null);
       setAuthReady(true);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
       const u = sess?.user;
+      // Đăng nhập tài khoản (mới): xóa thông báo của phiên trước
+      // (vd: "Đã đăng xuất." sau khi đăng xuất) để không hiện sang tài khoản khác.
+      if (event === 'SIGNED_IN' && u) { setMsg(''); setErrs([]); }
       setAuthUser(u ? { id: u.id, email: u.email ?? '', user_metadata: (u.user_metadata ?? {}) as Record<string, unknown> } : null);
       setAuthReady(true);
     });
