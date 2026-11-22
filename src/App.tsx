@@ -759,9 +759,11 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
           <>
             <div className="row"><button className="btn ghost" type="button" onClick={onRefreshProfiles}>Làm mới danh sách</button></div>
             {profiles.length === 0 && <p>Chưa có tài khoản nào.</p>}
-            {profiles.map(p => (
+            {profiles.map(p => {
+              const clsName = p.role === 'codo' ? state.classes.find(c => c.id === p.assigned_class_id)?.name : undefined;
+              return (
               <div key={p.id} className="card" style={{ marginTop: 10 }}>
-                <p><b>{p.full_name}</b> — {p.email} {session.id === p.id && <span className="badge">Tài khoản của bạn</span>}</p>
+                <p><b>{p.full_name}</b>{clsName ? ` — Lớp ${clsName}` : p.role === 'codo' ? <span style={{ color: '#9ca3af' }}> — Chưa gán lớp</span> : ''} — {p.email} {session.id === p.id && <span className="badge">Tài khoản của bạn</span>}</p>
                 <div className="row">
                   <div style={{ minWidth: 150 }}><label>Vai trò</label><select value={p.role} disabled={session.id === p.id} onChange={e => onProfilePatch(p.id, { role: e.target.value as Role })}><option value="admin">Ban thi đua</option><option value="codo">Cờ đỏ trực</option><option value="viewer">Chỉ xem</option></select></div>
                   <div style={{ minWidth: 150 }}><label>Trạng thái</label><span className={`badge ${p.status === 'active' ? 'approved' : p.status === 'pending' ? 'submitted' : 'returned'}`}>{p.status === 'active' ? 'Đang dùng' : p.status === 'pending' ? 'Chờ duyệt' : 'Đã khóa'}</span></div>
@@ -779,7 +781,8 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
                   {session.id !== p.id && <button className="btn" type="button" onClick={() => onProfileDelete(p.id)}>Xóa tài khoản</button>}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </>
         )}
       </div>
