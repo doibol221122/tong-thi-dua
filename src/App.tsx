@@ -45,7 +45,6 @@ export default function App() {
   const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
   const [profileErr, setProfileErr] = useState('');
   const [remoteLoaded, setRemoteLoaded] = useState(!isSupabaseConfigured);
-  const [syncMsg, setSyncMsg] = useState('');
   const remoteUpdatedAtRef = useRef<string | null>(null);
   const lastSavedAtRef = useRef<string | null>(null);
   const remoteLoadingRef = useRef(false);
@@ -119,7 +118,7 @@ export default function App() {
           lastSavedAtRef.current = at;
         }
       })
-      .catch(() => setSyncMsg('Chưa tải được dữ liệu dùng chung từ Supabase — đang dùng dữ liệu trên máy này.'))
+      .catch(() => setErrs(['Chưa tải được dữ liệu dùng chung từ Supabase — đang dùng dữ liệu trên máy này.']))
       .finally(() => { setRemoteLoaded(true); remoteLoadingRef.current = false; });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, remoteLoaded]);
@@ -136,14 +135,13 @@ export default function App() {
           if (remote.data) {
             setState(remote.data);
             remoteUpdatedAtRef.current = remote.updatedAt;
-            setSyncMsg('Đã tải dữ liệu mới hơn từ máy khác.');
           }
           return;
         }
         const at = await saveSharedState(state, profile.full_name);
         if (at) { remoteUpdatedAtRef.current = at; lastSavedAtRef.current = at; }
       } catch {
-        setSyncMsg('Chưa đồng bộ được lên Supabase — dữ liệu vẫn lưu trên máy này.');
+        setErrs(['Chưa đồng bộ được lên Supabase — dữ liệu vẫn lưu trên máy này.']);
       }
     }, 1000);
     return () => window.clearTimeout(timer);
@@ -377,9 +375,6 @@ export default function App() {
         </div>
       </div></header>
       <main className="wrap">
-        {isSupabaseConfigured
-          ? <div className="ok">Đã kết nối Supabase — dữ liệu dùng chung cho mọi máy.{syncMsg ? ` ${syncMsg}` : ''}</div>
-          : <div className="warn">Chưa cấu hình Supabase — đang dùng chế độ trên máy này. Dữ liệu chỉ lưu trên trình duyệt này.</div>}
         <div className="tabs">{tabs.map(([k, l]) => <button key={k} type="button" className={tab === k ? 'on' : ''} onClick={() => switchTab(k)}>{l}</button>)}</div>
         {msg && <div className="ok">{msg}</div>}
         {errs.length > 0 && <div className="err">{errs.map((e, i) => <div key={i}>• {e}</div>)}</div>}
