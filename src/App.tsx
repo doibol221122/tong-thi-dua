@@ -4,7 +4,7 @@ import { calcScore, classAvg, classGroup, clsOf, currentMonth, downloadBlob, emp
 import { exportClassDocx, exportWeekDocx } from './docxExport';
 import { LOGO_DATA_URI } from './logoData';
 import AuthScreen from './AuthScreen';
-import { ensureProfile, fetchSharedState, isSupabaseConfigured, listProfiles, saveSharedState, supabase, updateProfile } from './supabase';
+import { deleteProfile, ensureProfile, fetchSharedState, isSupabaseConfigured, listProfiles, saveSharedState, supabase, updateProfile } from './supabase';
 import type { Profile } from './supabase';
 
 const LS_KEY = 'tong-thi-dua-v1';
@@ -210,6 +210,23 @@ export default function App() {
     }
   }
 
+  // Ban thi đua xóa tài khoản: gỡ hồ sơ khỏi bảng profiles, người đó không vào app được nữa.
+  // Không xóa được tài khoản của chính mình. Phiếu đã nhập vẫn giữ lại.
+  async function removeProfile(id: string) {
+    if (!supabase) { setErrs(['Chưa cấu hình Supabase nên chưa quản lý được tài khoản.']); return; }
+    const p = profiles.find(x => x.id === id);
+    if (!p || session?.id === id) return;
+    if (!window.confirm(`Xóa tài khoản ${p.full_name} (${p.email})? Người này sẽ không đăng nhập vào hệ thống được nữa. Phiếu đã nhập vẫn giữ lại.`)) return;
+    try {
+      await deleteProfile(id);
+      setProfiles(prev => prev.filter(x => x.id !== id));
+      update(s => s, 'Xóa tài khoản', `${p.full_name} (${p.email})`);
+      setMsg('Đã xóa tài khoản.');
+    } catch {
+      setErrs(['Không xóa được tài khoản. Kiểm tra lại Supabase (đã chạy dòng chính sách xóa trong schema.sql chưa).']);
+    }
+  }
+
   function update(fn: (s: AppState) => AppState, logAction?: string, logDetail?: string) {
     setState(prev => {
       const next = fn(prev);
@@ -400,7 +417,7 @@ export default function App() {
             </tbody></table></div></div>
         )}
         {tab === 'tong-hop' && <SummaryTab state={state} />}
-        {tab === 'quan-ly' && <ManageTab state={state} setState={setState} session={session} onLog={(a: string, d: string) => update(s => s, a, d)} onExportJson={exportJson} onImportJson={importJson} profiles={profiles} onProfilePatch={patchProfile} onRefreshProfiles={() => { if (isSupabaseConfigured) listProfiles().then(setProfiles).catch(() => undefined); }} />}
+        {tab === 'quan-ly' && <ManageTab state={state} setState={setState} session={session} onLog={(a: string, d: string) => update(s => s, a, d)} onExportJson={exportJson} onImportJson={importJson} profiles={profiles} onProfilePatch={patchProfile} onProfileDelete={removeProfile} onRefreshProfiles={() => { if (isSupabaseConfigured) listProfiles().then(setProfiles).catch(() => undefined); }} />}
         {tab === 'lich-su' && (
           <div className="card"><h2>Lịch sử hoạt động</h2>{session.role !== 'admin' && <p>Vai trò Chỉ xem / Cờ đỏ không xem được nhật ký chi tiết.</p>}
           {session.role === 'admin' && (state.logs.length === 0 ? <p>Chưa có hoạt động nào.</p> : <table><thead><tr><th>Thời gian</th><th>Người làm</th><th>Vai trò</th><th>Việc làm</th><th>Chi tiết</th></tr></thead><tbody>{[...state.logs].reverse().map(l => <tr key={l.id}><td>{l.time}</td><td>{l.actor}</td><td>{l.role}</td><td>{l.action}</td><td>{l.detail}</td></tr>)}</tbody></table>)}
@@ -587,10 +604,10 @@ function ScoreForm(props: {
   );
 }
 
-function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson, profiles, onProfilePatch, onRefreshProfiles }: {
+function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson, profiles, onProfilePatch, onProfileDelete, onRefreshProfiles }: {
   state: AppState; setState: (s: AppState) => void; session: { role: Role; name: string; id?: string; email?: string };
   onLog: (a: string, d: string) => void; onExportJson: () => void; onImportJson: (f: File) => void;
-  profiles: Profile[]; onProfilePatch: (id: string, patch: Partial<Pick<Profile, 'role' | 'status' | 'assigned_class_id' | 'assigned_week_id'>>) => void; onRefreshProfiles: () => void;
+  profiles: Profile[]; onProfilePatch: (id: string, patch: Partial<Pick<Profile, 'role' | 'status' | 'assigned_class_id' | 'assigned_week_id'>>) => void; onProfileDelete: (id: string) => void; onRefreshProfiles: () => void;
 }) {
   const [weekLabel, setWeekLabel] = useState(''); const [weekRange, setWeekRange] = useState(''); const [weekMonth, setWeekMonth] = useState(currentMonth);
   const [className, setClassName] = useState('');
@@ -604,7 +621,7 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
         {!isSupabaseConfigured && <p>Chưa cấu hình Supabase — quản lý tài khoản chỉ dùng được sau khi cấu hình Supabase (xem README).</p>}
         {isSupabaseConfigured && (
           <>
-            <p>Tài khoản đăng ký mới đều ở trạng thái <b>chờ duyệt</b>. Ban thi đua bấm <b>Duyệt</b> để cho vào hệ thống, gán lớp/tuần cho cờ đỏ, đổi vai trò, hoặc khóa tài khoản vi phạm. Tài khoản đầu tiên đăng ký là Ban thi đua.</p>
+            <p>Tài khoản đăng ký mới đều ở trạng thái <b>chờ duyệt</b>. Ban thi đua bấm <b>Duyệt</b> để cho vào hệ thống, gán lớp/tuần cho cờ đỏ, đổi vai trò, khóa hoặc xóa tài khoản vi phạm. Xóa tài khoản gỡ hồ sơ khỏi hệ thống (người đó không vào được nữa); muốn xóa hẳn tài khoản đăng nhập thì xóa thêm trong Supabase → Authentication → Users. Tài khoản đầu tiên đăng ký là Ban thi đua.</p>
             <div className="row"><button className="btn ghost" type="button" onClick={onRefreshProfiles}>Làm mới danh sách</button></div>
             {profiles.length === 0 && <p>Chưa có tài khoản nào.</p>}
             {profiles.map(p => (
@@ -624,6 +641,7 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
                   {p.status === 'pending' && <button className="btn green" type="button" onClick={() => onProfilePatch(p.id, { status: 'active' })}>Duyệt</button>}
                   {p.status === 'active' && session.id !== p.id && <button className="btn grey" type="button" onClick={() => onProfilePatch(p.id, { status: 'disabled' })}>Khóa tài khoản</button>}
                   {p.status === 'disabled' && <button className="btn green" type="button" onClick={() => onProfilePatch(p.id, { status: 'active' })}>Mở lại tài khoản</button>}
+                  {session.id !== p.id && <button className="btn" type="button" onClick={() => onProfileDelete(p.id)}>Xóa tài khoản</button>}
                 </div>
               </div>
             ))}

@@ -98,6 +98,12 @@ export async function listProfiles(): Promise<Profile[]> {
   return (data ?? []) as Profile[];
 }
 
+export async function deleteProfile(id: string): Promise<void> {
+  if (!supabase) throw new Error('Chưa cấu hình Supabase.');
+  const { error } = await supabase.from('profiles').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
 export async function updateProfile(
   id: string,
   patch: Partial<Pick<Profile, 'role' | 'status' | 'assigned_class_id' | 'assigned_week_id'>>,

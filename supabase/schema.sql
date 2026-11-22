@@ -61,6 +61,16 @@ drop policy if exists "profiles_update_authenticated" on public.profiles;
 create policy "profiles_update_authenticated" on public.profiles
   for update to authenticated using (true) with check (true);
 
+-- Tài khoản đã đăng nhập được xóa hồ sơ. App chỉ cho Ban thi đua
+-- gọi xóa này, và không cho xóa tài khoản của chính mình.
+-- LƯU Ý: xóa ở đây chỉ gỡ hồ sơ trong bảng profiles, người đó không
+-- vào app được nữa; tài khoản đăng nhập (email/mật khẩu) vẫn còn trong
+-- Supabase Auth — muốn xóa hẳn thì xóa thêm trong Dashboard →
+-- Authentication → Users.
+drop policy if exists "profiles_delete_authenticated" on public.profiles;
+create policy "profiles_delete_authenticated" on public.profiles
+  for delete to authenticated using (true);
+
 -- 5. Chính sách cho app_state (dữ liệu tuần/lớp/phiếu dùng chung)
 drop policy if exists "app_state_select_authenticated" on public.app_state;
 create policy "app_state_select_authenticated" on public.app_state
