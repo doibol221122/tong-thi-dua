@@ -16,6 +16,7 @@ export interface Details {
   allGood?: boolean; // Tích tay: 100% giờ Tốt (+20đ)
   goodHigh: number; goodLow: number; studyViol: number; cheating: number;
   absentTotal: number; absentPermit: number; absentNoPermit: number;
+  noAbsLate?: boolean; // Tích tay: 100% không vắng, không đi muộn (+10đ)
   late: number; noisy: number; privateWork: number; lateDuty: number; dirty: number;
   food: number; dress: number; skip: number; dishonest: number; parking: number;
   phone: number; traffic: number; fight: number;
@@ -82,7 +83,7 @@ export function emptyDetails(): Details {
   return {
     hoursTot: 0, hoursKha: 0, hoursTb: 0, hoursYeu: 0, allGood: false,
     goodHigh: 0, goodLow: 0, studyViol: 0, cheating: 0,
-    absentTotal: 0, absentPermit: 0, absentNoPermit: 0,
+    absentTotal: 0, absentPermit: 0, absentNoPermit: 0, noAbsLate: false,
     late: 0, noisy: 0, privateWork: 0, lateDuty: 0, dirty: 0,
     food: 0, dress: 0, skip: 0, dishonest: 0, parking: 0,
     phone: 0, traffic: 0, fight: 0,
@@ -101,11 +102,15 @@ export function emptyState(): AppState {
   return { settings: defaultSettings(), weeks: [], classes: [], roster: [], scores: [], logs: [] };
 }
 export interface Calc { plus: number; minus: number; final: number; cls: string; totalHours: number; is100Tot: boolean; noAbsentLate: boolean; }
+export function isNoAbsentLate(d: Details): boolean {
+  return d.noAbsLate === true || (d.noAbsLate === undefined && d.absentTotal === 0 && d.late === 0);
+}
+
 export function calcScore(d: Details): Calc {
   const totalHours = d.hoursTot + d.hoursKha + d.hoursTb + d.hoursYeu;
   const autoGood = totalHours > 0 && d.hoursKha === 0 && d.hoursTb === 0 && d.hoursYeu === 0;
   const is100Tot = d.allGood === true || (d.allGood === undefined && autoGood);
-  const noAbsentLate = d.absentTotal === 0 && d.late === 0;
+  const noAbsentLate = isNoAbsentLate(d);
   const plus = (is100Tot ? 20 : 0) + d.goodHigh * 1 + d.bonusYouth * 20 + d.bonusSweep * 10 + d.bonusNtvt * 10 + (noAbsentLate ? 10 : 0);
   const minus = d.hoursKha * 1 + d.hoursTb * 3 + d.hoursYeu * 5
     + d.goodLow * 1 + d.studyViol * 1 + d.cheating * 10
@@ -148,7 +153,7 @@ export function hocTapLines(d: Details): string[] {
 }
 export function neNepLines(d: Details): string[] {
   const out: string[] = [];
-  if (d.absentTotal === 0 && d.late === 0) out.push('Không vắng, không đi muộn: +10đ');
+  if (isNoAbsentLate(d)) out.push('Không vắng, không đi muộn: +10đ');
   else {
     if (d.absentTotal) out.push(`Vắng: ${d.absentTotal} (${d.absentPermit}p, ${d.absentNoPermit}Kp)`);
     if (d.late) out.push(`Đi muộn: ${d.late} lượt (-${d.late * 2})`);

@@ -567,7 +567,8 @@ function ScoreForm(props: {
               {f('phone', 'Dùng điện thoại trong giờ học', '-10đ/lượt')}
               {f('traffic', 'Vi phạm ATGT', '-10đ/lượt')}
               {f('fight', 'Đánh nhau, vô lễ với GV', '-20đ/lượt')}
-              {calc.noAbsentLate && <p>Đạt 100% không vắng, không đi muộn (+10đ).</p>}
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 700, marginTop: 6 }}><input type="checkbox" checked={calc.noAbsentLate} disabled={!canEdit} onChange={e => props.setD('noAbsLate', e.target.checked)} style={{ width: 22, height: 22 }} /> 100% không vắng, không đi muộn (+10đ)</label>
+              {calc.noAbsentLate && (d.absentTotal > 0 || d.late > 0) && <p>Lưu ý: đã tích 100% không vắng, không đi muộn nhưng vẫn có vắng/đi muộn — kiểm tra lại nhé.</p>}
             </div>
           </div>
           <label>Tên HS vi phạm (bắt buộc khi có vi phạm)</label>
