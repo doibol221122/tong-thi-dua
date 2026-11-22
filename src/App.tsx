@@ -558,6 +558,7 @@ export default function App() {
         <div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1></div></div>
         <div className="userbox">
           <span className="chip">{week ? week.label : 'Chưa có tuần'}</span>
+          {session.role === 'codo' && assignment?.classId && <span className="chip">Lớp {state.classes.find(c => c.id === assignment.classId)?.name}</span>}
           <span className="chip rolebadge">{roleLabel}</span>
           <span className="chip"><span className="who">{session.name}</span></span>
           {showInstall && <button type="button" className="btn logout" onClick={installApp}>Cài app</button>}
