@@ -8,7 +8,7 @@ export interface Settings {
   signer: string; signerTitle: string; standardHours: number;
   generalPros: string; generalCons: string;
 }
-export interface Week { id: string; label: string; dateRange: string; submittedAt?: string | null; submittedBy?: string | null; }
+export interface Week { id: string; label: string; dateRange: string; month?: string; submittedAt?: string | null; submittedBy?: string | null; }
 export interface ClassItem { id: string; name: string; }
 export interface Roster { id: string; name: string; classId: string; weekId: string; active: boolean; }
 export interface Details {
@@ -34,6 +34,48 @@ export interface AppState {
 }
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 export const nowStr = () => new Date().toLocaleString('vi-VN');
+
+// --- Phân khối lớp ---
+export type ClassGroup = 'tu-nhien' | 'xa-hoi';
+const TU_NHIEN = new Set(['10B1', '10B2', '11A1', '11A2', '12C1', '12C2']);
+const XA_HOI = new Set(['10B3', '10B4', '10B5', '11A3', '11A4', '12C3', '12C4', '12C5']);
+export function classGroup(name: string): ClassGroup | null {
+  const n = name.trim().toUpperCase().replace(/\s+/g, '');
+  if (TU_NHIEN.has(n)) return 'tu-nhien';
+  if (XA_HOI.has(n)) return 'xa-hoi';
+  return null;
+}
+export function groupLabel(g: ClassGroup): string { return g === 'tu-nhien' ? 'Khối tự nhiên' : 'Khối xã hội'; }
+
+// --- Tháng của tuần (dạng MM/YYYY) ---
+export function currentMonth(): string {
+  const d = new Date();
+  return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+}
+const MONTH_RE = /^(0[1-9]|1[0-2])\/\d{4}$/;
+// Tuần mới có trường month thì dùng luôn. Tuần cũ chưa có thì suy ra từ
+// khoảng ngày: lấy ngày cuối trong khoảng (vd "17/11 – 22/11" -> 11/2026);
+// năm lấy trong khoảng ngày nếu có, không có thì lấy năm hiện tại.
+export function monthOfWeek(w: Week): string | null {
+  const m = w.month?.trim();
+  if (m && MONTH_RE.test(m)) return m;
+  const dates = [...w.dateRange.matchAll(/(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?/g)];
+  if (!dates.length) return null;
+  const last = dates[dates.length - 1];
+  const mm = String(Number(last[2])).padStart(2, '0');
+  const yyyy = last[3] ?? String(new Date().getFullYear());
+  return `${mm}/${yyyy}`;
+}
+export function monthLabel(m: string): string { return `Tháng ${m}`; }
+
+// Xếp loại từ điểm trung bình (cùng ngưỡng với điểm thi đua tuần).
+export function clsOf(avg: number): string { return avg >= 80 ? 'A' : avg >= 65 ? 'B' : avg >= 50 ? 'C' : 'D'; }
+// Điểm trung bình của một lớp qua các tuần cho trước, chỉ tính phiếu đã duyệt.
+export function classAvg(state: AppState, classId: string, weekIds: string[]): number | null {
+  const list = state.scores.filter(s => s.classId === classId && s.status === 'approved' && weekIds.includes(s.weekId));
+  if (!list.length) return null;
+  return list.reduce((a, s) => a + calcScore(s.details).final, 0) / list.length;
+}
 
 export function emptyDetails(): Details {
   return {
