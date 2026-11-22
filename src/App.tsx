@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, ClassItem, Details, Role, Score, Week } from './lib';
 import { calcScore, downloadBlob, emptyDetails, emptyState, hocTapLines, neNepLines, nowStr, toCsv, uid, validateDetails } from './lib';
 import { exportClassDocx, exportWeekDocx } from './docxExport';
+import AuthScreen from './AuthScreen';
+import { ensureProfile, fetchSharedState, isSupabaseConfigured, listProfiles, saveSharedState, supabase, updateProfile } from './supabase';
+import type { Profile } from './supabase';
 
 const LS_KEY = 'tong-thi-dua-v1';
 const LS_SESSION = 'tong-thi-dua-session-v1';
@@ -30,9 +33,21 @@ function Stepper({ label, pts, value, onChange, disabled }: { label: string; pts
 
 export default function App() {
   const [state, setState] = useState<AppState>(loadState);
-  const [session, setSession] = useState<{ role: Role; name: string } | null>(() => {
+  const [session, setSession] = useState<{ role: Role; name: string; id?: string; email?: string } | null>(() => {
+    if (isSupabaseConfigured) return null; // Chế độ Supabase: phiên do Supabase + hồ sơ quyết định, không dùng vai trò chọn tay.
     try { const raw = localStorage.getItem(LS_SESSION); return raw ? JSON.parse(raw) : null; } catch { return null; }
   });
+  // --- Supabase: tài khoản dùng chung ---
+  const [authUser, setAuthUser] = useState<{ id: string; email: string; user_metadata?: Record<string, unknown> } | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
+  const [profileErr, setProfileErr] = useState('');
+  const [remoteLoaded, setRemoteLoaded] = useState(!isSupabaseConfigured);
+  const [syncMsg, setSyncMsg] = useState('');
+  const remoteUpdatedAtRef = useRef<string | null>(null);
+  const lastSavedAtRef = useRef<string | null>(null);
+  const remoteLoadingRef = useRef(false);
   const [tab, setTab] = useState('tong-quan');
   const [weekId, setWeekId] = useState('');
   const [classId, setClassId] = useState('');
@@ -47,10 +62,105 @@ export default function App() {
   useEffect(() => { localStorage.setItem(LS_KEY, JSON.stringify(state)); }, [state]);
   useEffect(() => { if (session) localStorage.setItem(LS_SESSION, JSON.stringify(session)); else localStorage.removeItem(LS_SESSION); }, [session]);
 
+  // Theo dõi phiên Supabase (đăng nhập / đăng xuất / làm mới token).
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => {
+      const u = data.session?.user;
+      setAuthUser(u ? { id: u.id, email: u.email ?? '', user_metadata: (u.user_metadata ?? {}) as Record<string, unknown> } : null);
+      setAuthReady(true);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
+      const u = sess?.user;
+      setAuthUser(u ? { id: u.id, email: u.email ?? '', user_metadata: (u.user_metadata ?? {}) as Record<string, unknown> } : null);
+      setAuthReady(true);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  // Từ tài khoản Supabase -> hồ sơ (profiles) -> vai trò trong app.
+  // Hồ sơ chưa có (đăng ký / đăng nhập lần đầu) thì tự tạo theo quy tắc
+  // khởi tạo trong ensureProfile: hồ sơ đầu tiên thành admin, còn lại chờ duyệt.
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    if (!authUser) { setProfile(null); setSession(null); setProfileErr(''); return; }
+    let alive = true;
+    ensureProfile(authUser as never)
+      .then(p => {
+        if (!alive) return;
+        setProfile(p);
+        setSession({ role: p.role, name: p.full_name, id: p.id, email: p.email });
+        setProfileErr('');
+      })
+      .catch(e => { if (alive) setProfileErr(`Không tải được hồ sơ: ${e instanceof Error ? e.message : 'lỗi không rõ'}. Kiểm tra xem đã chạy supabase/schema.sql chưa.`); });
+    return () => { alive = false; };
+  }, [authUser]);
+
+  // Ban thi đua tải danh sách tài khoản để duyệt / quản lý.
+  useEffect(() => {
+    if (!isSupabaseConfigured || profile?.role !== 'admin') return;
+    listProfiles().then(setProfiles).catch(() => { /* hiển thị trống, lỗi sẽ thấy khi thao tác */ });
+  }, [profile]);
+
+  // Tải dữ liệu dùng chung từ Supabase sau khi đăng nhập (tài khoản đã duyệt).
+  // Chưa có dòng dữ liệu trên Supabase thì đẩy dữ liệu đang có trên máy này lên.
+  useEffect(() => {
+    if (!isSupabaseConfigured || profile?.status !== 'active' || remoteLoaded || remoteLoadingRef.current) return;
+    remoteLoadingRef.current = true;
+    fetchSharedState()
+      .then(async row => {
+        if (row.data) {
+          setState(row.data);
+          remoteUpdatedAtRef.current = row.updatedAt;
+        } else {
+          const at = await saveSharedState(loadState(), profile.full_name);
+          remoteUpdatedAtRef.current = at;
+          lastSavedAtRef.current = at;
+        }
+      })
+      .catch(() => setSyncMsg('Chưa tải được dữ liệu dùng chung từ Supabase — đang dùng dữ liệu trên máy này.'))
+      .finally(() => { setRemoteLoaded(true); remoteLoadingRef.current = false; });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, remoteLoaded]);
+
+  // Ghi dữ liệu lên Supabase sau mỗi thay đổi (debounce ~1s, last-write-wins).
+  // Trước khi ghi, đọc lại updated_at trên máy chủ: nếu có máy khác ghi mới
+  // hơn kể từ lúc mình tải thì KHÔNG ghi đè, mà tải bản mới đó về.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !remoteLoaded || profile?.status !== 'active') return;
+    const timer = window.setTimeout(async () => {
+      try {
+        const remote = await fetchSharedState();
+        if (remote.updatedAt && remoteUpdatedAtRef.current && remote.updatedAt > remoteUpdatedAtRef.current && remote.updatedAt !== lastSavedAtRef.current) {
+          if (remote.data) {
+            setState(remote.data);
+            remoteUpdatedAtRef.current = remote.updatedAt;
+            setSyncMsg('Đã tải dữ liệu mới hơn từ máy khác.');
+          }
+          return;
+        }
+        const at = await saveSharedState(state, profile.full_name);
+        if (at) { remoteUpdatedAtRef.current = at; lastSavedAtRef.current = at; }
+      } catch {
+        setSyncMsg('Chưa đồng bộ được lên Supabase — dữ liệu vẫn lưu trên máy này.');
+      }
+    }, 1000);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, remoteLoaded, profile]);
+
   const week: Week | undefined = state.weeks.find(w => w.id === weekId) ?? state.weeks[state.weeks.length - 1];
   const effectiveWeekId = week?.id ?? '';
   const currentScore: Score | undefined = state.scores.find(s => s.weekId === effectiveWeekId && s.classId === classId);
-  const assignment = session?.role === 'codo' ? state.roster.find(r => r.name === session.name && r.active) : undefined;
+  // Phân công của cờ đỏ: ưu tiên gán lớp/tuần trong hồ sơ Supabase,
+  // nếu chưa gán thì dùng danh sách phân công cũ (roster) theo họ tên.
+  const assignment = useMemo(() => {
+    if (session?.role !== 'codo') return undefined;
+    if (profile?.assigned_class_id && profile?.assigned_week_id) {
+      return { id: 'profile', name: session.name, classId: profile.assigned_class_id, weekId: profile.assigned_week_id, active: true };
+    }
+    return state.roster.find(r => r.name === session.name && r.active);
+  }, [session, profile, state.roster]);
 
   // Cờ đỏ vào là tự mở đúng lớp được phân công
   useEffect(() => {
@@ -75,6 +185,30 @@ export default function App() {
     if (session.role === 'codo') return assignment?.classId === classId && assignment?.weekId === effectiveWeekId;
     return true;
   }, [session, week, currentScore, assignment, classId, effectiveWeekId, draft]);
+
+  async function handleSignOut() {
+    if (supabase) await supabase.auth.signOut();
+    setProfile(null);
+    setSession(null);
+    setRemoteLoaded(false);
+    remoteUpdatedAtRef.current = null;
+    lastSavedAtRef.current = null;
+    setMsg('Đã đăng xuất.');
+  }
+
+  // Ban thi đua cập nhật tài khoản (duyệt / đổi vai trò / gán lớp-tuần / khóa / mở lại).
+  async function patchProfile(id: string, patch: Partial<Pick<Profile, 'role' | 'status' | 'assigned_class_id' | 'assigned_week_id'>>) {
+    if (!supabase) { setErrs(['Chưa cấu hình Supabase nên chưa quản lý được tài khoản.']); return; }
+    try {
+      await updateProfile(id, patch);
+      setProfiles(prev => prev.map(p => (p.id === id ? { ...p, ...patch } : p)));
+      const p = profiles.find(x => x.id === id);
+      update(s => s, 'Quản lý tài khoản', `${p?.full_name ?? ''} (${p?.email ?? ''})`);
+      setMsg('Đã cập nhật tài khoản.');
+    } catch {
+      setErrs(['Không cập nhật được tài khoản. Kiểm tra lại Supabase (đã chạy schema.sql chưa).']);
+    }
+  }
 
   function update(fn: (s: AppState) => AppState, logAction?: string, logDetail?: string) {
     setState(prev => {
@@ -195,9 +329,32 @@ export default function App() {
   const visibleClasses = session?.role === 'codo' && assignment ? state.classes.filter(c => c.id === assignment.classId) : filteredClasses;
 
   if (!session) {
+    // --- Chế độ Supabase: đăng nhập bằng email + mật khẩu ---
+    if (isSupabaseConfigured) {
+      if (!authReady) {
+        return (<div><header className="top"><h1>HỆ THỐNG TỔNG THI ĐUA</h1><p>{state.settings.school} — {state.settings.dept}</p></header><main className="wrap"><div className="card"><p>Đang kiểm tra phiên đăng nhập…</p></div></main></div>);
+      }
+      if (authUser && profile && (profile.status === 'pending' || profile.status === 'disabled')) {
+        return (
+          <div><header className="top"><h1>HỆ THỐNG TỔNG THI ĐUA</h1><p>{state.settings.school} — {state.settings.dept}</p></header>
+          <main className="wrap"><div className="card"><h2>{profile.status === 'pending' ? 'Tài khoản đang chờ Ban thi đua duyệt' : 'Tài khoản đã bị khóa'}</h2>
+          <p>Xin chào <b>{profile.full_name}</b> ({profile.email}). {profile.status === 'pending' ? 'Tài khoản của bạn đang chờ Ban thi đua duyệt. Sau khi được duyệt, bạn đăng nhập lại là vào được hệ thống.' : 'Tài khoản của bạn đã bị Ban thi đua khóa. Bạn liên hệ Ban thi đua để được mở lại.'}</p>
+          <div className="row"><button className="btn grey" type="button" onClick={handleSignOut}>Đăng xuất</button></div></div></main></div>
+        );
+      }
+      if (authUser && !profile) {
+        return (<div><header className="top"><h1>HỆ THỐNG TỔNG THI ĐUA</h1><p>{state.settings.school} — {state.settings.dept}</p></header><main className="wrap"><div className="card"><p>Đang tải hồ sơ tài khoản…</p>{profileErr && <div className="err">{profileErr}</div>}<div className="row"><button className="btn grey" type="button" onClick={handleSignOut}>Đăng xuất</button></div></div></main></div>);
+      }
+      return (
+        <div><header className="top"><h1>HỆ THỐNG TỔNG THI ĐUA</h1><p>{state.settings.school} — {state.settings.dept}</p></header>
+        <main className="wrap"><AuthScreen />{profileErr && <div className="err">{profileErr}</div>}{msg && <div className="ok">{msg}</div>}</main></div>
+      );
+    }
+    // --- Chế độ cũ (chưa cấu hình Supabase): chọn vai trò, dữ liệu trên máy này ---
     return (
       <div><header className="top"><h1>HỆ THỐNG TỔNG THI ĐUA</h1><p>{state.settings.school} — {state.settings.dept}</p></header>
       <main className="wrap"><div className="card"><h2>Chọn vai trò để vào hệ thống</h2><p>Ban thi đua quản lý toàn bộ. Cờ đỏ chỉ nhập lớp được phân công. Chỉ xem không được nhập hay sửa.</p>
+      <p><b>Chưa cấu hình Supabase — đang dùng chế độ trên máy này.</b> Dữ liệu và vai trò chỉ lưu trên trình duyệt này; muốn đăng nhập dùng chung cho mọi máy, cấu hình Supabase theo hướng dẫn trong README.</p>
       <div className="rolecard">
         <button type="button" onClick={() => setSession({ role: 'admin', name: state.settings.signer })}><b>Ban thi đua</b><br />{state.settings.signer} — toàn quyền: tạo tuần/lớp, phân công cờ đỏ, duyệt, chốt tuần, xuất file.</button>
         <button type="button" onClick={() => { const names = state.roster.filter(r => r.active).map(r => r.name); if (!names.length) { setMsg('Chưa có cờ đỏ nào được phân công. Nhờ Ban thi đua thêm ở tab Quản lý.'); return; } const n = window.prompt('Nhập đúng tên cờ đỏ của bạn:\n' + names.join(', ')); if (n && names.includes(n.trim())) setSession({ role: 'codo', name: n.trim() }); else if (n) setMsg('Tên này không có trong danh sách phân công.'); }}><b>Cờ đỏ trực</b><br />Chọn đúng tên được phân công, hệ thống tự mở lớp của bạn để nhập trực tiếp.</button>
@@ -209,8 +366,11 @@ export default function App() {
   const tabs: [string, string][] = [['tong-quan', 'Tổng quan'], ['nhap-diem', 'Nhập điểm'], ['xep-hang', 'Xếp hạng'], ['tong-hop', 'Tổng hợp'], ['quan-ly', 'Quản lý'], ['lich-su', 'Lịch sử']];
   return (
     <div>
-      <header className="top"><h1>HỆ THỐNG TỔNG THI ĐUA</h1><p>{state.settings.school} — {state.settings.dept} • {week ? week.label : 'Chưa có tuần'} • Vai trò: {roleLabel} — {session.name} • <button type="button" className="btn grey" onClick={() => setSession(null)}>Đổi vai trò</button></p></header>
+      <header className="top"><h1>HỆ THỐNG TỔNG THI ĐUA</h1><p>{state.settings.school} — {state.settings.dept} • {week ? week.label : 'Chưa có tuần'} • Vai trò: {roleLabel} — {session.name} • <button type="button" className="btn grey" onClick={handleSignOut}>{isSupabaseConfigured ? 'Đăng xuất' : 'Đổi vai trò'}</button></p></header>
       <main className="wrap">
+        {isSupabaseConfigured
+          ? <div className="ok">Đã kết nối Supabase — dữ liệu dùng chung cho mọi máy.{syncMsg ? ` ${syncMsg}` : ''}</div>
+          : <div className="warn">Chưa cấu hình Supabase — đang dùng chế độ trên máy này. Dữ liệu chỉ lưu trên trình duyệt này.</div>}
         <div className="tabs">{tabs.map(([k, l]) => <button key={k} type="button" className={tab === k ? 'on' : ''} onClick={() => switchTab(k)}>{l}</button>)}</div>
         {msg && <div className="ok">{msg}</div>}
         {errs.length > 0 && <div className="err">{errs.map((e, i) => <div key={i}>• {e}</div>)}</div>}
@@ -233,7 +393,7 @@ export default function App() {
             </tbody></table></div>
         )}
         {tab === 'tong-hop' && <SummaryTab state={state} />}
-        {tab === 'quan-ly' && <ManageTab state={state} setState={setState} session={session} onLog={(a: string, d: string) => update(s => s, a, d)} onExportJson={exportJson} onImportJson={importJson} />}
+        {tab === 'quan-ly' && <ManageTab state={state} setState={setState} session={session} onLog={(a: string, d: string) => update(s => s, a, d)} onExportJson={exportJson} onImportJson={importJson} profiles={profiles} onProfilePatch={patchProfile} onRefreshProfiles={() => { if (isSupabaseConfigured) listProfiles().then(setProfiles).catch(() => undefined); }} />}
         {tab === 'lich-su' && (
           <div className="card"><h2>Lịch sử hoạt động</h2>{session.role !== 'admin' && <p>Vai trò Chỉ xem / Cờ đỏ không xem được nhật ký chi tiết.</p>}
           {session.role === 'admin' && (state.logs.length === 0 ? <p>Chưa có hoạt động nào.</p> : <table><thead><tr><th>Thời gian</th><th>Người làm</th><th>Vai trò</th><th>Việc làm</th><th>Chi tiết</th></tr></thead><tbody>{[...state.logs].reverse().map(l => <tr key={l.id}><td>{l.time}</td><td>{l.actor}</td><td>{l.role}</td><td>{l.action}</td><td>{l.detail}</td></tr>)}</tbody></table>)}
@@ -372,9 +532,10 @@ function ScoreForm(props: {
   );
 }
 
-function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson }: {
-  state: AppState; setState: (s: AppState) => void; session: { role: Role; name: string };
+function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson, profiles, onProfilePatch, onRefreshProfiles }: {
+  state: AppState; setState: (s: AppState) => void; session: { role: Role; name: string; id?: string; email?: string };
   onLog: (a: string, d: string) => void; onExportJson: () => void; onImportJson: (f: File) => void;
+  profiles: Profile[]; onProfilePatch: (id: string, patch: Partial<Pick<Profile, 'role' | 'status' | 'assigned_class_id' | 'assigned_week_id'>>) => void; onRefreshProfiles: () => void;
 }) {
   const [weekLabel, setWeekLabel] = useState(''); const [weekRange, setWeekRange] = useState('');
   const [className, setClassName] = useState('');
@@ -384,6 +545,36 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
   if (!isAdmin) return <div className="card"><h2>Quản lý</h2><p>Chỉ Ban thi đua mới quản lý tuần, lớp, cờ đỏ và cài đặt.</p></div>;
   return (
     <div>
+      <div className="card"><h2>Tài khoản</h2>
+        {!isSupabaseConfigured && <p>Chưa cấu hình Supabase — quản lý tài khoản chỉ dùng được sau khi cấu hình Supabase (xem README).</p>}
+        {isSupabaseConfigured && (
+          <>
+            <p>Tài khoản đăng ký mới đều ở trạng thái <b>chờ duyệt</b>. Ban thi đua bấm <b>Duyệt</b> để cho vào hệ thống, gán lớp/tuần cho cờ đỏ, đổi vai trò, hoặc khóa tài khoản vi phạm. Tài khoản đầu tiên đăng ký là Ban thi đua.</p>
+            <div className="row"><button className="btn ghost" type="button" onClick={onRefreshProfiles}>Làm mới danh sách</button></div>
+            {profiles.length === 0 && <p>Chưa có tài khoản nào.</p>}
+            {profiles.map(p => (
+              <div key={p.id} className="card" style={{ marginTop: 10 }}>
+                <p><b>{p.full_name}</b> — {p.email} {session.id === p.id && <span className="badge">Tài khoản của bạn</span>}</p>
+                <div className="row">
+                  <div style={{ minWidth: 150 }}><label>Vai trò</label><select value={p.role} disabled={session.id === p.id} onChange={e => onProfilePatch(p.id, { role: e.target.value as Role })}><option value="admin">Ban thi đua</option><option value="codo">Cờ đỏ trực</option><option value="viewer">Chỉ xem</option></select></div>
+                  <div style={{ minWidth: 150 }}><label>Trạng thái</label><span className={`badge ${p.status === 'active' ? 'approved' : p.status === 'pending' ? 'submitted' : 'returned'}`}>{p.status === 'active' ? 'Đang dùng' : p.status === 'pending' ? 'Chờ duyệt' : 'Đã khóa'}</span></div>
+                </div>
+                {p.role === 'codo' && (
+                  <div className="row">
+                    <div style={{ minWidth: 150 }}><label>Gán lớp</label><select value={p.assigned_class_id ?? ''} onChange={e => onProfilePatch(p.id, { assigned_class_id: e.target.value || null })}><option value="">Chưa gán</option>{state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                    <div style={{ minWidth: 150 }}><label>Gán tuần</label><select value={p.assigned_week_id ?? ''} onChange={e => onProfilePatch(p.id, { assigned_week_id: e.target.value || null })}><option value="">Chưa gán</option>{state.weeks.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}</select></div>
+                  </div>
+                )}
+                <div className="row" style={{ marginTop: 8 }}>
+                  {p.status === 'pending' && <button className="btn green" type="button" onClick={() => onProfilePatch(p.id, { status: 'active' })}>Duyệt</button>}
+                  {p.status === 'active' && session.id !== p.id && <button className="btn grey" type="button" onClick={() => onProfilePatch(p.id, { status: 'disabled' })}>Khóa tài khoản</button>}
+                  {p.status === 'disabled' && <button className="btn green" type="button" onClick={() => onProfilePatch(p.id, { status: 'active' })}>Mở lại tài khoản</button>}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
       <div className="card"><h2>Tuần</h2>
         <div className="row"><input type="text" placeholder="Vd: Tuần 4" value={weekLabel} onChange={e => setWeekLabel(e.target.value)} style={{ maxWidth: 200 }} /><input type="text" placeholder="Vd: 17/11 – 22/11" value={weekRange} onChange={e => setWeekRange(e.target.value)} style={{ maxWidth: 220 }} /><button className="btn" type="button" onClick={() => { if (!weekLabel.trim()) return; const w: Week = { id: uid(), label: weekLabel.trim(), dateRange: weekRange.trim() }; setState({ ...state, weeks: [...state.weeks, w] }); onLog('Tạo tuần', w.label); setWeekLabel(''); setWeekRange(''); }}>Thêm tuần</button></div>
         {state.weeks.map(w => <p key={w.id}>{w.label} {w.dateRange} {w.submittedAt ? `— Đã nộp ${w.submittedAt}` : '— Chưa chốt'} <button className="btn grey" type="button" onClick={() => { if (!window.confirm(`Xóa ${w.label} và toàn bộ phiếu của tuần này?`)) return; setState({ ...state, weeks: state.weeks.filter(x => x.id !== w.id), scores: state.scores.filter(x => x.weekId !== w.id) }); onLog('Xóa tuần', w.label); }}>Xóa</button></p>)}
@@ -409,7 +600,7 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
         <label>Nhận xét chung — Ưu điểm (để trống sẽ tự gợi ý)</label><textarea value={state.settings.generalPros} onChange={e => setState({ ...state, settings: { ...state.settings, generalPros: e.target.value } })} />
         <label>Nhận xét chung — Nhược điểm (để trống sẽ tự gợi ý)</label><textarea value={state.settings.generalCons} onChange={e => setState({ ...state, settings: { ...state.settings, generalCons: e.target.value } })} />
       </div>
-      <div className="card"><h2>Sao lưu dữ liệu</h2><p>Dữ liệu lưu trên trình duyệt (localStorage). Xuất file JSON để sao lưu, nhập lại khi đổi máy.</p>
+      <div className="card"><h2>Sao lưu dữ liệu</h2><p>Dữ liệu dùng chung qua Supabase (và lưu dự phòng trên trình duyệt). Xuất file JSON để sao lưu, nhập lại khi cần khôi phục.</p>
         <div className="row"><button className="btn" type="button" onClick={onExportJson}>Xuất JSON sao lưu</button><label className="btn ghost" style={{ padding: '10px 14px' }}>Nhập JSON sao lưu<input type="file" accept="application/json" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) onImportJson(f); }} /></label></div>
       </div>
     </div>
