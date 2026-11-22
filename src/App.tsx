@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { AppState, ClassItem, Details, Role, Score, Week } from './lib';
-import { calcScore, downloadBlob, emptyDetails, emptyState, hocTapLines, neNepLines, nowStr, toCsv, uid, validateDetails } from './lib';
+import type { AppState, ClassGroup, ClassItem, Details, Role, Score, Week } from './lib';
+import { calcScore, classAvg, classGroup, clsOf, currentMonth, downloadBlob, emptyDetails, emptyState, groupLabel, hocTapLines, monthLabel, monthOfWeek, neNepLines, nowStr, toCsv, uid, validateDetails } from './lib';
 import { exportClassDocx, exportWeekDocx } from './docxExport';
 import { LOGO_DATA_URI } from './logoData';
 import AuthScreen from './AuthScreen';
@@ -58,6 +58,7 @@ export default function App() {
   const [errs, setErrs] = useState<string[]>([]);
   const [returnReason, setReturnReason] = useState('');
   const [showPhieu, setShowPhieu] = useState(false);
+  const [rankGroup, setRankGroup] = useState<'all' | ClassGroup>('all');
 
   useEffect(() => { localStorage.setItem(LS_KEY, JSON.stringify(state)); }, [state]);
   useEffect(() => { if (session) localStorage.setItem(LS_SESSION, JSON.stringify(session)); else localStorage.removeItem(LS_SESSION); }, [session]);
@@ -323,6 +324,7 @@ export default function App() {
   }
 
   const approvedScores = useMemo(() => week ? state.scores.filter(s => s.weekId === week.id && s.status === 'approved').sort((a, b) => calcScore(b.details).final - calcScore(a.details).final) : [], [state.scores, week]);
+  const rankedScores = useMemo(() => rankGroup === 'all' ? approvedScores : approvedScores.filter(s => classGroup(state.classes.find(c => c.id === s.classId)?.name ?? '') === rankGroup), [approvedScores, rankGroup, state.classes]);
   const pendingScores = useMemo(() => week ? state.scores.filter(s => s.weekId === week.id && s.status === 'submitted') : [], [state.scores, week]);
   const filteredClasses = state.classes.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
   const visibleClasses = session?.role === 'codo' && assignment ? state.classes.filter(c => c.id === assignment.classId) : filteredClasses;
@@ -388,13 +390,14 @@ export default function App() {
         {tab === 'xep-hang' && week && (
           <div className="card"><h2>Xếp hạng — {week.label} {week.submittedAt ? <span className="badge approved">Đã nộp {week.submittedAt}</span> : <span className="badge draft">Chưa chốt tuần</span>}</h2>
             <p>Chỉ phiếu <b>đã duyệt</b> mới vào xếp hạng chính thức. Còn {pendingScores.length} phiếu chờ duyệt, {state.classes.length - approvedScores.length} lớp chưa có phiếu duyệt.</p>
-            {approvedScores.length >= 3 && <div className="podium">{approvedScores.slice(0, 3).map((s, i) => <div key={s.id} className={`p${i + 1}`}><b>{i + 1}. {state.classes.find(c => c.id === s.classId)?.name}</b><br /><span style={{ fontSize: 22 }}>{calcScore(s.details).final}đ-{calcScore(s.details).cls}</span></div>)}</div>}
+            <div className="row"><span><b>Khối:</b></span>{(['all', 'tu-nhien', 'xa-hoi'] as const).map(g => <button key={g} type="button" className={rankGroup === g ? 'btn' : 'btn ghost'} onClick={() => setRankGroup(g)}>{g === 'all' ? 'Tất cả các khối' : groupLabel(g)}</button>)}</div>
+            {rankedScores.length >= 3 && <div className="podium" style={{ marginTop: 10 }}>{rankedScores.slice(0, 3).map((s, i) => <div key={s.id} className={`p${i + 1}`}><b>{i + 1}. {state.classes.find(c => c.id === s.classId)?.name}</b><br /><span style={{ fontSize: 22 }}>{calcScore(s.details).final}đ-{calcScore(s.details).cls}</span></div>)}</div>}
             <div className="row" style={{ marginTop: 10 }}><button className="btn" type="button" onClick={doExportDocxWeek}>Xuất Word (.docx)</button><button className="btn ghost" type="button" onClick={exportCsv}>Tải CSV</button><button className="btn ghost" type="button" onClick={copyZalo}>Chép gửi Zalo</button>
             {session.role === 'admin' && (week.submittedAt ? <button className="btn grey" type="button" onClick={reopenWeek}>Mở lại tuần</button> : <button className="btn green" type="button" onClick={closeWeek}>Nộp &amp; chốt tuần này</button>)}</div>
-            <table><thead><tr><th>Hạng</th><th>Lớp</th><th>Điểm</th><th>Loại</th><th>Người nhập</th><th>Trạng thái</th></tr></thead><tbody>
-              {approvedScores.map((s, i) => <tr key={s.id}><td>{i + 1}</td><td><b>{state.classes.find(c => c.id === s.classId)?.name}</b></td><td>{calcScore(s.details).final}đ</td><td><span className={`badge ${calcScore(s.details).cls}`}>{calcScore(s.details).cls}</span></td><td>{s.submittedBy ?? '—'}<br /><small>{s.submittedAt ?? ''}</small></td><td><span className="badge approved">Đã duyệt</span></td></tr>)}
-              {approvedScores.length === 0 && <tr><td colSpan={6}>Chưa có lớp nào được duyệt trong tuần này.</td></tr>}
-            </tbody></table></div>
+            <div className="tablewrap"><table><thead><tr><th>Hạng</th><th>Lớp</th><th>Điểm</th><th>Loại</th><th>Người nhập</th><th>Trạng thái</th></tr></thead><tbody>
+              {rankedScores.map((s, i) => <tr key={s.id}><td>{i + 1}</td><td><b>{state.classes.find(c => c.id === s.classId)?.name}</b></td><td>{calcScore(s.details).final}đ</td><td><span className={`badge ${calcScore(s.details).cls}`}>{calcScore(s.details).cls}</span></td><td>{s.submittedBy ?? '—'}<br /><small>{s.submittedAt ?? ''}</small></td><td><span className="badge approved">Đã duyệt</span></td></tr>)}
+              {rankedScores.length === 0 && <tr><td colSpan={6}>Chưa có lớp nào được duyệt trong tuần này{rankGroup === 'all' ? '' : ` ở ${groupLabel(rankGroup)}`}.</td></tr>}
+            </tbody></table></div></div>
         )}
         {tab === 'tong-hop' && <SummaryTab state={state} />}
         {tab === 'quan-ly' && <ManageTab state={state} setState={setState} session={session} onLog={(a: string, d: string) => update(s => s, a, d)} onExportJson={exportJson} onImportJson={importJson} profiles={profiles} onProfilePatch={patchProfile} onRefreshProfiles={() => { if (isSupabaseConfigured) listProfiles().then(setProfiles).catch(() => undefined); }} />}
@@ -429,13 +432,58 @@ function Overview({ state, week }: { state: AppState; week?: Week }) {
 }
 
 function SummaryTab({ state }: { state: AppState }) {
-  const avg = (classId: string) => { const list = state.scores.filter(s => s.classId === classId && s.status === 'approved'); if (!list.length) return null; return list.reduce((a, s) => a + calcScore(s.details).final, 0) / list.length; };
+  const [mode, setMode] = useState<'week' | 'month' | 'group'>('week');
+  // Các tháng có tuần, xếp theo thời gian (mới nhất cuối).
+  const months = useMemo(() => {
+    const map = new Map<string, Week[]>();
+    state.weeks.forEach(w => { const m = monthOfWeek(w); if (!m) return; const arr = map.get(m) ?? []; arr.push(w); map.set(m, arr); });
+    return [...map.entries()].sort((a, b) => { const [am, ay] = a[0].split('/').map(Number); const [bm, by] = b[0].split('/').map(Number); return ay - by || am - bm; });
+  }, [state.weeks]);
+  const [monthSel, setMonthSel] = useState('');
+  const selMonth = monthSel || (months.length ? months[months.length - 1][0] : '');
+  const monthWeeks = months.find(([m]) => m === selMonth)?.[1] ?? [];
+  const avg = (classId: string, weekIds?: string[]) => classAvg(state, classId, weekIds ?? state.weeks.map(w => w.id));
   const ranked = [...state.classes].map(c => ({ c, a: avg(c.id) })).sort((x, y) => (y.a ?? -1) - (x.a ?? -1));
+  const monthRows = [...state.classes].map(c => ({ c, a: avg(c.id, monthWeeks.map(w => w.id)) })).sort((x, y) => (y.a ?? -1) - (x.a ?? -1));
+  const groupRows = (g: ClassGroup | null) => [...state.classes].filter(c => classGroup(c.name) === g).map(c => ({ c, a: avg(c.id) })).sort((x, y) => (y.a ?? -1) - (x.a ?? -1));
+  const groupTable = (title: string, rows: { c: ClassItem; a: number | null }[]) => (
+    <div className="card"><h2>{title}</h2>
+      {rows.length === 0 ? <p>Chưa có lớp nào trong khối này.</p> : <div className="tablewrap"><table><thead><tr><th>Hạng</th><th>Lớp</th><th>Điểm TB</th><th>Loại</th></tr></thead><tbody>
+        {rows.map(({ c, a }, i) => <tr key={c.id}><td>{a === null ? '—' : i + 1}</td><td><b>{c.name}</b></td><td>{a === null ? '—' : `${a.toFixed(1)}đ`}</td><td>{a === null ? '—' : <span className={`badge ${clsOf(a)}`}>{clsOf(a)}</span>}</td></tr>)}
+      </tbody></table></div>}
+    </div>
+  );
   return (
-    <div className="card"><h2>Tổng hợp theo điểm trung bình qua các tuần</h2><p>Chỉ tính phiếu đã duyệt.</p>
-      <table><thead><tr><th>Lớp</th><th>Điểm TB</th>{state.weeks.map(w => <th key={w.id}>{w.label}</th>)}</tr></thead><tbody>
-        {ranked.map(({ c, a }) => <tr key={c.id}><td><b>{c.name}</b></td><td>{a === null ? '—' : `${a.toFixed(1)}đ`}</td>{state.weeks.map(w => { const s = state.scores.find(x => x.weekId === w.id && x.classId === c.id && x.status === 'approved'); return <td key={w.id}>{s ? `${calcScore(s.details).final}đ-${calcScore(s.details).cls}` : '—'}</td>; })}</tr>)}
-      </tbody></table></div>
+    <div>
+      <div className="tabs">
+        <button type="button" className={mode === 'week' ? 'on' : ''} onClick={() => setMode('week')}>Theo tuần</button>
+        <button type="button" className={mode === 'month' ? 'on' : ''} onClick={() => setMode('month')}>Theo tháng</button>
+        <button type="button" className={mode === 'group' ? 'on' : ''} onClick={() => setMode('group')}>Theo khối</button>
+      </div>
+      {mode === 'week' && (
+        <div className="card"><h2>Tổng hợp theo điểm trung bình qua các tuần</h2><p>Chỉ tính phiếu đã duyệt.</p>
+          <div className="tablewrap"><table><thead><tr><th>Lớp</th><th>Điểm TB</th>{state.weeks.map(w => <th key={w.id}>{w.label}</th>)}</tr></thead><tbody>
+            {ranked.map(({ c, a }) => <tr key={c.id}><td><b>{c.name}</b></td><td>{a === null ? '—' : `${a.toFixed(1)}đ`}</td>{state.weeks.map(w => { const s = state.scores.find(x => x.weekId === w.id && x.classId === c.id && x.status === 'approved'); return <td key={w.id}>{s ? `${calcScore(s.details).final}đ-${calcScore(s.details).cls}` : '—'}</td>; })}</tr>)}
+          </tbody></table></div></div>
+      )}
+      {mode === 'month' && (
+        <div className="card"><h2>Tổng hợp theo tháng</h2><p>Điểm trung bình của các phiếu đã duyệt trong các tuần thuộc tháng đã chọn.</p>
+          {months.length === 0 ? <p>Chưa có tuần nào xác định được tháng. Thêm tháng khi tạo tuần ở tab Quản lý, hoặc nhập khoảng ngày có tháng/năm.</p> : <>
+            <div className="row"><label style={{ margin: 0 }}>Tháng</label><select value={selMonth} onChange={e => setMonthSel(e.target.value)} style={{ maxWidth: 200 }}>{months.map(([m]) => <option key={m} value={m}>{monthLabel(m)}</option>)}</select><span>{monthWeeks.map(w => w.label).join(', ')}</span></div>
+            <div className="tablewrap"><table><thead><tr><th>Hạng</th><th>Lớp</th><th>Điểm TB</th><th>Loại</th>{monthWeeks.map(w => <th key={w.id}>{w.label}</th>)}</tr></thead><tbody>
+              {monthRows.map(({ c, a }, i) => <tr key={c.id}><td>{a === null ? '—' : i + 1}</td><td><b>{c.name}</b></td><td>{a === null ? '—' : `${a.toFixed(1)}đ`}</td><td>{a === null ? '—' : <span className={`badge ${clsOf(a)}`}>{clsOf(a)}</span>}</td>{monthWeeks.map(w => { const s = state.scores.find(x => x.weekId === w.id && x.classId === c.id && x.status === 'approved'); return <td key={w.id}>{s ? `${calcScore(s.details).final}đ-${calcScore(s.details).cls}` : '—'}</td>; })}</tr>)}
+            </tbody></table></div>
+          </>}
+        </div>
+      )}
+      {mode === 'group' && (
+        <div><p>Điểm trung bình qua tất cả các tuần, chỉ tính phiếu đã duyệt.</p>
+          {groupTable('Khối tự nhiên', groupRows('tu-nhien'))}
+          {groupTable('Khối xã hội', groupRows('xa-hoi'))}
+          {groupTable('Chưa phân khối', groupRows(null))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -541,7 +589,7 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
   onLog: (a: string, d: string) => void; onExportJson: () => void; onImportJson: (f: File) => void;
   profiles: Profile[]; onProfilePatch: (id: string, patch: Partial<Pick<Profile, 'role' | 'status' | 'assigned_class_id' | 'assigned_week_id'>>) => void; onRefreshProfiles: () => void;
 }) {
-  const [weekLabel, setWeekLabel] = useState(''); const [weekRange, setWeekRange] = useState('');
+  const [weekLabel, setWeekLabel] = useState(''); const [weekRange, setWeekRange] = useState(''); const [weekMonth, setWeekMonth] = useState(currentMonth);
   const [className, setClassName] = useState('');
   const [bulkBase, setBulkBase] = useState('10B'); const [bulkFrom, setBulkFrom] = useState(1); const [bulkTo, setBulkTo] = useState(5);
   const [codoName, setCodoName] = useState(''); const [codoClass, setCodoClass] = useState(''); const [codoWeek, setCodoWeek] = useState('');
@@ -580,8 +628,8 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
         )}
       </div>
       <div className="card"><h2>Tuần</h2>
-        <div className="row"><input type="text" placeholder="Vd: Tuần 4" value={weekLabel} onChange={e => setWeekLabel(e.target.value)} style={{ maxWidth: 200 }} /><input type="text" placeholder="Vd: 17/11 – 22/11" value={weekRange} onChange={e => setWeekRange(e.target.value)} style={{ maxWidth: 220 }} /><button className="btn" type="button" onClick={() => { if (!weekLabel.trim()) return; const w: Week = { id: uid(), label: weekLabel.trim(), dateRange: weekRange.trim() }; setState({ ...state, weeks: [...state.weeks, w] }); onLog('Tạo tuần', w.label); setWeekLabel(''); setWeekRange(''); }}>Thêm tuần</button></div>
-        {state.weeks.map(w => <p key={w.id}>{w.label} {w.dateRange} {w.submittedAt ? `— Đã nộp ${w.submittedAt}` : '— Chưa chốt'} <button className="btn grey" type="button" onClick={() => { if (!window.confirm(`Xóa ${w.label} và toàn bộ phiếu của tuần này?`)) return; setState({ ...state, weeks: state.weeks.filter(x => x.id !== w.id), scores: state.scores.filter(x => x.weekId !== w.id) }); onLog('Xóa tuần', w.label); }}>Xóa</button></p>)}
+        <div className="row"><input type="text" placeholder="Vd: Tuần 4" value={weekLabel} onChange={e => setWeekLabel(e.target.value)} style={{ maxWidth: 200 }} /><input type="text" placeholder="Vd: 17/11 – 22/11" value={weekRange} onChange={e => setWeekRange(e.target.value)} style={{ maxWidth: 220 }} /><input type="text" placeholder="Tháng (vd 11/2026)" value={weekMonth} onChange={e => setWeekMonth(e.target.value)} style={{ maxWidth: 160 }} /><button className="btn" type="button" onClick={() => { if (!weekLabel.trim()) return; const m = weekMonth.trim(); const w: Week = { id: uid(), label: weekLabel.trim(), dateRange: weekRange.trim(), ...(/^(0[1-9]|1[0-2])\/\d{4}$/.test(m) ? { month: m } : {}) }; setState({ ...state, weeks: [...state.weeks, w] }); onLog('Tạo tuần', `${w.label} — Tháng ${monthOfWeek(w) ?? 'chưa rõ tháng'}`); setWeekLabel(''); setWeekRange(''); setWeekMonth(currentMonth()); }}>Thêm tuần</button></div>
+        {state.weeks.map(w => <p key={w.id}>{w.label} {w.dateRange} — Tháng {monthOfWeek(w) ?? 'Chưa rõ tháng'} {w.submittedAt ? `— Đã nộp ${w.submittedAt}` : '— Chưa chốt'} <button className="btn grey" type="button" onClick={() => { if (!window.confirm(`Xóa ${w.label} và toàn bộ phiếu của tuần này?`)) return; setState({ ...state, weeks: state.weeks.filter(x => x.id !== w.id), scores: state.scores.filter(x => x.weekId !== w.id) }); onLog('Xóa tuần', w.label); }}>Xóa</button></p>)}
       </div>
       <div className="card"><h2>Lớp</h2>
         <div className="row"><input type="text" placeholder="Vd: 10B1" value={className} onChange={e => setClassName(e.target.value)} style={{ maxWidth: 200 }} /><button className="btn" type="button" onClick={() => { if (!className.trim()) return; const c: ClassItem = { id: uid(), name: className.trim().toUpperCase() }; setState({ ...state, classes: [...state.classes, c] }); onLog('Thêm lớp', c.name); setClassName(''); }}>Thêm lớp</button></div>
