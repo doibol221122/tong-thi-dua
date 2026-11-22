@@ -7,6 +7,12 @@ import AuthScreen from './AuthScreen';
 import { deleteProfile, ensureProfile, fetchSharedState, isSupabaseConfigured, listProfiles, saveSharedState, supabase, updateProfile } from './supabase';
 import type { Profile } from './supabase';
 
+// Sự kiện trình duyệt báo app web cài được (beforeinstallprompt).
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
 const LS_KEY = 'tong-thi-dua-v1';
 const LS_SESSION = 'tong-thi-dua-session-v1';
 const STATUS_LABEL: Record<string, string> = { draft: 'Nháp', submitted: 'Chờ duyệt', approved: 'Đã duyệt', returned: 'Bị trả lại' };
@@ -75,6 +81,8 @@ export default function App() {
   const [rankGroup, setRankGroup] = useState<'all' | ClassGroup>('all');
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
+  // Cài đặt app (PWA): trình duyệt báo khi app cài được.
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   // Học sinh đang chờ duyệt: chọn lớp của mình ở màn hình chờ duyệt.
   const [pendingClassId, setPendingClassId] = useState('');
   const [pendingBusy, setPendingBusy] = useState(false);
@@ -104,6 +112,17 @@ export default function App() {
     const onVisible = () => { if (document.visibilityState === 'visible') check(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => { stopped = true; window.clearInterval(id); document.removeEventListener('visibilitychange', onVisible); };
+  }, []);
+
+  // Nghe sự kiện "cài được app": trình duyệt chỉ báo khi app đủ điều kiện
+  // (đã có manifest + icon + service worker). Đã cài rồi thì không hiện.
+  useEffect(() => {
+    if (window.matchMedia('(display-mode: standalone)').matches || (navigator as unknown as { standalone?: boolean }).standalone) return;
+    const onPrompt = (e: Event) => { e.preventDefault(); setInstallPrompt(e as BeforeInstallPromptEvent); };
+    const onInstalled = () => setInstallPrompt(null);
+    window.addEventListener('beforeinstallprompt', onPrompt);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => { window.removeEventListener('beforeinstallprompt', onPrompt); window.removeEventListener('appinstalled', onInstalled); };
   }, []);
 
   // Theo dõi phiên Supabase (đăng nhập / đăng xuất / làm mới token).
@@ -201,6 +220,36 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, remoteLoaded, profile]);
 
+  // Tự làm mới dữ liệu dùng chung: máy khác nộp/duyệt phiếu thì máy này
+  // tự thấy sau tối đa ~45 giây mà không cần tải lại trang. Chỉ đọc,
+  // không ghi; phiếu đang nhập dở không bị mất vì bản nháp nằm riêng.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !remoteLoaded || !profile) return;
+    const id = window.setInterval(async () => {
+      if (document.hidden || !navigator.onLine) return;
+      try {
+        const remote = await fetchSharedState();
+        if (remote.data && remote.updatedAt && remote.updatedAt !== lastSavedAtRef.current && (!remoteUpdatedAtRef.current || remote.updatedAt > remoteUpdatedAtRef.current)) {
+          setState(remote.data);
+          remoteUpdatedAtRef.current = remote.updatedAt;
+        }
+      } catch { /* ngoại tuyến / lỗi mạng: lần sau thử lại */ }
+    }, 45000);
+    return () => window.clearInterval(id);
+  }, [remoteLoaded, profile]);
+
+  // Thông báo xanh (đã lưu, đã duyệt...) tự ẩn sau 5 giây cho gọn.
+  useEffect(() => {
+    if (!msg) return;
+    const t = window.setTimeout(() => setMsg(''), 5000);
+    return () => window.clearTimeout(t);
+  }, [msg]);
+
+  // Nút "Cài app": chỉ hiện khi app chưa được cài (chưa chạy standalone)
+  // và trình duyệt báo cài được, hoặc đang dùng iPhone (hướng dẫn thủ công).
+  const isStandalone = typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || (navigator as unknown as { standalone?: boolean }).standalone === true);
+  const showInstall = !isStandalone && (installPrompt !== null || /iPad|iPhone|iPod/.test(navigator.userAgent));
+
   const week: Week | undefined = state.weeks.find(w => w.id === weekId) ?? state.weeks[state.weeks.length - 1];
   const effectiveWeekId = week?.id ?? '';
   const currentScore: Score | undefined = state.scores.find(s => s.weekId === effectiveWeekId && s.classId === classId);
@@ -237,6 +286,18 @@ export default function App() {
     if (session.role === 'codo') return assignment?.classId === classId && assignment?.weekId === effectiveWeekId;
     return true;
   }, [session, week, currentScore, assignment, classId, effectiveWeekId, draft]);
+
+  // Bấm "Cài app": Android mở hộp thoại cài đặt của trình duyệt;
+  // iPhone không có hộp thoại này nên hiện hướng dẫn thêm thủ công.
+  async function installApp() {
+    if (installPrompt) {
+      installPrompt.prompt();
+      await installPrompt.userChoice.catch(() => undefined);
+      setInstallPrompt(null);
+      return;
+    }
+    if (/iPad|iPhone|iPod/.test(navigator.userAgent)) setMsg('Trên iPhone: bấm nút Chia sẻ (hình vuông có mũi tên lên) rồi chọn "Thêm vào Màn hình chính" nhé.');
+  }
 
   async function handleSignOut() {
     if (supabase) await supabase.auth.signOut();
@@ -498,6 +559,7 @@ export default function App() {
           <span className="chip">{week ? week.label : 'Chưa có tuần'}</span>
           <span className="chip rolebadge">{roleLabel}</span>
           <span className="chip"><span className="who">{session.name}</span></span>
+          {showInstall && <button type="button" className="btn logout" onClick={installApp}>Cài app</button>}
           <button type="button" className="btn logout" onClick={handleSignOut}>{isSupabaseConfigured ? 'Đăng xuất' : 'Đổi vai trò'}</button>
         </div>
       </div></header>
@@ -509,10 +571,14 @@ export default function App() {
         {currentScore?.status === 'returned' && <div className="err">Phiếu bị trả lại — lý do: {currentScore.returnReason}. Sửa lại rồi nộp lại nhé.</div>}
 
         {tab === 'tong-quan' && <Overview state={state} week={week} role={session.role} assignment={assignment?.classId && assignment?.weekId ? { classId: assignment.classId, weekId: assignment.weekId } : undefined} onEnterScores={() => { if (assignment) { setWeekId(assignment.weekId); setClassId(assignment.classId); switchTab('nhap-diem'); } }} />}
-        {tab === 'nhap-diem' && draft && (
+        {tab === 'nhap-diem' && (!week ? (
+          <div className="card"><h2>Nhập điểm</h2><p>Chưa có tuần nào nên chưa nhập điểm được.</p>{session.role === 'admin' ? <><p>Tạo tuần đầu tiên để bắt đầu chấm thi đua nhé.</p><div className="row"><button className="btn" type="button" onClick={() => setTab('quan-ly')}>Sang tab Quản lý tạo tuần</button></div></> : <p>Nhờ Ban thi đua tạo tuần nhé.</p>}</div>
+        ) : session.role === 'codo' && !assignment ? (
+          <div className="card"><h2>Nhập điểm</h2><p>Bạn chưa được Ban thi đua phân công lớp/tuần nên chưa nhập điểm được. Bạn liên hệ Ban thi đua để được phân công nhé.</p></div>
+        ) : draft && (
           <ScoreForm state={state} week={week} draft={draft} calc={calc} canEdit={canEdit} classId={classId} setClassId={switchClass} weekId={effectiveWeekId} setWeekId={(id: string) => { if (confirmDirty()) setWeekId(id); }} search={search} setSearch={setSearch} classes={visibleClasses} currentScore={currentScore} setD={setD} dirty={dirty} onSaveDraft={() => saveScore('draft')} onSubmit={() => saveScore('submitted')} onApprove={approveScore} onReturn={returnScore} returnReason={returnReason} setReturnReason={setReturnReason} onReopen={reopenScore} onCopyPrev={copyPrevWeek} onShowPhieu={() => setShowPhieu(true)} showPhieu={showPhieu} onExportClass={doExportDocxClass} sessionRole={session.role} />
-        )}
-        {tab === 'xep-hang' && week && (
+        ))}
+        {tab === 'xep-hang' && (week ? (
           <div className="card"><h2>Xếp hạng — {week.label} {week.submittedAt ? <span className="badge approved">Đã nộp {week.submittedAt}</span> : <span className="badge draft">Chưa chốt tuần</span>}</h2>
             <p>Chỉ phiếu <b>đã duyệt</b> mới vào xếp hạng chính thức. Còn {pendingScores.length} phiếu chờ duyệt, {state.classes.length - approvedScores.length} lớp chưa có phiếu duyệt.</p>
             <div className="row"><span><b>Khối:</b></span>{(['all', 'tu-nhien', 'xa-hoi'] as const).map(g => <button key={g} type="button" className={rankGroup === g ? 'btn' : 'btn ghost'} onClick={() => setRankGroup(g)}>{g === 'all' ? 'Tất cả các khối' : groupLabel(g)}</button>)}</div>
@@ -523,7 +589,9 @@ export default function App() {
               {rankedScores.map((s, i) => <tr key={s.id}><td>{i + 1}</td><td><b>{state.classes.find(c => c.id === s.classId)?.name}</b></td><td>{calcScore(s.details).final}đ</td><td><span className={`badge ${calcScore(s.details).cls}`}>{calcScore(s.details).cls}</span></td><td>{s.submittedBy ?? '—'}<br /><small>{s.submittedAt ?? ''}</small></td><td><span className="badge approved">Đã duyệt</span></td></tr>)}
               {rankedScores.length === 0 && <tr><td colSpan={6}>Chưa có lớp nào được duyệt trong tuần này{rankGroup === 'all' ? '' : ` ở ${groupLabel(rankGroup)}`}.</td></tr>}
             </tbody></table></div></div>
-        )}
+        ) : (
+          <div className="card"><h2>Xếp hạng</h2><p>Chưa có tuần nào nên chưa có bảng xếp hạng.</p>{session.role === 'admin' ? <><p>Tạo tuần đầu tiên để bắt đầu chấm thi đua nhé.</p><div className="row"><button className="btn" type="button" onClick={() => setTab('quan-ly')}>Sang tab Quản lý tạo tuần</button></div></> : <p>Nhờ Ban thi đua tạo tuần nhé.</p>}</div>
+        ))}
         {tab === 'tong-hop' && <SummaryTab state={state} />}
         {tab === 'quan-ly' && <ManageTab state={state} setState={setState} session={session} onLog={(a: string, d: string) => update(s => s, a, d)} onExportJson={exportJson} onImportJson={importJson} profiles={profiles} onProfilePatch={patchProfile} onProfileDelete={removeProfile} onRefreshProfiles={() => { if (isSupabaseConfigured) listProfiles().then(setProfiles).catch(() => undefined); }} />}
         {tab === 'lich-su' && (
