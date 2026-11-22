@@ -117,8 +117,9 @@ export default function App() {
     const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
       const u = sess?.user;
       // Đăng nhập tài khoản (mới): xóa thông báo của phiên trước
-      // (vd: "Đã đăng xuất." sau khi đăng xuất) để không hiện sang tài khoản khác.
-      if (event === 'SIGNED_IN' && u) { setMsg(''); setErrs([]); }
+      // (vd: "Đã đăng xuất." sau khi đăng xuất) để không hiện sang tài khoản khác,
+      // và đưa về tab Tổng quan thay vì ở lại tab của tài khoản trước.
+      if (event === 'SIGNED_IN' && u) { setMsg(''); setErrs([]); setTab('tong-quan'); }
       setAuthUser(u ? { id: u.id, email: u.email ?? '', user_metadata: (u.user_metadata ?? {}) as Record<string, unknown> } : null);
       setAuthReady(true);
     });
@@ -411,6 +412,8 @@ export default function App() {
   const approvedScores = useMemo(() => week ? state.scores.filter(s => s.weekId === week.id && s.status === 'approved').sort((a, b) => calcScore(b.details).final - calcScore(a.details).final) : [], [state.scores, week]);
   const rankedScores = useMemo(() => rankGroup === 'all' ? approvedScores : approvedScores.filter(s => classGroup(state.classes.find(c => c.id === s.classId)?.name ?? '') === rankGroup), [approvedScores, rankGroup, state.classes]);
   const pendingScores = useMemo(() => week ? state.scores.filter(s => s.weekId === week.id && s.status === 'submitted') : [], [state.scores, week]);
+  // Cờ đỏ chỉ xem được hoạt động của chính mình trong nhật ký.
+  const myLogs = useMemo(() => [...state.logs].reverse().filter(l => l.actor === session?.name), [state.logs, session?.name]);
   const filteredClasses = state.classes.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
   const visibleClasses = session?.role === 'codo' && assignment ? state.classes.filter(c => c.id === assignment.classId) : filteredClasses;
 
@@ -471,7 +474,15 @@ export default function App() {
     );
   }
 
-  const tabs: [string, string][] = [['tong-quan', 'Tổng quan'], ['nhap-diem', 'Nhập điểm'], ['xep-hang', 'Xếp hạng'], ['tong-hop', 'Tổng hợp'], ['quan-ly', 'Quản lý'], ['lich-su', 'Lịch sử']];
+  // Thanh tab theo vai trò: Cờ đỏ không thấy tab Quản lý (chỉ Ban thi đua
+  // mới quản lý được); Chỉ xem không thấy Quản lý lẫn Lịch sử (không có
+  // nội dung gì cho vai trò này ở 2 tab đó).
+  const allTabs: [string, string][] = [['tong-quan', 'Tổng quan'], ['nhap-diem', 'Nhập điểm'], ['xep-hang', 'Xếp hạng'], ['tong-hop', 'Tổng hợp'], ['quan-ly', 'Quản lý'], ['lich-su', 'Lịch sử']];
+  const tabs: [string, string][] = allTabs.filter(([k]) => {
+    if (k === 'quan-ly') return session.role === 'admin';
+    if (k === 'lich-su') return session.role !== 'viewer';
+    return true;
+  });
   return (
     <div>
       {updateAvailable && !updateDismissed && (
@@ -497,7 +508,7 @@ export default function App() {
         {session.role === 'codo' && assignment && <div className="warn">Bạn đang nhập cho lớp {state.classes.find(c => c.id === assignment.classId)?.name} — {state.weeks.find(w => w.id === assignment.weekId)?.label}. Chỉ nhập và nộp được lớp này.</div>}
         {currentScore?.status === 'returned' && <div className="err">Phiếu bị trả lại — lý do: {currentScore.returnReason}. Sửa lại rồi nộp lại nhé.</div>}
 
-        {tab === 'tong-quan' && <Overview state={state} week={week} />}
+        {tab === 'tong-quan' && <Overview state={state} week={week} role={session.role} assignment={assignment?.classId && assignment?.weekId ? { classId: assignment.classId, weekId: assignment.weekId } : undefined} onEnterScores={() => { if (assignment) { setWeekId(assignment.weekId); setClassId(assignment.classId); switchTab('nhap-diem'); } }} />}
         {tab === 'nhap-diem' && draft && (
           <ScoreForm state={state} week={week} draft={draft} calc={calc} canEdit={canEdit} classId={classId} setClassId={switchClass} weekId={effectiveWeekId} setWeekId={(id: string) => { if (confirmDirty()) setWeekId(id); }} search={search} setSearch={setSearch} classes={visibleClasses} currentScore={currentScore} setD={setD} dirty={dirty} onSaveDraft={() => saveScore('draft')} onSubmit={() => saveScore('submitted')} onApprove={approveScore} onReturn={returnScore} returnReason={returnReason} setReturnReason={setReturnReason} onReopen={reopenScore} onCopyPrev={copyPrevWeek} onShowPhieu={() => setShowPhieu(true)} showPhieu={showPhieu} onExportClass={doExportDocxClass} sessionRole={session.role} />
         )}
@@ -516,11 +527,13 @@ export default function App() {
         {tab === 'tong-hop' && <SummaryTab state={state} />}
         {tab === 'quan-ly' && <ManageTab state={state} setState={setState} session={session} onLog={(a: string, d: string) => update(s => s, a, d)} onExportJson={exportJson} onImportJson={importJson} profiles={profiles} onProfilePatch={patchProfile} onProfileDelete={removeProfile} onRefreshProfiles={() => { if (isSupabaseConfigured) listProfiles().then(setProfiles).catch(() => undefined); }} />}
         {tab === 'lich-su' && (
-          <div className="card"><h2>Lịch sử hoạt động</h2>{session.role !== 'admin' && <p>Vai trò Chỉ xem / Cờ đỏ không xem được nhật ký chi tiết.</p>}
-          {session.role === 'admin' && (state.logs.length === 0 ? <p>Chưa có hoạt động nào.</p> : <>
+          <div className="card"><h2>Lịch sử hoạt động</h2>
+          {session.role === 'admin' ? (state.logs.length === 0 ? <p>Chưa có hoạt động nào.</p> : <>
             <div className="tablewrap log-table-wrap"><table className="log-table"><thead><tr><th>Thời gian</th><th>Người làm</th><th>Vai trò</th><th>Việc làm</th><th>Chi tiết</th></tr></thead><tbody>{[...state.logs].reverse().map(l => <tr key={l.id}><td>{l.time}</td><td>{l.actor}</td><td>{l.role}</td><td>{l.action}</td><td>{l.detail}</td></tr>)}</tbody></table></div>
             <div className="log-list">{[...state.logs].reverse().map(l => <div key={l.id} className="log-item"><b>{l.action}</b>{l.detail ? ` — ${l.detail}` : ''}<div className="meta">{l.actor} • {l.role} • {l.time}</div></div>)}</div>
-          </>)}
+          </>) : session.role === 'codo' ? (
+            myLogs.length === 0 ? <p>Bạn chưa có hoạt động nào được ghi lại.</p> : <div className="log-list always">{myLogs.map(l => <div key={l.id} className="log-item"><b>{l.action}</b>{l.detail ? ` — ${l.detail}` : ''}<div className="meta">{l.time}</div></div>)}</div>
+          ) : <p>Vai trò Chỉ xem không xem được nhật ký chi tiết.</p>}
           </div>
         )}
       </main>
@@ -528,7 +541,42 @@ export default function App() {
   );
 }
 
-function Overview({ state, week }: { state: AppState; week?: Week }) {
+function Overview({ state, week, role, assignment, onEnterScores }: {
+  state: AppState; week?: Week;
+  role: Role;
+  assignment?: { classId: string; weekId: string };
+  onEnterScores: () => void;
+}) {
+  // Cờ đỏ: chỉ thấy phần việc của mình — lớp, tuần, trạng thái phiếu của mình.
+  // Không thấy số liệu toàn trường, danh sách lớp cần nhắc hay cảnh báo duyệt (việc của Ban thi đua).
+  if (role === 'codo') {
+    const clsName = assignment ? state.classes.find(c => c.id === assignment.classId)?.name : undefined;
+    const wk = assignment ? state.weeks.find(w => w.id === assignment.weekId) : undefined;
+    const myScore = assignment ? state.scores.find(s => s.weekId === assignment.weekId && s.classId === assignment.classId) : undefined;
+    const myCalc = myScore ? calcScore(myScore.details) : undefined;
+    return (
+      <div>
+        <div className="card"><h2>Lớp của bạn</h2>
+          {!assignment || !clsName || !wk ? (
+            <p>Bạn chưa được Ban thi đua phân công lớp/tuần. Bạn liên hệ Ban thi đua để được phân công nhé.</p>
+          ) : (
+            <>
+              <p><b>{clsName}</b> — {wk.label} {wk.dateRange}</p>
+              {!myScore ? <p>Chưa nhập phiếu tuần này.</p> : (
+                <p>Phiếu tuần này: <b>{STATUS_LABEL[myScore.status]}</b>{myScore.status === 'returned' && myScore.returnReason ? ` — lý do: ${myScore.returnReason}` : ''}{myCalc ? ` — ${myCalc.final}đ, loại ${myCalc.cls}` : ''}</p>
+              )}
+              <div className="row"><button className="btn" type="button" onClick={onEnterScores}>Nhập điểm lớp tôi</button></div>
+            </>
+          )}
+        </div>
+        <div className="card"><h2>Quy trình làm việc</h2>
+          <div className="steps"><span>1. Nháp</span><i>→</i><span>2. Cờ đỏ nộp</span><i>→</i><span>3. Ban thi đua duyệt</span><i>→</i><span>4. Chốt tuần</span></div>
+          <p>Chỉ phiếu đã duyệt mới vào xếp hạng chính thức. Trả lại phải kèm lý do.</p>
+        </div>
+      </div>
+    );
+  }
+  // Ban thi đua / Chỉ xem: bảng tổng hợp toàn trường như cũ.
   const total = state.classes.length;
   const approved = week ? state.scores.filter(s => s.weekId === week.id && s.status === 'approved').length : 0;
   const submitted = week ? state.scores.filter(s => s.weekId === week.id && s.status === 'submitted').length : 0;
