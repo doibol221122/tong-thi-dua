@@ -35,6 +35,14 @@ create table if not exists public.app_state (
 alter table public.profiles enable row level security;
 alter table public.app_state enable row level security;
 
+-- 3b. Cấp quyền bảng cho các role anon/authenticated (bắt buộc:
+-- bảng mới tạo trong SQL Editor chưa tự có quyền này, thiếu là
+-- PostgREST trả 42501 "permission denied" dù RLS đã đúng).
+-- RLS ở mục 4-5 vẫn là lớp chặn chính: chỉ tài khoản đã đăng nhập
+-- mới đọc/ghi được dữ liệu.
+grant select, insert, update, delete on public.profiles to anon, authenticated;
+grant select, insert, update, delete on public.app_state to anon, authenticated;
+
 -- 4. Chính sách cho profiles
 -- Tài khoản đã đăng nhập được đọc danh sách hồ sơ (để đếm hồ sơ đầu
 -- tiên làm admin, và để Ban thi đua duyệt tài khoản trong tab Quản lý).
