@@ -230,7 +230,7 @@ export default function App() {
 
   function saveScore(status: 'draft' | 'submitted') {
     if (!draft || !week || !classId) return;
-    const errors = status === 'submitted' ? validateDetails(draft, state.settings.standardHours) : [];
+    const errors = status === 'submitted' ? validateDetails(draft) : [];
     if (errors.length) { setErrs(errors); setMsg(''); return; }
     setErrs([]);
     const clsName = state.classes.find(c => c.id === classId)?.name ?? classId;
@@ -516,11 +516,13 @@ function ScoreForm(props: {
           <div className="grid2">
             <div>
               <h3>Giờ học</h3>
-              {f('hoursTot', 'Giờ Tốt', '100% giờ Tốt thì +20đ')}
+              {f('hoursTot', 'Giờ Tốt', '')}
               {f('hoursKha', 'Giờ Khá', '-1đ/giờ')}
               {f('hoursTb', 'Giờ Trung bình', '-3đ/giờ')}
               {f('hoursYeu', 'Giờ Yếu', '-5đ/giờ')}
-              <p>Tổng giờ: {calc.totalHours} / chuẩn {state.settings.standardHours} giờ. {calc.is100Tot && 'Đạt 100% giờ Tốt (+20đ).'}</p>
+              <p>Tổng giờ: {calc.totalHours} giờ.</p>
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 700, marginTop: 6 }}><input type="checkbox" checked={calc.is100Tot} disabled={!canEdit} onChange={e => props.setD('allGood', e.target.checked)} style={{ width: 22, height: 22 }} /> 100% giờ Tốt (+20đ)</label>
+              {calc.is100Tot && (d.hoursKha + d.hoursTb + d.hoursYeu > 0) && <p>Lưu ý: đã tích 100% giờ Tốt nhưng vẫn có giờ Khá/Trung bình/Yếu — kiểm tra lại nhé.</p>}
               <h3>Về học tập</h3>
               {f('goodHigh', 'Tổng điểm tốt (≥5)', '+1đ/điểm')}
               {f('goodLow', 'Tổng điểm tốt (<5)', '-1đ/điểm')}
@@ -649,7 +651,6 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
         <label>Tên trường</label><input type="text" value={state.settings.school} onChange={e => setState({ ...state, settings: { ...state.settings, school: e.target.value } })} />
         <label>Số văn bản (vd 04/TĐ-HV)</label><input type="text" value={state.settings.docNo} onChange={e => setState({ ...state, settings: { ...state.settings, docNo: e.target.value } })} />
         <label>Người ký</label><input type="text" value={state.settings.signer} onChange={e => setState({ ...state, settings: { ...state.settings, signer: e.target.value } })} />
-        <label>Giờ học chuẩn / tuần</label><input type="number" value={state.settings.standardHours} onChange={e => setState({ ...state, settings: { ...state.settings, standardHours: Number(e.target.value) || 0 } })} />
         <label>Nhận xét chung — Ưu điểm (để trống sẽ tự gợi ý)</label><textarea value={state.settings.generalPros} onChange={e => setState({ ...state, settings: { ...state.settings, generalPros: e.target.value } })} />
         <label>Nhận xét chung — Nhược điểm (để trống sẽ tự gợi ý)</label><textarea value={state.settings.generalCons} onChange={e => setState({ ...state, settings: { ...state.settings, generalCons: e.target.value } })} />
       </div>
