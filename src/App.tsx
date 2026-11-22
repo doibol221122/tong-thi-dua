@@ -333,27 +333,27 @@ export default function App() {
     // --- Chế độ Supabase: đăng nhập bằng email + mật khẩu ---
     if (isSupabaseConfigured) {
       if (!authReady) {
-        return (<div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><h1>HỆ THỐNG TỔNG THI ĐUA</h1><p className="school">{state.settings.school} — {state.settings.dept}</p></div></div></div></header><main className="wrap"><div className="card"><p>Đang kiểm tra phiên đăng nhập…</p></div></main></div>);
+        return (<div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1></div></div></div></header><main className="wrap"><div className="card"><p>Đang kiểm tra phiên đăng nhập…</p></div></main></div>);
       }
       if (authUser && profile && (profile.status === 'pending' || profile.status === 'disabled')) {
         return (
-          <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><h1>HỆ THỐNG TỔNG THI ĐUA</h1><p className="school">{state.settings.school} — {state.settings.dept}</p></div></div></div></header>
+          <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1></div></div></div></header>
           <main className="wrap"><div className="card"><h2>{profile.status === 'pending' ? 'Tài khoản đang chờ Ban thi đua duyệt' : 'Tài khoản đã bị khóa'}</h2>
           <p>Xin chào <b>{profile.full_name}</b> ({profile.email}). {profile.status === 'pending' ? 'Tài khoản của bạn đang chờ Ban thi đua duyệt. Sau khi được duyệt, bạn đăng nhập lại là vào được hệ thống.' : 'Tài khoản của bạn đã bị Ban thi đua khóa. Bạn liên hệ Ban thi đua để được mở lại.'}</p>
           <div className="row"><button className="btn grey" type="button" onClick={handleSignOut}>Đăng xuất</button></div></div></main></div>
         );
       }
       if (authUser && !profile) {
-        return (<div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><h1>HỆ THỐNG TỔNG THI ĐUA</h1><p className="school">{state.settings.school} — {state.settings.dept}</p></div></div></div></header><main className="wrap"><div className="card"><p>Đang tải hồ sơ tài khoản…</p>{profileErr && <div className="err">{profileErr}</div>}<div className="row"><button className="btn grey" type="button" onClick={handleSignOut}>Đăng xuất</button></div></div></main></div>);
+        return (<div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1></div></div></div></header><main className="wrap"><div className="card"><p>Đang tải hồ sơ tài khoản…</p>{profileErr && <div className="err">{profileErr}</div>}<div className="row"><button className="btn grey" type="button" onClick={handleSignOut}>Đăng xuất</button></div></div></main></div>);
       }
       return (
-        <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><h1>HỆ THỐNG TỔNG THI ĐUA</h1><p className="school">{state.settings.school} — {state.settings.dept}</p></div></div></div></header>
+        <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1></div></div></div></header>
         <main className="wrap"><AuthScreen />{profileErr && <div className="err">{profileErr}</div>}{msg && <div className="ok">{msg}</div>}</main></div>
       );
     }
     // --- Chế độ cũ (chưa cấu hình Supabase): chọn vai trò, dữ liệu trên máy này ---
     return (
-      <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><h1>HỆ THỐNG TỔNG THI ĐUA</h1><p className="school">{state.settings.school} — {state.settings.dept}</p></div></div></div></header>
+      <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1></div></div></div></header>
       <main className="wrap"><div className="card"><h2>Chọn vai trò để vào hệ thống</h2><p>Ban thi đua quản lý toàn bộ. Cờ đỏ chỉ nhập lớp được phân công. Chỉ xem không được nhập hay sửa.</p>
       <p><b>Chưa cấu hình Supabase — đang dùng chế độ trên máy này.</b> Dữ liệu và vai trò chỉ lưu trên trình duyệt này; muốn đăng nhập dùng chung cho mọi máy, cấu hình Supabase theo hướng dẫn trong README.</p>
       <div className="rolecard">
@@ -368,7 +368,7 @@ export default function App() {
   return (
     <div>
       <header className="top"><div className="top-inner">
-        <div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><h1>HỆ THỐNG TỔNG THI ĐUA</h1><p className="school">{state.settings.school} — {state.settings.dept}</p></div></div>
+        <div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1></div></div>
         <div className="userbox">
           <span className="chip">{week ? week.label : 'Chưa có tuần'}</span>
           <span className="chip rolebadge">{roleLabel}</span>

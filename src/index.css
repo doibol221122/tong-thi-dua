@@ -9,7 +9,7 @@ input,select,textarea{font:inherit}
 .brand .logo{width:56px;height:56px;border-radius:50%;object-fit:cover;background:#fff;padding:2px;flex-shrink:0}
 .brand-text{min-width:0}
 .top h1{margin:0;font-size:clamp(17px,4.5vw,22px);line-height:1.25;letter-spacing:.02em}
-.top .school{margin:3px 0 0;opacity:.92;font-size:13px;line-height:1.4}
+.top .school{margin:0 0 2px;opacity:.92;font-size:13px;line-height:1.4;letter-spacing:.04em}
 .userbox{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.14);font-size:13px;font-weight:600;white-space:nowrap}
 .chip .who{font-weight:700;white-space:nowrap}
