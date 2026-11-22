@@ -448,7 +448,7 @@ function SummaryTab({ state }: { state: AppState }) {
   const groupRows = (g: ClassGroup | null) => [...state.classes].filter(c => classGroup(c.name) === g).map(c => ({ c, a: avg(c.id) })).sort((x, y) => (y.a ?? -1) - (x.a ?? -1));
   const groupTable = (title: string, rows: { c: ClassItem; a: number | null }[]) => (
     <div className="card"><h2>{title}</h2>
-      {rows.length === 0 ? <p>Chưa có lớp nào trong khối này.</p> : <div className="tablewrap"><table><thead><tr><th>Hạng</th><th>Lớp</th><th>Điểm TB</th><th>Loại</th></tr></thead><tbody>
+      {rows.length === 0 ? <p>Chưa có lớp nào trong khối này.</p> : <div className="tablewrap slim"><table><thead><tr><th>Hạng</th><th>Lớp</th><th>Điểm TB</th><th>Loại</th></tr></thead><tbody>
         {rows.map(({ c, a }, i) => <tr key={c.id}><td>{a === null ? '—' : i + 1}</td><td><b>{c.name}</b></td><td>{a === null ? '—' : `${a.toFixed(1)}đ`}</td><td>{a === null ? '—' : <span className={`badge ${clsOf(a)}`}>{clsOf(a)}</span>}</td></tr>)}
       </tbody></table></div>}
     </div>

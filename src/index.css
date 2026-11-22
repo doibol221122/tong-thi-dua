@@ -18,18 +18,19 @@ input,select,textarea{font:inherit}
 @media(max-width:760px){.top-inner{flex-direction:column;align-items:flex-start;gap:10px}.top h1{font-size:18px}.brand .logo{width:46px;height:46px}}
 .wrap{max-width:1152px;margin:0 auto;padding:12px 12px 90px}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
-.tabs button{border:1px solid #d7dce6;background:#fff;padding:9px 12px;border-radius:999px;font-weight:600}
+.tabs button{border:1px solid #d7dce6;background:#fff;padding:11px 14px;border-radius:999px;font-weight:600;min-height:44px}
 .tabs button.on{background:#991b1b;color:#fff;border-color:#991b1b}
 .card{background:#fff;border:1px solid #e3e7ef;border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
 .card h2{margin:0 0 8px;font-size:17px}
 .card h3{margin:14px 0 8px;font-size:15px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid2>*{min-width:0}
 @media(max-width:760px){.grid2{grid-template-columns:1fr}.top h1{font-size:17px}}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-input[type=number],input[type=text],input[type=email],input[type=password],select,textarea{width:100%;padding:9px 10px;border:1px solid #cbd2dd;border-radius:9px;background:#fff}
+input[type=number],input[type=text],input[type=email],input[type=password],select,textarea{width:100%;padding:11px 12px;border:1px solid #cbd2dd;border-radius:9px;background:#fff}
 textarea{min-height:64px;resize:vertical}
 label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px}
-.btn{background:#991b1b;color:#fff;border:none;padding:10px 14px;border-radius:10px;font-weight:700}
+.btn{background:#991b1b;color:#fff;border:none;padding:10px 14px;border-radius:10px;font-weight:700;min-height:44px}
 .btn.ghost{background:#fff;color:#991b1b;border:1px solid #991b1b}
 .btn.green{background:#166534}
 .btn.grey{background:#e5e7eb;color:#111}
@@ -37,16 +38,18 @@ label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px}
 .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700;background:#e5e7eb}
 .badge.A{background:#dcfce7;color:#166534}.badge.B{background:#dbeafe;color:#1d4ed8}.badge.C{background:#fef9c3;color:#854d0e}.badge.D{background:#fee2e2;color:#991b1b}
 .badge.submitted{background:#dbeafe;color:#1d4ed8}.badge.approved{background:#dcfce7;color:#166534}.badge.returned{background:#fee2e2;color:#991b1b}.badge.draft{background:#e5e7eb}
-.stepper{display:flex;align-items:center;gap:6px}
+.stepper{display:flex;align-items:center;gap:6px;flex-shrink:0}
 .stepper button{width:44px;height:44px;border-radius:10px;border:1px solid #cbd2dd;background:#fff;font-size:20px;font-weight:800}
 .stepper input{width:84px;text-align:center}
 .field{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #f0f2f6}
-.field .nm{flex:1}.field .pts{font-size:12px;color:#6b7280;white-space:nowrap}
+.field .nm{flex:1;min-width:0}.field .pts{font-size:12px;color:#6b7280}
+@media(max-width:480px){.field{flex-wrap:wrap}.field .nm{flex:1 1 100%}.stepper{margin-left:auto}}
 .scorebar{position:sticky;bottom:0;background:#111827;color:#fff;border-radius:12px;padding:10px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
 .scorebar b{font-size:20px}
 table{width:100%;border-collapse:collapse;font-size:14px}
 .tablewrap{overflow-x:auto;margin-top:8px}
 .tablewrap table{min-width:560px}
+.tablewrap.slim table{min-width:0}
 th,td{border-bottom:1px solid #e5e7eb;padding:8px 6px;text-align:left;vertical-align:top}
 th{background:#f8fafc}
 .podium{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center}
