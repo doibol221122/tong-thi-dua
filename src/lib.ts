@@ -16,12 +16,53 @@ export interface ExtraLine { points: number; note: string; }
 export interface Details {
   hoursTot: number; hoursKha: number; hoursTb: number; hoursYeu: number;
   allGood?: boolean; // Tích tay: 100% giờ Tốt (+20đ)
-  goodHigh: number; goodLow: number; studyViol: number; cheating: number;
+  goodHigh: number; goodLow: number; cheating: number;
   absentTotal: number; absentPermit: number; absentNoPermit: number;
   noAbsLate?: boolean; // Tích tay: 100% không vắng, không đi muộn (+10đ)
-  late: number; noisy: number; privateWork: number; lateDuty: number; dirty: number;
-  food: number; dress: number; skip: number; dishonest: number; parking: number;
-  phone: number; traffic: number; fight: number;
+  noisy: number; lateDuty: number; dirty: number; skip: number; phone: number;
+  // Lỗi vi phạm tách nhỏ theo đúng phiếu giấy (mỗi lỗi một dòng riêng để
+  // khi xuất phiếu chỉ hiện đúng lỗi đã xảy ra, không bê nguyên cụm):
+  // Học tập (-1đ/lượt mỗi lỗi)
+  studyNoLearn?: number; // Không học bài
+  studyNoPrepare?: number; // Không soạn bài
+  studyNoMaterial?: number; // Không mang tài liệu, đồ dùng học tập
+  // Đi muộn / ra ngoài (-2đ/lượt mỗi lỗi)
+  lateLate?: number; // Đi muộn
+  lateOut?: number; // Tự ý ra ngoài trong sinh hoạt 15p
+  // Trong lớp (-2đ/lượt mỗi lỗi)
+  workPrivate?: number; // Làm việc riêng
+  workNotSerious?: number; // Không nghiêm túc
+  workSleep?: number; // Ngủ gục
+  // Ăn uống / điện thoại (-2đ/lượt mỗi lỗi)
+  foodEat?: number; // Ăn/mang đồ ăn vào lớp
+  foodPhone?: number; // Không bỏ điện thoại vào tủ
+  // Trang phục (-1đ/lượt mỗi lỗi)
+  dressSlipper?: number; // Mang dép lê
+  dressNoCard?: number; // Không đeo thẻ HS
+  dressNoBadge?: number; // Không đeo huy hiệu đoàn
+  dressHair?: number; // Nhuộm tóc
+  dressEarring?: number; // Đeo bông tai (Nam)
+  // Thái độ (-5đ/lượt mỗi lỗi)
+  dishonestLie?: number; // Không trung thực
+  dishonestSwear?: number; // Nói tục, chửi thề
+  // Xe cộ (-5đ/lượt mỗi lỗi)
+  parkingWrong?: number; // Để xe sai quy định
+  parkingRev?: number; // Nẹt bô
+  // ATGT (-10đ/lượt mỗi lỗi)
+  trafficHelmet?: number; // Không đội mũ bảo hiểm
+  trafficMirror?: number; // Xe không có gương chiếu hậu
+  trafficThree?: number; // Chở ba
+  // Nghiêm trọng (-20đ/lượt mỗi lỗi)
+  fightHit?: number; // Đánh nhau
+  fightRude?: number; // Vô lễ với GV
+  fightExplosive?: number; // Tàng trữ, sử dụng chất gây nổ
+  fightDrug?: number; // Sử dụng thuốc lá, chất gây nghiện
+  // --- Trường cũ (gộp nhiều lỗi vào một mục) ---
+  // Chỉ giữ lại để phiếu cũ không mất điểm và vẫn xuất đúng như trước;
+  // phiếu mới nhập bằng các trường tách nhỏ ở trên, form không hiện các
+  // trường cũ này nữa.
+  studyViol?: number; late?: number; privateWork?: number; food?: number;
+  dress?: number; dishonest?: number; parking?: number; traffic?: number; fight?: number;
   bonusYouth: number; bonusSweep: number; bonusNtvt: number;
   extraPlus?: ExtraLine[]; // Cộng đột xuất: tối đa 5 dòng, mỗi dòng điểm + nội dung
   extraMinus?: ExtraLine[]; // Trừ đột xuất: tối đa 5 dòng, mỗi dòng điểm + nội dung
@@ -86,11 +127,20 @@ export function classAvg(state: AppState, classId: string, weekIds: string[]): n
 export function emptyDetails(): Details {
   return {
     hoursTot: 0, hoursKha: 0, hoursTb: 0, hoursYeu: 0, allGood: false,
-    goodHigh: 0, goodLow: 0, studyViol: 0, cheating: 0,
+    goodHigh: 0, goodLow: 0, cheating: 0,
     absentTotal: 0, absentPermit: 0, absentNoPermit: 0, noAbsLate: false,
-    late: 0, noisy: 0, privateWork: 0, lateDuty: 0, dirty: 0,
-    food: 0, dress: 0, skip: 0, dishonest: 0, parking: 0,
-    phone: 0, traffic: 0, fight: 0,
+    noisy: 0, lateDuty: 0, dirty: 0, skip: 0, phone: 0,
+    studyNoLearn: 0, studyNoPrepare: 0, studyNoMaterial: 0,
+    lateLate: 0, lateOut: 0,
+    workPrivate: 0, workNotSerious: 0, workSleep: 0,
+    foodEat: 0, foodPhone: 0,
+    dressSlipper: 0, dressNoCard: 0, dressNoBadge: 0, dressHair: 0, dressEarring: 0,
+    dishonestLie: 0, dishonestSwear: 0,
+    parkingWrong: 0, parkingRev: 0,
+    trafficHelmet: 0, trafficMirror: 0, trafficThree: 0,
+    fightHit: 0, fightRude: 0, fightExplosive: 0, fightDrug: 0,
+    studyViol: 0, late: 0, privateWork: 0, food: 0, dress: 0,
+    dishonest: 0, parking: 0, traffic: 0, fight: 0,
     bonusYouth: 0, bonusSweep: 0, bonusNtvt: 0,
     extraPlus: [], extraMinus: [],
     names: '', opinionClass: '', opinionCodo: '',
@@ -108,7 +158,7 @@ export function emptyState(): AppState {
 }
 export interface Calc { plus: number; minus: number; final: number; cls: string; totalHours: number; is100Tot: boolean; noAbsentLate: boolean; }
 export function isNoAbsentLate(d: Details): boolean {
-  return d.noAbsLate === true || (d.noAbsLate === undefined && d.absentTotal === 0 && d.late === 0);
+  return d.noAbsLate === true || (d.noAbsLate === undefined && d.absentTotal === 0 && (d.late ?? 0) === 0 && (d.lateLate ?? 0) === 0);
 }
 export function is100Tot(d: Details): boolean {
   return d.allGood === true || (d.allGood === undefined && d.hoursTot > 0 && d.hoursKha === 0 && d.hoursTb === 0 && d.hoursYeu === 0);
@@ -120,29 +170,41 @@ export interface SectionSums { hoursPlus: number; hoursMinus: number; hocTapPlus
 
 // Điểm cộng/trừ theo từng mục, dùng cùng quy tắc với calcScore
 // (để tiêu đề mục thu gọn hiển thị đúng số điểm của mục đó).
+// Mỗi lỗi tách nhỏ tính đúng mức điểm của cụm cũ; phiếu cũ (trường gộp)
+// vẫn được cộng vào để không mất điểm.
+const num = (v?: number) => v ?? 0;
 export function sectionSums(d: Details): SectionSums {
   return {
     hoursPlus: is100Tot(d) ? 20 : 0,
     hoursMinus: d.hoursKha * 1 + d.hoursTb * 3 + d.hoursYeu * 5,
     hocTapPlus: d.goodHigh * 1 + d.bonusYouth * 20 + d.bonusSweep * 10 + d.bonusNtvt * 10,
-    hocTapMinus: d.goodLow * 1 + d.studyViol * 1 + d.cheating * 10,
+    hocTapMinus: d.goodLow * 1 + num(d.studyViol) * 1 + num(d.studyNoLearn) * 1 + num(d.studyNoPrepare) * 1 + num(d.studyNoMaterial) * 1 + d.cheating * 10,
     neNepPlus: isNoAbsentLate(d) ? 10 : 0,
-    neNepMinus: d.absentNoPermit * 5 + d.late * 2 + d.noisy * 5 + d.privateWork * 2 + d.lateDuty * 2 + d.dirty * 5 + d.food * 2 + d.dress * 1 + d.skip * 5 + d.dishonest * 5 + d.parking * 5 + d.phone * 10 + d.traffic * 10 + d.fight * 20,
+    neNepMinus: d.absentNoPermit * 5
+      + num(d.late) * 2 + num(d.lateLate) * 2 + num(d.lateOut) * 2
+      + d.noisy * 5
+      + num(d.privateWork) * 2 + num(d.workPrivate) * 2 + num(d.workNotSerious) * 2 + num(d.workSleep) * 2
+      + d.lateDuty * 2 + d.dirty * 5
+      + num(d.food) * 2 + num(d.foodEat) * 2 + num(d.foodPhone) * 2
+      + num(d.dress) * 1 + num(d.dressSlipper) * 1 + num(d.dressNoCard) * 1 + num(d.dressNoBadge) * 1 + num(d.dressHair) * 1 + num(d.dressEarring) * 1
+      + d.skip * 5
+      + num(d.dishonest) * 5 + num(d.dishonestLie) * 5 + num(d.dishonestSwear) * 5
+      + num(d.parking) * 5 + num(d.parkingWrong) * 5 + num(d.parkingRev) * 5
+      + d.phone * 10
+      + num(d.traffic) * 10 + num(d.trafficHelmet) * 10 + num(d.trafficMirror) * 10 + num(d.trafficThree) * 10
+      + num(d.fight) * 20 + num(d.fightHit) * 20 + num(d.fightRude) * 20 + num(d.fightExplosive) * 20 + num(d.fightDrug) * 20,
     extraPlus: extraSum(d.extraPlus),
     extraMinus: extraSum(d.extraMinus),
   };
 }
 
 export function calcScore(d: Details): Calc {
+  const sec = sectionSums(d);
   const totalHours = d.hoursTot + d.hoursKha + d.hoursTb + d.hoursYeu;
   const tot100 = is100Tot(d);
   const noAbsentLate = isNoAbsentLate(d);
-  const plus = (tot100 ? 20 : 0) + d.goodHigh * 1 + d.bonusYouth * 20 + d.bonusSweep * 10 + d.bonusNtvt * 10 + (noAbsentLate ? 10 : 0) + extraSum(d.extraPlus);
-  const minus = d.hoursKha * 1 + d.hoursTb * 3 + d.hoursYeu * 5
-    + d.goodLow * 1 + d.studyViol * 1 + d.cheating * 10
-    + d.absentNoPermit * 5 + d.late * 2 + d.noisy * 5 + d.privateWork * 2
-    + d.lateDuty * 2 + d.dirty * 5 + d.food * 2 + d.dress * 1 + d.skip * 5
-    + d.dishonest * 5 + d.parking * 5 + d.phone * 10 + d.traffic * 10 + d.fight * 20 + extraSum(d.extraMinus);
+  const plus = sec.hoursPlus + sec.hocTapPlus + sec.neNepPlus + sec.extraPlus;
+  const minus = sec.hoursMinus + sec.hocTapMinus + sec.neNepMinus + sec.extraMinus;
   const final = 100 + plus - minus;
   const cls = final >= 80 ? 'A' : final >= 65 ? 'B' : final >= 50 ? 'C' : 'D';
   return { plus, minus, final, cls, totalHours, is100Tot: tot100, noAbsentLate };
@@ -154,10 +216,11 @@ export function validateDetails(d: Details): string[] {
   if (d.absentNoPermit > d.absentTotal) errs.push('Số vắng không phép không được lớn hơn tổng số vắng.');
   if (d.absentPermit + d.absentNoPermit > d.absentTotal)
     errs.push('Số vắng có phép + không phép đang lớn hơn tổng số vắng.');
-  const conductViol = d.late + d.noisy + d.privateWork + d.lateDuty + d.dirty + d.food + d.dress + d.skip + d.dishonest + d.parking + d.phone + d.traffic + d.fight;
+  const conductViol = num(d.late) + num(d.lateLate) + num(d.lateOut) + d.noisy + num(d.privateWork) + num(d.workPrivate) + num(d.workNotSerious) + num(d.workSleep) + d.lateDuty + d.dirty + num(d.food) + num(d.foodEat) + num(d.foodPhone) + num(d.dress) + num(d.dressSlipper) + num(d.dressNoCard) + num(d.dressNoBadge) + num(d.dressHair) + num(d.dressEarring) + d.skip + num(d.dishonest) + num(d.dishonestLie) + num(d.dishonestSwear) + num(d.parking) + num(d.parkingWrong) + num(d.parkingRev) + d.phone + num(d.traffic) + num(d.trafficHelmet) + num(d.trafficMirror) + num(d.trafficThree) + num(d.fight) + num(d.fightHit) + num(d.fightRude) + num(d.fightExplosive) + num(d.fightDrug);
   if (conductViol > 0 && d.names.trim() === '')
     errs.push('Có vi phạm nề nếp nhưng chưa ghi tên học sinh vi phạm (ô "Tên HS vi phạm").');
-  if (d.studyViol > 0 && d.names.trim() === '' && conductViol === 0)
+  const studyViolTotal = num(d.studyViol) + num(d.studyNoLearn) + num(d.studyNoPrepare) + num(d.studyNoMaterial);
+  if (studyViolTotal > 0 && d.names.trim() === '' && conductViol === 0)
     errs.push('Có vi phạm học tập nhưng chưa ghi tên học sinh vi phạm.');
   return errs;
 }
@@ -170,7 +233,10 @@ export function hocTapLines(d: Details): string[] {
   }
   if (d.goodHigh) out.push(`Điểm tốt (≥5): ${d.goodHigh}`);
   if (d.goodLow) out.push(`Điểm dưới 5: ${d.goodLow}`);
-  if (d.studyViol) out.push(`Vi phạm học tập: ${d.studyViol} lượt (-${d.studyViol})`);
+  if (num(d.studyNoLearn)) out.push(`Không học bài: ${num(d.studyNoLearn)} lượt (-${num(d.studyNoLearn)})`);
+  if (num(d.studyNoPrepare)) out.push(`Không soạn bài: ${num(d.studyNoPrepare)} lượt (-${num(d.studyNoPrepare)})`);
+  if (num(d.studyNoMaterial)) out.push(`Không mang tài liệu, đồ dùng học tập: ${num(d.studyNoMaterial)} lượt (-${num(d.studyNoMaterial)})`);
+  if (num(d.studyViol)) out.push(`Vi phạm học tập: ${num(d.studyViol)} lượt (-${num(d.studyViol)})`);
   if (d.cheating) out.push(`Gian lận trong thi: ${d.cheating} lượt (-${d.cheating * 10})`);
   if (d.bonusYouth) out.push(`Công trình thanh niên: +${d.bonusYouth * 20}đ`);
   if (d.bonusSweep) out.push(`Quét sân: +${d.bonusSweep * 10}đ`);
@@ -181,22 +247,43 @@ export function hocTapLines(d: Details): string[] {
 export function neNepLines(d: Details): string[] {
   const out: string[] = [];
   if (isNoAbsentLate(d)) out.push('Không vắng, không đi muộn: +10đ');
-  else {
-    if (d.absentTotal) out.push(`Vắng: ${d.absentTotal} (${d.absentPermit}p, ${d.absentNoPermit}Kp)`);
-    if (d.late) out.push(`Đi muộn: ${d.late} lượt (-${d.late * 2})`);
-  }
+  else if (d.absentTotal) out.push(`Vắng: ${d.absentTotal} (${d.absentPermit}p, ${d.absentNoPermit}Kp)`);
+  if (num(d.lateLate)) out.push(`Đi muộn: ${num(d.lateLate)} lượt (-${num(d.lateLate) * 2})`);
+  if (num(d.lateOut)) out.push(`Tự ý ra ngoài trong sinh hoạt 15p: ${num(d.lateOut)} lượt (-${num(d.lateOut) * 2})`);
+  if (num(d.late)) out.push(`Đi muộn, sinh hoạt 15p tự ý ra ngoài: ${num(d.late)} lượt (-${num(d.late) * 2})`);
   if (d.noisy) out.push(`Lớp ồn trong sinh hoạt 15p: ${d.noisy} lượt (-${d.noisy * 5})`);
-  if (d.privateWork) out.push(`Làm việc riêng, ngủ gục: ${d.privateWork} lượt (-${d.privateWork * 2})`);
+  if (num(d.workPrivate)) out.push(`Làm việc riêng: ${num(d.workPrivate)} lượt (-${num(d.workPrivate) * 2})`);
+  if (num(d.workNotSerious)) out.push(`Không nghiêm túc: ${num(d.workNotSerious)} lượt (-${num(d.workNotSerious) * 2})`);
+  if (num(d.workSleep)) out.push(`Ngủ gục: ${num(d.workSleep)} lượt (-${num(d.workSleep) * 2})`);
+  if (num(d.privateWork)) out.push(`Làm việc riêng, không nghiêm túc, ngủ gục: ${num(d.privateWork)} lượt (-${num(d.privateWork) * 2})`);
   if (d.lateDuty) out.push(`Trực nhật muộn: ${d.lateDuty} lần (-${d.lateDuty * 2})`);
   if (d.dirty) out.push(`Lớp bẩn: ${d.dirty} lượt (-${d.dirty * 5})`);
-  if (d.food) out.push(`Ăn/mang đồ ăn vào lớp: ${d.food} lượt (-${d.food * 2})`);
-  if (d.dress) out.push(`Mang dép lê, không đeo thẻ: ${d.dress} lượt (-${d.dress})`);
+  if (num(d.foodEat)) out.push(`Ăn/mang đồ ăn vào lớp: ${num(d.foodEat)} lượt (-${num(d.foodEat) * 2})`);
+  if (num(d.foodPhone)) out.push(`Không bỏ điện thoại vào tủ: ${num(d.foodPhone)} lượt (-${num(d.foodPhone) * 2})`);
+  if (num(d.food)) out.push(`Ăn/mang đồ ăn vào lớp: ${num(d.food)} lượt (-${num(d.food) * 2})`);
+  if (num(d.dressSlipper)) out.push(`Mang dép lê: ${num(d.dressSlipper)} lượt (-${num(d.dressSlipper)})`);
+  if (num(d.dressNoCard)) out.push(`Không đeo thẻ HS: ${num(d.dressNoCard)} lượt (-${num(d.dressNoCard)})`);
+  if (num(d.dressNoBadge)) out.push(`Không đeo huy hiệu đoàn: ${num(d.dressNoBadge)} lượt (-${num(d.dressNoBadge)})`);
+  if (num(d.dressHair)) out.push(`Nhuộm tóc: ${num(d.dressHair)} lượt (-${num(d.dressHair)})`);
+  if (num(d.dressEarring)) out.push(`Đeo bông tai (Nam): ${num(d.dressEarring)} lượt (-${num(d.dressEarring)})`);
+  if (num(d.dress)) out.push(`Mang dép lê, không đeo thẻ: ${num(d.dress)} lượt (-${num(d.dress)})`);
   if (d.skip) out.push(`Bỏ tiết: ${d.skip} lượt (-${d.skip * 5})`);
-  if (d.dishonest) out.push(`Không trung thực, nói tục: ${d.dishonest} lượt (-${d.dishonest * 5})`);
-  if (d.parking) out.push(`Để xe sai quy định, nẹt bô: ${d.parking} lượt (-${d.parking * 5})`);
+  if (num(d.dishonestLie)) out.push(`Không trung thực: ${num(d.dishonestLie)} lượt (-${num(d.dishonestLie) * 5})`);
+  if (num(d.dishonestSwear)) out.push(`Nói tục, chửi thề: ${num(d.dishonestSwear)} lượt (-${num(d.dishonestSwear) * 5})`);
+  if (num(d.dishonest)) out.push(`Không trung thực, nói tục: ${num(d.dishonest)} lượt (-${num(d.dishonest) * 5})`);
+  if (num(d.parkingWrong)) out.push(`Để xe sai quy định: ${num(d.parkingWrong)} lượt (-${num(d.parkingWrong) * 5})`);
+  if (num(d.parkingRev)) out.push(`Nẹt bô: ${num(d.parkingRev)} lượt (-${num(d.parkingRev) * 5})`);
+  if (num(d.parking)) out.push(`Để xe sai quy định, nẹt bô: ${num(d.parking)} lượt (-${num(d.parking) * 5})`);
   if (d.phone) out.push(`Dùng điện thoại trong giờ học: ${d.phone} lượt (-${d.phone * 10})`);
-  if (d.traffic) out.push(`Vi phạm ATGT: ${d.traffic} lượt (-${d.traffic * 10})`);
-  if (d.fight) out.push(`Đánh nhau, vô lễ với GV: ${d.fight} lượt (-${d.fight * 20})`);
+  if (num(d.trafficHelmet)) out.push(`Không đội mũ bảo hiểm: ${num(d.trafficHelmet)} lượt (-${num(d.trafficHelmet) * 10})`);
+  if (num(d.trafficMirror)) out.push(`Xe không có gương chiếu hậu: ${num(d.trafficMirror)} lượt (-${num(d.trafficMirror) * 10})`);
+  if (num(d.trafficThree)) out.push(`Chở ba: ${num(d.trafficThree)} lượt (-${num(d.trafficThree) * 10})`);
+  if (num(d.traffic)) out.push(`Vi phạm ATGT: ${num(d.traffic)} lượt (-${num(d.traffic) * 10})`);
+  if (num(d.fightHit)) out.push(`Đánh nhau: ${num(d.fightHit)} lượt (-${num(d.fightHit) * 20})`);
+  if (num(d.fightRude)) out.push(`Vô lễ với GV: ${num(d.fightRude)} lượt (-${num(d.fightRude) * 20})`);
+  if (num(d.fightExplosive)) out.push(`Tàng trữ, sử dụng chất gây nổ: ${num(d.fightExplosive)} lượt (-${num(d.fightExplosive) * 20})`);
+  if (num(d.fightDrug)) out.push(`Sử dụng thuốc lá, chất gây nghiện: ${num(d.fightDrug)} lượt (-${num(d.fightDrug) * 20})`);
+  if (num(d.fight)) out.push(`Đánh nhau, vô lễ với GV: ${num(d.fight)} lượt (-${num(d.fight) * 20})`);
   (d.extraMinus ?? []).filter(x => x.points > 0 || x.note.trim()).forEach(x => out.push(`${x.note.trim() || 'Trừ khác'}: -${Math.max(0, x.points || 0)}đ`));
   if (d.names.trim()) out.push(`HS vi phạm: ${d.names.trim()}`);
   return out.length ? out : ['—'];
@@ -215,22 +302,49 @@ export function toCsv(rows: string[][]): string {
 // Các lỗi vi phạm tính theo lượt (không tính giờ học vì khác đơn vị,
 // không tính vắng tổng vì trùng với vắng không phép).
 export const VIOLATION_FIELDS: { key: keyof Details; label: string }[] = [
-  { key: 'studyViol', label: 'Vi phạm học tập' },
+  { key: 'studyNoLearn', label: 'Không học bài' },
+  { key: 'studyNoPrepare', label: 'Không soạn bài' },
+  { key: 'studyNoMaterial', label: 'Không mang tài liệu' },
   { key: 'cheating', label: 'Gian lận trong thi' },
   { key: 'absentNoPermit', label: 'Vắng không phép' },
-  { key: 'late', label: 'Đi muộn / ra ngoài 15p' },
+  { key: 'lateLate', label: 'Đi muộn' },
+  { key: 'lateOut', label: 'Tự ý ra ngoài 15p' },
   { key: 'noisy', label: 'Lớp ồn sinh hoạt 15p' },
-  { key: 'privateWork', label: 'Làm việc riêng, ngủ gục' },
+  { key: 'workPrivate', label: 'Làm việc riêng' },
+  { key: 'workNotSerious', label: 'Không nghiêm túc' },
+  { key: 'workSleep', label: 'Ngủ gục' },
   { key: 'lateDuty', label: 'Trực nhật muộn' },
   { key: 'dirty', label: 'Lớp bẩn' },
-  { key: 'food', label: 'Ăn/mang đồ ăn vào lớp' },
-  { key: 'dress', label: 'Dép lê, không đeo thẻ' },
+  { key: 'foodEat', label: 'Ăn/mang đồ ăn vào lớp' },
+  { key: 'foodPhone', label: 'Không bỏ ĐT vào tủ' },
+  { key: 'dressSlipper', label: 'Mang dép lê' },
+  { key: 'dressNoCard', label: 'Không đeo thẻ HS' },
+  { key: 'dressNoBadge', label: 'Không đeo huy hiệu đoàn' },
+  { key: 'dressHair', label: 'Nhuộm tóc' },
+  { key: 'dressEarring', label: 'Đeo bông tai (Nam)' },
   { key: 'skip', label: 'Bỏ tiết' },
-  { key: 'dishonest', label: 'Không trung thực, nói tục' },
-  { key: 'parking', label: 'Để xe sai quy định, nẹt bô' },
+  { key: 'dishonestLie', label: 'Không trung thực' },
+  { key: 'dishonestSwear', label: 'Nói tục, chửi thề' },
+  { key: 'parkingWrong', label: 'Để xe sai quy định' },
+  { key: 'parkingRev', label: 'Nẹt bô' },
   { key: 'phone', label: 'Dùng điện thoại trong giờ' },
-  { key: 'traffic', label: 'Vi phạm ATGT' },
-  { key: 'fight', label: 'Đánh nhau, vô lễ với GV' },
+  { key: 'trafficHelmet', label: 'Không đội mũ bảo hiểm' },
+  { key: 'trafficMirror', label: 'Xe không có gương chiếu hậu' },
+  { key: 'trafficThree', label: 'Chở ba' },
+  { key: 'fightHit', label: 'Đánh nhau' },
+  { key: 'fightRude', label: 'Vô lễ với GV' },
+  { key: 'fightExplosive', label: 'Tàng trữ chất gây nổ' },
+  { key: 'fightDrug', label: 'Thuốc lá, chất gây nghiện' },
+  // Phiếu cũ (trường gộp) — vẫn đếm để dashboard không mất số liệu cũ:
+  { key: 'studyViol', label: 'Vi phạm học tập (cũ)' },
+  { key: 'late', label: 'Đi muộn / ra ngoài 15p (cũ)' },
+  { key: 'privateWork', label: 'Làm việc riêng, ngủ gục (cũ)' },
+  { key: 'food', label: 'Ăn/mang đồ ăn vào lớp (cũ)' },
+  { key: 'dress', label: 'Dép lê, không đeo thẻ (cũ)' },
+  { key: 'dishonest', label: 'Không trung thực, nói tục (cũ)' },
+  { key: 'parking', label: 'Để xe sai quy định, nẹt bô (cũ)' },
+  { key: 'traffic', label: 'Vi phạm ATGT (cũ)' },
+  { key: 'fight', label: 'Đánh nhau, vô lễ với GV (cũ)' },
 ];
 
 export interface ViolationTotal { key: string; label: string; count: number; }

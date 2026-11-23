@@ -796,7 +796,7 @@ function ScoreForm(props: {
   const d = draft;
   const sec = sectionSums(d);
   const pm = (plus: number, minus: number) => [plus ? `+${plus}đ` : '', minus ? `−${minus}đ` : ''].filter(Boolean).join(' • ') || '0đ';
-  const f = (key: keyof Details, label: string, pts: string) => <Stepper label={label} pts={pts} value={d[key] as number} onChange={v => props.setD(key, v as never)} disabled={!canEdit} />;
+  const f = (key: keyof Details, label: string, pts: string) => <Stepper label={label} pts={pts} value={(d[key] as number) ?? 0} onChange={v => props.setD(key, v as never)} disabled={!canEdit} />;
   return (
     <div>
       <div className="card">
@@ -825,7 +825,9 @@ function ScoreForm(props: {
               <Section title="Về học tập" sum={pm(sec.hocTapPlus, sec.hocTapMinus)}>
               {f('goodHigh', 'Tổng điểm tốt (≥5)', '+1đ/điểm')}
               {f('goodLow', 'Tổng điểm tốt (<5)', '-1đ/điểm')}
-              {f('studyViol', 'Vi phạm học tập', '-1đ/lượt: không học bài, không soạn bài, không mang tài liệu')}
+              {f('studyNoLearn', 'Không học bài', '-1đ/lượt')}
+              {f('studyNoPrepare', 'Không soạn bài', '-1đ/lượt')}
+              {f('studyNoMaterial', 'Không mang tài liệu, đồ dùng học tập', '-1đ/lượt')}
               {f('cheating', 'Gian lận trong thi', '-10đ/lượt')}
               {f('bonusYouth', 'Công trình thanh niên', '+20đ/lần')}
               {f('bonusSweep', 'Quét sân', '+10đ/lần')}
@@ -837,21 +839,36 @@ function ScoreForm(props: {
               {f('absentTotal', 'Vắng học (tổng)', 'K phép -5đ/lượt')}
               {f('absentPermit', 'Trong đó: có phép', '')}
               {f('absentNoPermit', 'Trong đó: không phép', '-5đ/lượt')}
-              {f('late', 'Đi muộn, sinh hoạt 15p tự ý ra ngoài', '-2đ/lượt')}
+              {f('lateLate', 'Đi muộn', '-2đ/lượt')}
+              {f('lateOut', 'Tự ý ra ngoài trong sinh hoạt 15p', '-2đ/lượt')}
               {f('noisy', 'Lớp ồn trong sinh hoạt 15p', '-5đ/lượt')}
-              {f('privateWork', 'Làm việc riêng, không nghiêm túc, ngủ gục', '-2đ/lượt')}
+              {f('workPrivate', 'Làm việc riêng', '-2đ/lượt')}
+              {f('workNotSerious', 'Không nghiêm túc', '-2đ/lượt')}
+              {f('workSleep', 'Ngủ gục', '-2đ/lượt')}
               {f('lateDuty', 'Trực nhật muộn', '-2đ/lượt')}
               {f('dirty', 'Lớp bẩn', '-5đ/lượt')}
-              {f('food', 'Ăn/mang đồ ăn vào lớp', '-2đ/lượt')}
-              {f('dress', 'Mang dép lê, không đeo thẻ HS', '-1đ/lượt')}
+              {f('foodEat', 'Ăn/mang đồ ăn vào lớp', '-2đ/lượt')}
+              {f('foodPhone', 'Không bỏ điện thoại vào tủ', '-2đ/lượt')}
+              {f('dressSlipper', 'Mang dép lê', '-1đ/lượt')}
+              {f('dressNoCard', 'Không đeo thẻ HS', '-1đ/lượt')}
+              {f('dressNoBadge', 'Không đeo huy hiệu đoàn', '-1đ/lượt')}
+              {f('dressHair', 'Nhuộm tóc', '-1đ/lượt')}
+              {f('dressEarring', 'Đeo bông tai (Nam)', '-1đ/lượt')}
               {f('skip', 'Bỏ tiết', '-5đ/lượt')}
-              {f('dishonest', 'Không trung thực, nói tục, chửi thề', '-5đ/lượt')}
-              {f('parking', 'Để xe sai quy định, nẹt bô', '-5đ/lượt')}
+              {f('dishonestLie', 'Không trung thực', '-5đ/lượt')}
+              {f('dishonestSwear', 'Nói tục, chửi thề', '-5đ/lượt')}
+              {f('parkingWrong', 'Để xe sai quy định', '-5đ/lượt')}
+              {f('parkingRev', 'Nẹt bô', '-5đ/lượt')}
               {f('phone', 'Dùng điện thoại trong giờ học', '-10đ/lượt')}
-              {f('traffic', 'Vi phạm ATGT', '-10đ/lượt')}
-              {f('fight', 'Đánh nhau, vô lễ với GV', '-20đ/lượt')}
+              {f('trafficHelmet', 'Không đội mũ bảo hiểm', '-10đ/lượt')}
+              {f('trafficMirror', 'Xe không có gương chiếu hậu', '-10đ/lượt')}
+              {f('trafficThree', 'Chở ba', '-10đ/lượt')}
+              {f('fightHit', 'Đánh nhau', '-20đ/lượt')}
+              {f('fightRude', 'Vô lễ với GV', '-20đ/lượt')}
+              {f('fightExplosive', 'Tàng trữ, sử dụng chất gây nổ', '-20đ/lượt')}
+              {f('fightDrug', 'Sử dụng thuốc lá, chất gây nghiện', '-20đ/lượt')}
               <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 700, marginTop: 6 }}><input type="checkbox" checked={calc.noAbsentLate} disabled={!canEdit} onChange={e => props.setD('noAbsLate', e.target.checked)} style={{ width: 22, height: 22 }} /> 100% không vắng, không đi muộn (+10đ)</label>
-              {calc.noAbsentLate && (d.absentTotal > 0 || d.late > 0) && <p>Lưu ý: đã tích 100% không vắng, không đi muộn nhưng vẫn có vắng/đi muộn — kiểm tra lại nhé.</p>}
+              {calc.noAbsentLate && (d.absentTotal > 0 || (d.late ?? 0) > 0 || (d.lateLate ?? 0) > 0) && <p>Lưu ý: đã tích 100% không vắng, không đi muộn nhưng vẫn có vắng/đi muộn — kiểm tra lại nhé.</p>}
               </Section>
             </div>
           </div>
