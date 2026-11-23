@@ -211,3 +211,65 @@ export function toCsv(rows: string[][]): string {
   const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
   return '\uFEFF' + rows.map(r => r.map(esc).join(',')).join('\r\n');
 }
+
+// Các lỗi vi phạm tính theo lượt (không tính giờ học vì khác đơn vị,
+// không tính vắng tổng vì trùng với vắng không phép).
+export const VIOLATION_FIELDS: { key: keyof Details; label: string }[] = [
+  { key: 'studyViol', label: 'Vi phạm học tập' },
+  { key: 'cheating', label: 'Gian lận trong thi' },
+  { key: 'absentNoPermit', label: 'Vắng không phép' },
+  { key: 'late', label: 'Đi muộn / ra ngoài 15p' },
+  { key: 'noisy', label: 'Lớp ồn sinh hoạt 15p' },
+  { key: 'privateWork', label: 'Làm việc riêng, ngủ gục' },
+  { key: 'lateDuty', label: 'Trực nhật muộn' },
+  { key: 'dirty', label: 'Lớp bẩn' },
+  { key: 'food', label: 'Ăn/mang đồ ăn vào lớp' },
+  { key: 'dress', label: 'Dép lê, không đeo thẻ' },
+  { key: 'skip', label: 'Bỏ tiết' },
+  { key: 'dishonest', label: 'Không trung thực, nói tục' },
+  { key: 'parking', label: 'Để xe sai quy định, nẹt bô' },
+  { key: 'phone', label: 'Dùng điện thoại trong giờ' },
+  { key: 'traffic', label: 'Vi phạm ATGT' },
+  { key: 'fight', label: 'Đánh nhau, vô lễ với GV' },
+];
+
+export interface ViolationTotal { key: string; label: string; count: number; }
+export interface ClassViolation { classId: string; name: string; total: number; top: ViolationTotal[]; }
+
+// Thống kê vi phạm từ các phiếu đã cho (thường chỉ truyền phiếu đã duyệt):
+// lỗi nào hay gặp nhất toàn trường, lớp nào vi phạm nhiều nhất và mỗi lớp
+// hay lặp lại lỗi gì. Trả về top 5 mỗi loại.
+export function violationStats(scores: Score[], classes: ClassItem[]): { topViolations: ViolationTotal[]; classWarnings: ClassViolation[]; totalCount: number } {
+  const perField = new Map<string, number>();
+  const perClass = new Map<string, Map<string, number>>();
+  let totalCount = 0;
+  for (const s of scores) {
+    const d = s.details;
+    for (const f of VIOLATION_FIELDS) {
+      const n = Math.max(0, Number((d as unknown as Record<string, unknown>)[f.key]) || 0);
+      if (!n) continue;
+      totalCount += n;
+      perField.set(f.key, (perField.get(f.key) ?? 0) + n);
+      const m = perClass.get(s.classId) ?? new Map<string, number>();
+      m.set(f.key, (m.get(f.key) ?? 0) + n);
+      perClass.set(s.classId, m);
+    }
+  }
+  const labelOf = (key: string) => VIOLATION_FIELDS.find(f => f.key === key)?.label ?? key;
+  const topViolations = [...perField.entries()]
+    .map(([key, count]) => ({ key, label: labelOf(key), count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+  const classWarnings = [...perClass.entries()]
+    .map(([classId, m]) => {
+      const total = [...m.values()].reduce((a, b) => a + b, 0);
+      const top = [...m.entries()]
+        .map(([key, count]) => ({ key, label: labelOf(key), count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 2);
+      return { classId, name: classes.find(c => c.id === classId)?.name ?? classId, total, top };
+    })
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5);
+  return { topViolations, classWarnings, totalCount };
+}
