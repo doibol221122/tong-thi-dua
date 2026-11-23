@@ -9,6 +9,7 @@ export interface Settings {
   generalPros: string; generalCons: string;
 }
 export interface Week { id: string; label: string; dateRange: string; month?: string; submittedAt?: string | null; submittedBy?: string | null; }
+// (month cũ dạng MM/YYYY nhập tay — giờ tháng tính theo tuần nên không dùng nữa.)
 export interface ClassItem { id: string; name: string; }
 export interface Roster { id: string; name: string; classId: string; weekId: string; active: boolean; }
 export interface ExtraLine { points: number; note: string; }
@@ -94,26 +95,19 @@ export function classGroup(name: string): ClassGroup | null {
 }
 export function groupLabel(g: ClassGroup): string { return g === 'tu-nhien' ? 'Khối tự nhiên' : 'Khối xã hội'; }
 
-// --- Tháng của tuần (dạng MM/YYYY) ---
-export function currentMonth(): string {
-  const d = new Date();
-  return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+// --- Tháng của tuần: chỉ tính theo tuần, không tính theo ngày ---
+// Quy ước: cứ 4 tuần là 1 tháng — tuần 1–4 là Tháng 1, tuần 5–8 là Tháng 2...
+// Số tuần lấy từ tên tuần (vd "Tuần 04" -> 4); tên không có số thì dùng vị
+// trí của tuần trong danh sách (tuần đầu tiên là tuần 1).
+export function weekNumberOf(w: Week, fallback: number): number {
+  const m = w.label.match(/(\d+)/);
+  const n = m ? Number(m[1]) : fallback;
+  return n > 0 ? n : fallback;
 }
-const MONTH_RE = /^(0[1-9]|1[0-2])\/\d{4}$/;
-// Tuần mới có trường month thì dùng luôn. Tuần cũ chưa có thì suy ra từ
-// khoảng ngày: lấy ngày cuối trong khoảng (vd "17/11 – 22/11" -> 11/2026);
-// năm lấy trong khoảng ngày nếu có, không có thì lấy năm hiện tại.
-export function monthOfWeek(w: Week): string | null {
-  const m = w.month?.trim();
-  if (m && MONTH_RE.test(m)) return m;
-  const dates = [...w.dateRange.matchAll(/(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?/g)];
-  if (!dates.length) return null;
-  const last = dates[dates.length - 1];
-  const mm = String(Number(last[2])).padStart(2, '0');
-  const yyyy = last[3] ?? String(new Date().getFullYear());
-  return `${mm}/${yyyy}`;
+export function monthOfWeek(w: Week, fallback: number): number {
+  return Math.max(1, Math.ceil(weekNumberOf(w, fallback) / 4));
 }
-export function monthLabel(m: string): string { return `Tháng ${m}`; }
+export function monthLabel(m: number): string { return `Tháng ${m}`; }
 
 // Xếp loại từ điểm trung bình (cùng ngưỡng với điểm thi đua tuần).
 export function clsOf(avg: number): string { return avg >= 80 ? 'A' : avg >= 65 ? 'B' : avg >= 50 ? 'C' : 'D'; }
