@@ -96,7 +96,8 @@ export function classGroup(name: string): ClassGroup | null {
 export function groupLabel(g: ClassGroup): string { return g === 'tu-nhien' ? 'Khối tự nhiên' : 'Khối xã hội'; }
 
 // --- Tháng của tuần: chỉ tính theo tuần, không tính theo ngày ---
-// Quy ước: cứ 4 tuần là 1 tháng — tuần 1–4 là Tháng 1, tuần 5–8 là Tháng 2...
+// Năm học bắt đầu từ tháng 9; cứ 4 tuần là 1 tháng — tuần 1–4 là Tháng 9,
+// tuần 5–8 là Tháng 10, ..., tuần 17–20 là Tháng 1, ...
 // Số tuần lấy từ tên tuần (vd "Tuần 04" -> 4); tên không có số thì dùng vị
 // trí của tuần trong danh sách (tuần đầu tiên là tuần 1).
 export function weekNumberOf(w: Week, fallback: number): number {
@@ -104,10 +105,15 @@ export function weekNumberOf(w: Week, fallback: number): number {
   const n = m ? Number(m[1]) : fallback;
   return n > 0 ? n : fallback;
 }
-export function monthOfWeek(w: Week, fallback: number): number {
-  return Math.max(1, Math.ceil(weekNumberOf(w, fallback) / 4));
+// Khối 4 tuần thứ mấy của năm học (0-based): tuần 1–4 -> 0, tuần 5–8 -> 1...
+export function monthBlockOf(w: Week, fallback: number): number {
+  return Math.floor((weekNumberOf(w, fallback) - 1) / 4);
 }
-export function monthLabel(m: number): string { return `Tháng ${m}`; }
+// Tháng dương lịch của một khối 4 tuần: khối 0 -> 9, khối 1 -> 10, ..., khối 4 -> 1.
+export function monthOfBlock(b: number): number {
+  return ((8 + b) % 12) + 1;
+}
+export function monthLabel(b: number): string { return `Tháng ${monthOfBlock(b)}`; }
 
 // Xếp loại từ điểm trung bình (cùng ngưỡng với điểm thi đua tuần).
 export function clsOf(avg: number): string { return avg >= 80 ? 'A' : avg >= 65 ? 'B' : avg >= 50 ? 'C' : 'D'; }
