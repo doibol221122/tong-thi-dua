@@ -93,6 +93,51 @@ export async function exportWeekDocx(s: AppState, week: Week, approvedOnly: bool
   });
   return Packer.toBlob(doc);
 }
+// Tổng hợp tuần KHÔNG xếp hạng: để Ban thi đua rà soát số liệu trước khi
+// duyệt — liệt kê đủ các lớp từ khối 10 đến khối 12 theo thứ tự lớp,
+// kèm trạng thái từng phiếu (kể cả lớp chưa nộp), không sắp theo điểm.
+export async function exportWeekDocxNoRank(s: AppState, week: Week): Promise<Blob> {
+  const nameOf = (id: string) => s.classes.find(c => c.id === id)?.name ?? id;
+  const statusLabel = (st: Score['status']) => st === 'approved' ? 'Đã duyệt' : st === 'submitted' ? 'Chờ duyệt' : st === 'returned' ? 'Trả lại' : 'Nháp';
+  const tableRows = [
+    new TableRow({ children: [cell('TT', { bold: true, align: AlignmentType.CENTER }), cell('LỚP', { bold: true, align: AlignmentType.CENTER }), cell('HỌC TẬP', { bold: true, align: AlignmentType.CENTER }), cell('NỀ NẾP', { bold: true, align: AlignmentType.CENTER }), cell('TỔNG ĐIỂM – XẾP LOẠI', { bold: true, align: AlignmentType.CENTER }), cell('GHI CHÚ', { bold: true, align: AlignmentType.CENTER })] }),
+    ...s.classes.map((c, i) => {
+      const sc = s.scores.find(x => x.weekId === week.id && x.classId === c.id);
+      if (!sc) return new TableRow({ children: [
+        cell(String(i + 1), { align: AlignmentType.CENTER }),
+        cell(c.name, { bold: true }),
+        cell('—'),
+        cell('—'),
+        cell('—', { align: AlignmentType.CENTER }),
+        cell('Chưa nộp'),
+      ]});
+      const cc = calcScore(sc.details);
+      return new TableRow({ children: [
+        cell(String(i + 1), { align: AlignmentType.CENTER }),
+        cell(c.name, { bold: true }),
+        cell(hocTapLines(sc.details).map(x => '- ' + x).join('\n')),
+        cell(neNepLines(sc.details).map(x => '- ' + x).join('\n')),
+        cell(`${cc.final}đ-${cc.cls}`, { bold: true, align: AlignmentType.CENTER }),
+        cell(statusLabel(sc.status)),
+      ]});
+    }),
+  ];
+  const weekScores = s.scores.filter(x => x.weekId === week.id);
+  const pros = s.settings.generalPros || `Các lớp đạt 100% giờ học tốt: ${weekScores.filter(r => calcScore(r.details).is100Tot).map(r => nameOf(r.classId)).join(', ') || '—'}.`;
+  const cons = s.settings.generalCons || 'Vẫn còn một số học sinh vi phạm nội quy đi muộn, mang đồ ăn vào lớp.';
+  const doc = new Document({
+    sections: [{ children: [
+      ...headerRows(s, `TỔNG HỢP THI ĐUA ${week.label.toUpperCase()} (KHÔNG XẾP HẠNG)`, '1. Tổng kết tuần', week.dateRange),
+      new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: tableRows }),
+      p('2. Nhận xét chung', { bold: true, size: 14 }),
+      p(`- Ưu điểm: ${pros}`),
+      p(`- Nhược điểm: ${cons}`),
+      new Paragraph({ children: [new TextRun({ text: '', font: FONT })] }),
+      signRows(s),
+    ] }],
+  });
+  return Packer.toBlob(doc);
+}
 // Tổng hợp tháng: điểm trung bình của từng lớp qua các tuần trong tháng
 // (cứ 4 tuần là 1 tháng), kèm điểm từng tuần. Chỉ tính phiếu đã duyệt.
 export async function exportMonthDocx(s: AppState, weeks: Week[], monthName: string): Promise<Blob> {

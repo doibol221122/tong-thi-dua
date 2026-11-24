@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, ClassGroup, ClassItem, Details, ExtraLine, Role, Score, Week } from './lib';
 import { calcScore, classAvg, classGroup, clsOf, downloadBlob, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, gateDuty, groupLabel, hocTapLines, monthBlockOf, monthLabel, neNepLines, nowStr, sectionSums, toCsv, uid, validateDetails, violationStats, weekNumberOf } from './lib';
-import { exportClassDocx, exportMonthDocx, exportWeekDocx } from './docxExport';
+import { exportClassDocx, exportMonthDocx, exportWeekDocx, exportWeekDocxNoRank } from './docxExport';
 import { LOGO_DATA_URI } from './logoData';
 import AuthScreen from './AuthScreen';
 import { deleteProfile, ensureProfile, fetchSharedState, isSupabaseConfigured, listProfiles, saveSharedState, supabase, updateProfile } from './supabase';
@@ -509,6 +509,11 @@ export default function App() {
     try { const blob = await exportWeekDocx(state, week, false); downloadBlob(blob, `TONG_HOP_THI_DUA_${week.label.replace(/\s+/g, '_')}.docx`); update(s => s, 'Xuất file .docx', week.label); setMsg('Đã tải file .docx tổng hợp tuần.'); }
     catch { setErrs(['Không xuất được file .docx. Thử lại sau.']); }
   }
+  async function doExportDocxWeekNoRank() {
+    if (!week) return;
+    try { const blob = await exportWeekDocxNoRank(state, week); downloadBlob(blob, `TONG_HOP_THI_DUA_${week.label.replace(/\s+/g, '_')}_KHONG_XEP_HANG.docx`); update(s => s, 'Xuất file .docx (không xếp hạng)', week.label); setMsg('Đã tải file .docx tổng hợp tuần (không xếp hạng).'); }
+    catch { setErrs(['Không xuất được file .docx. Thử lại sau.']); }
+  }
   async function doExportDocxMonth(weeks: Week[], monthName: string) {
     try { const blob = await exportMonthDocx(state, weeks, monthName); downloadBlob(blob, `TONG_HOP_THI_DUA_${monthName.replace(/\s+/g, '_').toUpperCase()}.docx`); update(s => s, 'Xuất file .docx tổng hợp tháng', monthName); setMsg(`Đã tải file .docx tổng hợp ${monthName}.`); }
     catch { setErrs(['Không xuất được file .docx tổng hợp tháng. Thử lại sau.']); }
@@ -677,7 +682,7 @@ export default function App() {
             <p>Chỉ phiếu <b>đã duyệt</b> mới vào xếp hạng chính thức. Còn {pendingScores.length} phiếu chờ duyệt, {state.classes.length - approvedScores.length} lớp chưa có phiếu duyệt.</p>
             <div className="row"><span><b>Khối:</b></span>{(['all', 'tu-nhien', 'xa-hoi'] as const).map(g => <button key={g} type="button" className={rankGroup === g ? 'btn' : 'btn ghost'} onClick={() => setRankGroup(g)}>{g === 'all' ? 'Tất cả các khối' : groupLabel(g)}</button>)}</div>
             {rankedScores.length >= 3 && <div className="podium" style={{ marginTop: 10 }}>{rankedScores.slice(0, 3).map((s, i) => <div key={s.id} className={`p${i + 1}`}><b>{i + 1}. {state.classes.find(c => c.id === s.classId)?.name}</b><br /><span style={{ fontSize: 22 }}>{calcScore(s.details).final}đ-{calcScore(s.details).cls}</span></div>)}</div>}
-            <div className="row" style={{ marginTop: 10 }}><button className="btn" type="button" onClick={doExportDocxWeek}>Xuất Word (.docx)</button><button className="btn ghost" type="button" onClick={exportCsv}>Tải CSV</button><button className="btn ghost" type="button" onClick={copyZalo}>Chép gửi Zalo</button>
+            <div className="row" style={{ marginTop: 10 }}><button className="btn" type="button" onClick={doExportDocxWeek}>Xuất Word (.docx)</button><button className="btn ghost" type="button" onClick={doExportDocxWeekNoRank}>Xuất .docx (không xếp hạng)</button><button className="btn ghost" type="button" onClick={exportCsv}>Tải CSV</button><button className="btn ghost" type="button" onClick={copyZalo}>Chép gửi Zalo</button>
             {session.role === 'admin' && (week.submittedAt ? <button className="btn grey" type="button" onClick={reopenWeek}>Mở lại tuần</button> : <button className="btn green" type="button" onClick={closeWeek}>Nộp &amp; chốt tuần này</button>)}</div>
             <div className="tablewrap"><table><thead><tr><th>Hạng</th><th>Lớp</th><th>Điểm</th><th>Loại</th><th>Người nhập</th><th>Trạng thái</th></tr></thead><tbody>
               {rankedScores.map((s, i) => <tr key={s.id}><td>{i + 1}</td><td><b>{state.classes.find(c => c.id === s.classId)?.name}</b></td><td>{calcScore(s.details).final}đ</td><td><span className={`badge ${calcScore(s.details).cls}`}>{calcScore(s.details).cls}</span></td><td>{s.submittedBy ?? '—'}<br /><small>{s.submittedAt ?? ''}</small></td><td><span className="badge approved">Đã duyệt</span></td></tr>)}
