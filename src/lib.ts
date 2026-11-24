@@ -199,19 +199,32 @@ export function absentTotalOf(d: Details): number { return num(d.absentPermit) +
 // Dòng vi phạm theo đúng mẫu tổng hợp tuần của trường: có tên HS thì
 // tên nằm ngay sau dấu hai chấm, điểm trừ trong ngoặc cuối dòng
 // ("Đi muộn: Thanh, Hòa (-4)"); không có tên thì giữ số lượt
-// ("Đi muộn: 2 lượt (-4)"). Nếu một HS vi phạm nhiều lần thì số lượt
-// vẫn hiện sau tên ("Mang dép lê: Lan Anh (4 lượt) (-4)").
+// ("Đi muộn: 2 lượt (-4)"). Nếu tên và số lượt không khớp nhau (một HS
+// vi phạm nhiều lần, hoặc ghi thừa tên) thì số lượt vẫn hiện sau tên
+// ("Mang dép lê: Lan Anh (4 lượt) (-4)").
 export function violLine(d: Details, key: string, label: string, count: number, points: number, unit = 'lượt'): string {
   const names = (d.violNames?.[key] ?? '').trim();
   if (!names) return `${label}: ${count}${unit ? ' ' + unit : ''} (${points})`;
   const nNames = names.split(',').filter(s => s.trim()).length;
-  const extra = count > nNames ? ` (${count}${unit ? ' ' + unit : ''})` : '';
+  const extra = count !== nNames ? ` (${count}${unit ? ' ' + unit : ''})` : '';
   return `${label}: ${names}${extra} (${points})`;
 }
+// Dòng vi phạm đã được miễn vì tích 100% (không tính điểm, chỉ để người
+// duyệt phiếu thấy số liệu đã nhập): "Đi muộn: 2 lượt (đã miễn vì tích
+// 100% không vắng)". Tên HS (nếu có) hiện như violLine.
+export function violLineWaived(d: Details, key: string, label: string, count: number, reason: string, unit = 'lượt'): string {
+  const names = (d.violNames?.[key] ?? '').trim();
+  if (!names) return `${label}: ${count}${unit ? ' ' + unit : ''} (${reason})`;
+  const nNames = names.split(',').filter(s => s.trim()).length;
+  const extra = count !== nNames ? ` (${count}${unit ? ' ' + unit : ''})` : '';
+  return `${label}: ${names}${extra} (${reason})`;
+}
 // Hậu tố tên HS vắng không phép cho dòng Vắng (" — Minh, Quân (-5)").
+// Chỉ in khi thật sự có vắng không phép (không in "(-0)").
 export function absentNamesSuffix(d: Details): string {
   const names = (d.violNames?.['absentNoPermit'] ?? '').trim();
-  return names ? ` — ${names} (-${(d.absentNoPermit ?? 0) * 5})` : '';
+  if (!names || (d.absentNoPermit ?? 0) <= 0) return '';
+  return ` — ${names} (-${(d.absentNoPermit ?? 0) * 5})`;
 }
 export function isNoAbsentLate(d: Details): boolean {
   return d.noAbsLate === true || (d.noAbsLate === undefined && absentTotalOf(d) === 0 && (d.late ?? 0) === 0 && (d.lateLate ?? 0) === 0);
@@ -269,20 +282,294 @@ export function calcScore(d: Details): Calc {
   const cls = final >= 80 ? 'A' : final >= 65 ? 'B' : final >= 50 ? 'C' : 'D';
   return { plus, minus, final, cls, totalHours, is100Tot: tot100, noAbsentLate };
 }
+// Tất cả các trường số trong Details (giờ, điểm, vi phạm, thưởng, trường cũ).
+const NUM_INT_FIELDS: (keyof Details)[] = [
+  'hoursTot', 'hoursKha', 'hoursTb', 'hoursYeu',
+  'goodHigh', 'goodLow', 'cheating',
+  'absentPermit', 'absentNoPermit',
+  'noisy', 'lateDuty', 'dirty', 'skip', 'phone',
+  'studyNoLearn', 'studyNoPrepare', 'studyNoMaterial',
+  'lateLate', 'lateOut',
+  'workPrivate', 'workNotSerious', 'workSleep',
+  'foodEat', 'foodPhone',
+  'dressSlipper', 'dressNoCard', 'dressNoBadge', 'dressHair', 'dressEarring',
+  'dishonestLie', 'dishonestSwear',
+  'parkingWrong', 'parkingRev',
+  'trafficHelmet', 'trafficMirror', 'trafficThree',
+  'fightHit', 'fightRude', 'fightExplosive', 'fightDrug',
+  'studyViol', 'late', 'privateWork', 'food', 'dress', 'dishonest', 'parking', 'traffic', 'fight',
+  'bonusYouth', 'bonusSweep', 'bonusNtvt',
+];
+const NUM_LABELS: Partial<Record<keyof Details, string>> = {
+  hoursTot: 'Giờ Tốt', hoursKha: 'Giờ Khá', hoursTb: 'Giờ Trung bình', hoursYeu: 'Giờ Yếu',
+  goodHigh: 'Tổng điểm tốt (≥5)', goodLow: 'Tổng điểm tốt (<5)', cheating: 'Gian lận trong thi',
+  absentPermit: 'Vắng có phép', absentNoPermit: 'Vắng không phép',
+  bonusYouth: 'Công trình thanh niên', bonusSweep: 'Quét sân', bonusNtvt: 'NTVT',
+};
 export function validateDetails(d: Details): string[] {
   const errs: string[] = [];
+  const labelOf = (k: string): string => (NUM_LABELS[k as keyof Details] ?? VIOLATION_FIELDS.find(f => f.key === k)?.label ?? k);
+  // Mọi số phải là số nguyên hữu hạn ≥ 0 (chặn số âm, phân số, NaN lọt
+  // từ import/sao chép — NaN từng vô hiệu luôn kiểm tra tổng giờ).
+  for (const k of NUM_INT_FIELDS) {
+    const v = d[k] as unknown;
+    if (v === undefined) continue;
+    if (typeof v !== 'number' || !Number.isFinite(v) || !Number.isInteger(v) || v < 0) {
+      errs.push(`${labelOf(k)}: số liệu không hợp lệ (phải là số nguyên ≥ 0).`);
+    }
+  }
   const total = d.hoursTot + d.hoursKha + d.hoursTb + d.hoursYeu;
   // Tích 100% giờ Tốt thì không cần nhập tổng số giờ nữa.
   if (total === 0 && !is100Tot(d)) errs.push('Chưa nhập giờ học: tổng số giờ đang bằng 0.');
+  // Giờ học: mỗi loại ≤ 60 giờ/tuần, tổng ≤ 60 giờ.
+  for (const k of ['hoursTot', 'hoursKha', 'hoursTb', 'hoursYeu'] as const) {
+    if ((d[k] ?? 0) > 60) errs.push(`${labelOf(k)}: tối đa 60 giờ/tuần.`);
+  }
+  if (total > 60) errs.push('Tổng số giờ học vượt quá 60 giờ/tuần.');
+  // Mỗi lỗi vi phạm ≤ 100 lượt/tuần.
+  for (const f of VIOLATION_FIELDS) {
+    const v = (d[f.key] as number | undefined) ?? 0;
+    if (v > 100) errs.push(`${f.label}: tối đa 100 lượt/tuần.`);
+  }
+  if ((d.goodLow ?? 0) > 100) errs.push('Tổng điểm tốt (<5): tối đa 100 điểm/tuần.');
+  // Cộng/trừ đột xuất: có điểm thì bắt buộc ghi chú; tối đa 5 dòng mỗi loại
+  // (không giới hạn cứng số điểm mỗi dòng — theo quyết định D5).
+  for (const [key, ten] of [['extraPlus', 'Cộng khác'], ['extraMinus', 'Trừ khác']] as const) {
+    const list = d[key] ?? [];
+    if (list.length > 5) errs.push(`${ten}: tối đa 5 dòng.`);
+    list.forEach((x, i) => {
+      if (typeof x.points !== 'number' || !Number.isFinite(x.points) || !Number.isInteger(x.points) || x.points < 0) {
+        errs.push(`${ten} dòng ${i + 1}: điểm phải là số nguyên ≥ 0.`);
+      } else if (x.points !== 0 && !x.note.trim()) {
+        errs.push(`${ten} dòng ${i + 1}: có điểm thì cần ghi nội dung.`);
+      }
+    });
+  }
+  // Tên HS: chỉ ghi khi mục có lượt, số tên không vượt số lượt.
+  for (const [key, raw] of Object.entries(d.violNames ?? {})) {
+    const names = (raw ?? '').trim();
+    if (!names) continue;
+    const count = (d[key as keyof Details] as number | undefined) ?? 0;
+    const nNames = names.split(',').filter(s => s.trim()).length;
+    if (count <= 0) errs.push(`${labelOf(key)}: đã ghi tên HS nhưng số lượt đang là 0.`);
+    else if (nNames > count) errs.push(`${labelOf(key)}: ghi ${nNames} tên nhưng chỉ có ${count} lượt.`);
+  }
   return errs;
+}
+// So sánh điểm trung bình để xếp hạng: lớp chưa có phiếu duyệt (null)
+// luôn xếp sau lớp có điểm (không dùng -1 làm mốc — điểm thật có thể âm).
+export function compareAvg(a: number | null, b: number | null): number {
+  if (a === null && b === null) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return b - a;
+}
+// Số tuần đã nộp phiếu duyệt của một lớp trong danh sách tuần cho trước:
+// "nộp n/m tuần" — hiển thị độ phủ nộp phiếu bên cạnh điểm trung bình.
+export function classCoverage(state: AppState, classId: string, weekIds: string[]): { approved: number; total: number } {
+  const approved = new Set(state.scores.filter(s => s.classId === classId && s.status === 'approved' && weekIds.includes(s.weekId)).map(s => s.weekId)).size;
+  return { approved, total: weekIds.length };
+}
+
+// Cụm trường gộp cũ -> các trường tách nhỏ tương ứng.
+const LEGACY_CLUSTERS: { legacy: keyof Details; split: (keyof Details)[]; label: string }[] = [
+  { legacy: 'studyViol', split: ['studyNoLearn', 'studyNoPrepare', 'studyNoMaterial'], label: 'Vi phạm học tập' },
+  { legacy: 'late', split: ['lateLate', 'lateOut'], label: 'Đi muộn / ra ngoài 15p' },
+  { legacy: 'privateWork', split: ['workPrivate', 'workNotSerious', 'workSleep'], label: 'Làm việc riêng, không nghiêm túc, ngủ gục' },
+  { legacy: 'food', split: ['foodEat', 'foodPhone'], label: 'Ăn/mang đồ ăn vào lớp' },
+  { legacy: 'dress', split: ['dressSlipper', 'dressNoCard', 'dressNoBadge', 'dressHair', 'dressEarring'], label: 'Trang phục' },
+  { legacy: 'dishonest', split: ['dishonestLie', 'dishonestSwear'], label: 'Không trung thực, nói tục' },
+  { legacy: 'parking', split: ['parkingWrong', 'parkingRev'], label: 'Để xe sai quy định, nẹt bô' },
+  { legacy: 'traffic', split: ['trafficHelmet', 'trafficMirror', 'trafficThree'], label: 'Vi phạm ATGT' },
+  { legacy: 'fight', split: ['fightHit', 'fightRude', 'fightExplosive', 'fightDrug'], label: 'Đánh nhau, vô lễ với GV' },
+];
+// Phiếu trộn cả số liệu cũ (gộp) và mới (tách nhỏ) trong cùng một cụm thì
+// đang tính cả hai (trừ trùng). Chỉ cảnh báo, không tự sửa điểm phiếu đã duyệt.
+export function legacyMixedClusters(d: Details): string[] {
+  return LEGACY_CLUSTERS
+    .filter(c => ((d[c.legacy] as number | undefined) ?? 0) > 0 && c.split.some(k => ((d[k] as number | undefined) ?? 0) > 0))
+    .map(c => c.label);
+}
+// Chép/sao chép phiếu: bỏ trường gộp cũ khi đã có trường tách nhỏ tương ứng
+// (tránh trừ trùng), và bỏ tổng vắng nhập tay cũ (giờ tự tính).
+export function dropLegacyWhenSplit(d: Details): Details {
+  const next: Details = { ...d, absentTotal: undefined };
+  for (const c of LEGACY_CLUSTERS) {
+    if (c.split.some(k => ((next[k] as number | undefined) ?? 0) > 0)) (next as unknown as Record<string, unknown>)[c.legacy] = 0;
+  }
+  return next;
+}
+
+// Dấu ngày giờ cho tên file xuất (YYYYMMDD-HHmm, giờ địa phương).
+export function stamp(): string {
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  const t = new Date();
+  return `${t.getFullYear()}${p2(t.getMonth() + 1)}${p2(t.getDate())}-${p2(t.getHours())}${p2(t.getMinutes())}`;
+}
+
+// Tên file xuất: chỉ dùng ký tự ASCII (bỏ dấu tiếng Việt, khoảng trắng
+// thành _) để trình duyệt nào cũng giữ đúng tên file khi tải — tên có
+// dấu ("Tuần_05.docx") làm Chrome rơi về tên "download" không có đuôi.
+export function safeFilename(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').replace(/[^A-Za-z0-9._-]+/g, '_');
+}
+
+// --- Kiểm tra hình dạng của một Details (dùng khi nhập JSON) ---
+function detailsShapeError(d: unknown): string | null {
+  if (typeof d !== 'object' || d === null || Array.isArray(d)) return 'chi tiết phiếu không phải là một đối tượng';
+  const o = d as Record<string, unknown>;
+  for (const k of NUM_INT_FIELDS) {
+    const v = o[k];
+    if (v === undefined) continue;
+    if (typeof v !== 'number' || !Number.isFinite(v) || !Number.isInteger(v) || v < 0) return `chi tiết phiếu: trường ${k} phải là số nguyên ≥ 0`;
+  }
+  for (const k of ['allGood', 'noAbsLate'] as const) {
+    if (o[k] !== undefined && typeof o[k] !== 'boolean') return `chi tiết phiếu: trường ${k} phải là true/false`;
+  }
+  for (const k of ['extraPlus', 'extraMinus'] as const) {
+    const list = o[k];
+    if (list === undefined) continue;
+    if (!Array.isArray(list)) return `chi tiết phiếu: trường ${k} phải là một mảng`;
+    for (const x of list) {
+      if (typeof x !== 'object' || x === null) return `chi tiết phiếu: dòng ${k} không đúng định dạng`;
+      const r = x as Record<string, unknown>;
+      if (typeof r.points !== 'number' || !Number.isFinite(r.points) || !Number.isInteger(r.points) || (r.points as number) < 0) return `chi tiết phiếu: dòng ${k} có điểm không phải số nguyên ≥ 0`;
+      if (typeof r.note !== 'string') return `chi tiết phiếu: dòng ${k} thiếu nội dung`;
+    }
+  }
+  if (o.violNames !== undefined) {
+    if (typeof o.violNames !== 'object' || o.violNames === null || Array.isArray(o.violNames)) return 'chi tiết phiếu: violNames không đúng định dạng';
+    for (const v of Object.values(o.violNames as Record<string, unknown>)) {
+      if (typeof v !== 'string') return 'chi tiết phiếu: tên HS vi phạm phải là chuỗi';
+    }
+  }
+  for (const k of ['names', 'opinionClass', 'opinionCodo'] as const) {
+    if (o[k] !== undefined && typeof o[k] !== 'string') return `chi tiết phiếu: trường ${k} phải là chuỗi`;
+  }
+  if (o.absentTotal !== undefined && typeof o.absentTotal !== 'number') return 'chi tiết phiếu: trường absentTotal phải là số';
+  return null;
+}
+
+// Giờ "24/11/2026 06:00" (định dạng vi-VN trong dữ liệu) -> mốc thời gian
+// để so sánh bản nào mới hơn; không đọc được thì coi là 0 (cũ nhất).
+function parseVnTime(s?: string): number {
+  if (!s) return 0;
+  const m = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) return 0;
+  return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]), Number(m[4] ?? 0), Number(m[5] ?? 0), Number(m[6] ?? 0)).getTime();
+}
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isStr = (v: unknown): v is string => typeof v === 'string';
+
+// Kiểm tra file JSON sao lưu trước khi nhập: đủ mảng đúng kiểu, id duy
+// nhất, phiếu trỏ tới lớp/tuần có thật, mọi số nguyên hữu hạn ≥ 0.
+// Trùng (lớp, tuần) thì giữ bản mới nhất theo updatedAt. Lỗi -> từ chối
+// toàn bộ, giữ nguyên dữ liệu, báo lỗi đầu tiên gặp.
+export function validateImportedState(p: unknown): { ok: true; state: AppState } | { ok: false; error: string } {
+  const fail = (error: string): { ok: false; error: string } => ({ ok: false, error });
+  if (!isObj(p)) return fail('File không phải là một đối tượng JSON.');
+  const s = p.settings;
+  if (!isObj(s)) return fail('Thiếu mục settings.');
+  for (const k of ['school', 'dept', 'docNo', 'signer', 'signerTitle'] as const) {
+    if (!isStr(s[k])) return fail(`settings: thiếu trường ${k}.`);
+  }
+  for (const k of ['generalPros', 'generalCons'] as const) {
+    if (s[k] !== undefined && !isStr(s[k])) return fail(`settings: trường ${k} phải là chuỗi.`);
+  }
+  for (const k of ['weeks', 'classes', 'roster', 'scores', 'logs'] as const) {
+    if (!Array.isArray(p[k])) return fail(`Thiếu mục ${k} (phải là một mảng).`);
+  }
+  const weeks = p.weeks as unknown[];
+  const classes = p.classes as unknown[];
+  const roster = p.roster as unknown[];
+  const scores = p.scores as unknown[];
+  const logs = p.logs as unknown[];
+  const seenIds = (arr: unknown[], label: string): string | null => {
+    const ids = new Set<string>();
+    for (const x of arr) {
+      if (!isObj(x) || !isStr(x.id) || !x.id.trim()) return `${label}: có mục thiếu id.`;
+      if (ids.has(x.id)) return `${label}: trùng id ${x.id}.`;
+      ids.add(x.id);
+    }
+    return null;
+  };
+  for (const [arr, label] of [[weeks, 'weeks'], [classes, 'classes'], [roster, 'roster'], [scores, 'scores'], [logs, 'logs']] as const) {
+    const e = seenIds(arr, label);
+    if (e) return fail(e);
+  }
+  const weekIds = new Set(weeks.map(x => (x as Record<string, unknown>).id as string));
+  const classIds = new Set(classes.map(x => (x as Record<string, unknown>).id as string));
+  for (const x of weeks) {
+    const w = x as Record<string, unknown>;
+    if (!isStr(w.label)) return fail(`weeks: tuần ${String(w.id)} thiếu label.`);
+    if (w.dateRange !== undefined && !isStr(w.dateRange)) return fail(`weeks: tuần ${String(w.id)} có dateRange không phải chuỗi.`);
+  }
+  for (const x of classes) {
+    const c = x as Record<string, unknown>;
+    if (!isStr(c.name) || !c.name.trim()) return fail(`classes: lớp ${String(c.id)} thiếu tên.`);
+  }
+  for (const x of roster) {
+    const r = x as Record<string, unknown>;
+    if (!isStr(r.name) || !isStr(r.classId) || !isStr(r.weekId)) return fail(`roster: mục ${String(r.id)} thiếu tên/lớp/tuần.`);
+    if (r.active !== undefined && typeof r.active !== 'boolean') return fail(`roster: mục ${String(r.id)} có active không phải true/false.`);
+    if (!classIds.has(r.classId)) return fail(`roster: ${String(r.name)} trỏ tới lớp không tồn tại (${String(r.classId)}).`);
+    if (!weekIds.has(r.weekId)) return fail(`roster: ${String(r.name)} trỏ tới tuần không tồn tại (${String(r.weekId)}).`);
+  }
+  for (const x of scores) {
+    const sc = x as Record<string, unknown>;
+    if (!isStr(sc.weekId) || !isStr(sc.classId)) return fail(`scores: phiếu ${String(sc.id)} thiếu tuần/lớp.`);
+    if (!weekIds.has(sc.weekId)) return fail(`scores: phiếu ${String(sc.id)} trỏ tới tuần không tồn tại (${String(sc.weekId)}).`);
+    if (!classIds.has(sc.classId)) return fail(`scores: phiếu ${String(sc.id)} trỏ tới lớp không tồn tại (${String(sc.classId)}).`);
+    if (!['draft', 'submitted', 'approved', 'returned'].includes(String(sc.status))) return fail(`scores: phiếu ${String(sc.id)} có trạng thái không hợp lệ (${String(sc.status)}).`);
+    const e = detailsShapeError(sc.details);
+    if (e) return fail(`scores: phiếu ${String(sc.id)} — ${e}.`);
+  }
+  for (const x of logs) {
+    const l = x as Record<string, unknown>;
+    for (const k of ['time', 'actor', 'role', 'action'] as const) {
+      if (!isStr(l[k])) return fail(`logs: mục ${String(l.id)} thiếu trường ${k}.`);
+    }
+    if (l.detail !== undefined && !isStr(l.detail)) return fail(`logs: mục ${String(l.id)} có detail không phải chuỗi.`);
+  }
+  // Trùng (lớp, tuần): giữ bản mới nhất theo updatedAt.
+  const byKey = new Map<string, Record<string, unknown>>();
+  for (const x of scores) {
+    const sc = x as Record<string, unknown>;
+    const key = `${String(sc.classId)}|${String(sc.weekId)}`;
+    const prev = byKey.get(key);
+    if (!prev || parseVnTime(String(sc.updatedAt ?? '')) >= parseVnTime(String(prev.updatedAt ?? ''))) byKey.set(key, sc);
+  }
+  const state = p as unknown as AppState;
+  return {
+    ok: true,
+    state: {
+      settings: state.settings,
+      weeks: (state.weeks as Week[]).map(w => ({ ...w, dateRange: w.dateRange ?? '' })),
+      classes: state.classes,
+      roster: (state.roster as Roster[]).map(r => ({ ...r, active: r.active !== false })),
+      scores: [...byKey.values()] as unknown as Score[],
+      logs: state.logs,
+    },
+  };
 }
 export function hocTapLines(d: Details): string[] {
   const out: string[] = [];
   const total = d.hoursTot + d.hoursKha + d.hoursTb + d.hoursYeu;
   // Tích 100% giờ Tốt thì phiếu ghi 100% tốt ngay cả khi chưa nhập số giờ.
-  if (is100Tot(d)) out.push(`Giờ tốt: 100% tốt`);
-  else if (total > 0) out.push(`Giờ tốt: ${d.hoursTot} tốt, ${d.hoursKha} khá${d.hoursTb ? `, ${d.hoursTb} trung bình` : ''}${d.hoursYeu ? `, ${d.hoursYeu} yếu` : ''}`);
-  if (d.goodHigh) out.push(`Điểm tốt (≥5): ${d.goodHigh}`);
+  // Mọi dòng đều ghi đủ điểm để cộng lại ra (1); giờ Khá/TB/Yếu lỡ nhập
+  // thì hiện thành dòng đã miễn (không tính điểm) thay vì biến mất.
+  if (is100Tot(d)) {
+    out.push(`Giờ tốt: 100% tốt (+20đ)`);
+    const parts: string[] = [];
+    if (d.hoursKha) parts.push(`${d.hoursKha} khá`);
+    if (d.hoursTb) parts.push(`${d.hoursTb} trung bình`);
+    if (d.hoursYeu) parts.push(`${d.hoursYeu} yếu`);
+    if (parts.length) out.push(`Giờ Khá/Trung bình/Yếu: ${parts.join(', ')} (đã miễn vì tích 100% giờ Tốt)`);
+  } else if (total > 0) {
+    const minus = d.hoursKha * 1 + d.hoursTb * 3 + d.hoursYeu * 5;
+    out.push(`Giờ tốt: ${d.hoursTot} tốt, ${d.hoursKha} khá${d.hoursTb ? `, ${d.hoursTb} trung bình` : ''}${d.hoursYeu ? `, ${d.hoursYeu} yếu` : ''}${minus ? ` (-${minus}đ)` : ''}`);
+  }
+  if (d.goodHigh) out.push(`Điểm tốt (≥5): ${d.goodHigh} (+${d.goodHigh}đ)`);
   if (d.goodLow) out.push(violLine(d, 'goodLow', 'Điểm dưới 5', d.goodLow, -d.goodLow, ''));
   if (num(d.studyNoLearn)) out.push(violLine(d, 'studyNoLearn', 'Không học bài', num(d.studyNoLearn), -(num(d.studyNoLearn))));
   if (num(d.studyNoPrepare)) out.push(violLine(d, 'studyNoPrepare', 'Không soạn bài', num(d.studyNoPrepare), -(num(d.studyNoPrepare))));
@@ -297,10 +584,24 @@ export function hocTapLines(d: Details): string[] {
 }
 export function neNepLines(d: Details): string[] {
   const out: string[] = [];
-  if (isNoAbsentLate(d)) out.push('Không vắng, không đi muộn: +10đ');
-  else if (absentTotalOf(d)) out.push(`Vắng: ${absentTotalOf(d)} (${d.absentPermit}p, ${d.absentNoPermit}Kp)${absentNamesSuffix(d)}`);
+  if (isNoAbsentLate(d)) {
+    out.push('Không vắng, không đi muộn: +10đ');
+    // Đã tích 100% thì vắng/đi muộn lỡ nhập hiện thành dòng đã miễn (không
+    // tính điểm) thay vì biến mất; vắng có phép thật thì giữ dòng Vắng
+    // bình thường (vắng có phép vốn không bị trừ điểm).
+    if (absentTotalOf(d) > 0) {
+      if (d.absentNoPermit > 0) {
+        const names = (d.violNames?.['absentNoPermit'] ?? '').trim();
+        out.push(`Vắng: ${absentTotalOf(d)} (${d.absentPermit}p, ${d.absentNoPermit}Kp)${names ? ` — ${names}` : ''} (đã miễn vì tích 100% không vắng)`);
+      } else {
+        out.push(`Vắng: ${absentTotalOf(d)} (${d.absentPermit}p, 0Kp)`);
+      }
+    }
+    if (num(d.lateLate)) out.push(violLineWaived(d, 'lateLate', 'Đi muộn', num(d.lateLate), 'đã miễn vì tích 100% không vắng'));
+    if (num(d.late)) out.push(violLineWaived(d, 'late', 'Đi muộn, sinh hoạt 15p tự ý ra ngoài', num(d.late), 'đã miễn vì tích 100% không vắng'));
+  } else if (absentTotalOf(d)) out.push(`Vắng: ${absentTotalOf(d)} (${d.absentPermit}p, ${d.absentNoPermit}Kp)${absentNamesSuffix(d)}`);
   // Đã tích 100% không vắng, không đi muộn thì các dòng vắng/muộn lỡ nhập
-  // không hiện nữa (không bị trừ điểm); tự ý ra ngoài 15p vẫn hiện vì là lỗi khác.
+  // hiện ở trên dạng đã miễn; tự ý ra ngoài 15p vẫn hiện vì là lỗi khác.
   if (!isNoAbsentLate(d) && num(d.lateLate)) out.push(violLine(d, 'lateLate', 'Đi muộn', num(d.lateLate), -(num(d.lateLate) * 2)));
   if (num(d.lateOut)) out.push(violLine(d, 'lateOut', 'Tự ý ra ngoài trong sinh hoạt 15p', num(d.lateOut), -(num(d.lateOut) * 2)));
   if (!isNoAbsentLate(d) && num(d.late)) out.push(violLine(d, 'late', 'Đi muộn, sinh hoạt 15p tự ý ra ngoài', num(d.late), -(num(d.late) * 2)));

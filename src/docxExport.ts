@@ -1,7 +1,7 @@
 // Xuất .docx đúng mẫu TỔNG HỢP THI ĐUA TUẦN 04 (THPT Hùng Vương-Quảng Phú)
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, HeadingLevel, BorderStyle } from 'docx';
 import type { AppState, Score, Week } from './lib';
-import { calcScore, classAvg, clsOf, hocTapLines, neNepLines } from './lib';
+import { calcScore, classAvg, classCoverage, clsOf, compareAvg, hocTapLines, neNepLines } from './lib';
 
 const FONT = 'Times New Roman';
 type Align = (typeof AlignmentType)[keyof typeof AlignmentType];
@@ -13,9 +13,9 @@ function p(text: string, opts: { bold?: boolean; size?: number; align?: Align; i
     children: [new TextRun({ text, bold: opts.bold, italics: opts.italic, font: FONT, size: (opts.size ?? 13) * 2 })],
   });
 }
-function cell(text: string, opts: { bold?: boolean; align?: Align } = {}) {
+function cell(text: string, opts: { bold?: boolean; align?: Align; w?: number } = {}) {
   return new TableCell({
-    borders, width: { size: 0, type: WidthType.AUTO },
+    borders, width: opts.w ? { size: opts.w, type: WidthType.DXA } : { size: 0, type: WidthType.AUTO },
     children: [p(text, { bold: opts.bold, align: opts.align ?? AlignmentType.LEFT, size: 12 })],
   });
 }
@@ -23,11 +23,23 @@ function cell(text: string, opts: { bold?: boolean; align?: Align } = {}) {
 // Word xuống dòng thật. Nối bằng '\n' trong một TextRun thì thư viện docx
 // giữ nguyên ký tự xuống dòng trong một <w:t> duy nhất và Word hiển thị
 // thành một dòng dài (đã kiểm tra trên file tải về: 0 thẻ <w:br/>).
-function cellLines(lines: string[]) {
+function cellLines(lines: string[], w?: number) {
   return new TableCell({
-    borders, width: { size: 0, type: WidthType.AUTO },
+    borders, width: w ? { size: w, type: WidthType.DXA } : { size: 0, type: WidthType.AUTO },
     children: lines.map(x => p('- ' + x, { size: 12 })),
   });
+}
+// Độ rộng cột (DXA, tổng ~9360 = khổ A4 trừ lề): TT/LỚP hẹp, HỌC TẬP/NỀ NẾP rộng, điểm + ghi chú vừa.
+const WEEK_COLS = [450, 900, 2900, 2900, 1000, 1210];
+function weekHeaderRow() {
+  return new TableRow({ tableHeader: true, children: [
+    cell('TT', { bold: true, align: AlignmentType.CENTER, w: WEEK_COLS[0] }),
+    cell('LỚP', { bold: true, align: AlignmentType.CENTER, w: WEEK_COLS[1] }),
+    cell('HỌC TẬP', { bold: true, align: AlignmentType.CENTER, w: WEEK_COLS[2] }),
+    cell('NỀ NẾP', { bold: true, align: AlignmentType.CENTER, w: WEEK_COLS[3] }),
+    cell('TỔNG ĐIỂM – XẾP LOẠI', { bold: true, align: AlignmentType.CENTER, w: WEEK_COLS[4] }),
+    cell('GHI CHÚ', { bold: true, align: AlignmentType.CENTER, w: WEEK_COLS[5] }),
+  ] });
 }
 function headerRows(s: AppState, title: string, sectionTitle: string, dateRange?: string) {
   return [
@@ -75,25 +87,26 @@ export async function exportWeekDocx(s: AppState, week: Week, approvedOnly: bool
     .sort((a, b) => calcScore(b.details).final - calcScore(a.details).final);
   const clsOf = (id: string) => s.classes.find(c => c.id === id)?.name ?? id;
   const tableRows = [
-    new TableRow({ children: [cell('TT', { bold: true, align: AlignmentType.CENTER }), cell('LỚP', { bold: true, align: AlignmentType.CENTER }), cell('HỌC TẬP', { bold: true, align: AlignmentType.CENTER }), cell('NỀ NẾP', { bold: true, align: AlignmentType.CENTER }), cell('TỔNG ĐIỂM – XẾP LOẠI', { bold: true, align: AlignmentType.CENTER }), cell('GHI CHÚ', { bold: true, align: AlignmentType.CENTER })] }),
+    weekHeaderRow(),
     ...rows.map((sc, i) => {
       const c = calcScore(sc.details);
       return new TableRow({ children: [
-        cell(String(i + 1), { align: AlignmentType.CENTER }),
-        cell(clsOf(sc.classId), { bold: true }),
-        cellLines(hocTapLines(sc.details)),
-        cellLines(neNepLines(sc.details)),
-        cell(`${c.final}đ-${c.cls}`, { bold: true, align: AlignmentType.CENTER }),
-        cell(sc.status === 'approved' ? 'Đã duyệt' : sc.status === 'submitted' ? 'Chờ duyệt' : sc.status === 'returned' ? 'Trả lại' : 'Nháp'),
+        cell(String(i + 1), { align: AlignmentType.CENTER, w: WEEK_COLS[0] }),
+        cell(clsOf(sc.classId), { bold: true, w: WEEK_COLS[1] }),
+        cellLines(hocTapLines(sc.details), WEEK_COLS[2]),
+        cellLines(neNepLines(sc.details), WEEK_COLS[3]),
+        cell(`${c.final}đ-${c.cls}`, { bold: true, align: AlignmentType.CENTER, w: WEEK_COLS[4] }),
+        cell(sc.status === 'approved' ? 'Đã duyệt' : sc.status === 'submitted' ? 'Chờ duyệt' : sc.status === 'returned' ? 'Bị trả lại' : 'Nháp', { w: WEEK_COLS[5] }),
       ]});
     }),
   ];
+  // Dòng "Ưu điểm" chỉ tính phiếu đã duyệt (file xếp hạng vốn chỉ gồm phiếu duyệt).
   const pros = s.settings.generalPros || `Các lớp đạt 100% giờ học tốt: ${rows.filter(r => calcScore(r.details).is100Tot).map(r => clsOf(r.classId)).join(', ') || '—'}.`;
-  const cons = s.settings.generalCons || 'Vẫn còn một số học sinh vi phạm nội quy đi muộn, mang đồ ăn vào lớp.';
+  const cons = rows.length === 0 ? 'Chưa có phiếu nào được nộp trong tuần này.' : (s.settings.generalCons || 'Vẫn còn một số học sinh vi phạm nội quy đi muộn, mang đồ ăn vào lớp.');
   const doc = new Document({
     sections: [{ children: [
       ...headerRows(s, `TỔNG HỢP THI ĐUA ${week.label.toUpperCase()}`, '1. Tổng kết tuần', week.dateRange),
-      new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: tableRows }),
+      new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: WEEK_COLS, rows: tableRows }),
       p('2. Nhận xét chung', { bold: true, size: 14 }),
       p(`- Ưu điểm: ${pros}`),
       p(`- Nhược điểm: ${cons}`),
@@ -108,37 +121,37 @@ export async function exportWeekDocx(s: AppState, week: Week, approvedOnly: bool
 // kèm trạng thái từng phiếu (kể cả lớp chưa nộp), không sắp theo điểm.
 export async function exportWeekDocxNoRank(s: AppState, week: Week): Promise<Blob> {
   const nameOf = (id: string) => s.classes.find(c => c.id === id)?.name ?? id;
-  const statusLabel = (st: Score['status']) => st === 'approved' ? 'Đã duyệt' : st === 'submitted' ? 'Chờ duyệt' : st === 'returned' ? 'Trả lại' : 'Nháp';
+  const statusLabel = (st: Score['status']) => st === 'approved' ? 'Đã duyệt' : st === 'submitted' ? 'Chờ duyệt' : st === 'returned' ? 'Bị trả lại' : 'Nháp';
   const tableRows = [
-    new TableRow({ children: [cell('TT', { bold: true, align: AlignmentType.CENTER }), cell('LỚP', { bold: true, align: AlignmentType.CENTER }), cell('HỌC TẬP', { bold: true, align: AlignmentType.CENTER }), cell('NỀ NẾP', { bold: true, align: AlignmentType.CENTER }), cell('TỔNG ĐIỂM – XẾP LOẠI', { bold: true, align: AlignmentType.CENTER }), cell('GHI CHÚ', { bold: true, align: AlignmentType.CENTER })] }),
+    weekHeaderRow(),
     ...s.classes.map((c, i) => {
       const sc = s.scores.find(x => x.weekId === week.id && x.classId === c.id);
       if (!sc) return new TableRow({ children: [
-        cell(String(i + 1), { align: AlignmentType.CENTER }),
-        cell(c.name, { bold: true }),
-        cell('—'),
-        cell('—'),
-        cell('—', { align: AlignmentType.CENTER }),
-        cell('Chưa nộp'),
+        cell(String(i + 1), { align: AlignmentType.CENTER, w: WEEK_COLS[0] }),
+        cell(c.name, { bold: true, w: WEEK_COLS[1] }),
+        cell('—', { w: WEEK_COLS[2] }),
+        cell('—', { w: WEEK_COLS[3] }),
+        cell('—', { align: AlignmentType.CENTER, w: WEEK_COLS[4] }),
+        cell('Chưa nộp', { w: WEEK_COLS[5] }),
       ]});
       const cc = calcScore(sc.details);
       return new TableRow({ children: [
-        cell(String(i + 1), { align: AlignmentType.CENTER }),
-        cell(c.name, { bold: true }),
-        cellLines(hocTapLines(sc.details)),
-        cellLines(neNepLines(sc.details)),
-        cell(`${cc.final}đ-${cc.cls}`, { bold: true, align: AlignmentType.CENTER }),
-        cell(statusLabel(sc.status)),
+        cell(String(i + 1), { align: AlignmentType.CENTER, w: WEEK_COLS[0] }),
+        cell(c.name, { bold: true, w: WEEK_COLS[1] }),
+        cellLines(hocTapLines(sc.details), WEEK_COLS[2]),
+        cellLines(neNepLines(sc.details), WEEK_COLS[3]),
+        cell(`${cc.final}đ-${cc.cls}`, { bold: true, align: AlignmentType.CENTER, w: WEEK_COLS[4] }),
+        cell(statusLabel(sc.status), { w: WEEK_COLS[5] }),
       ]});
     }),
   ];
-  const weekScores = s.scores.filter(x => x.weekId === week.id);
+  const weekScores = s.scores.filter(x => x.weekId === week.id && x.status === 'approved');
   const pros = s.settings.generalPros || `Các lớp đạt 100% giờ học tốt: ${weekScores.filter(r => calcScore(r.details).is100Tot).map(r => nameOf(r.classId)).join(', ') || '—'}.`;
-  const cons = s.settings.generalCons || 'Vẫn còn một số học sinh vi phạm nội quy đi muộn, mang đồ ăn vào lớp.';
+  const cons = weekScores.length === 0 ? 'Chưa có phiếu nào được nộp trong tuần này.' : (s.settings.generalCons || 'Vẫn còn một số học sinh vi phạm nội quy đi muộn, mang đồ ăn vào lớp.');
   const doc = new Document({
     sections: [{ children: [
       ...headerRows(s, `TỔNG HỢP THI ĐUA ${week.label.toUpperCase()} (KHÔNG XẾP HẠNG)`, '1. Tổng kết tuần', week.dateRange),
-      new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: tableRows }),
+      new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: WEEK_COLS, rows: tableRows }),
       p('2. Nhận xét chung', { bold: true, size: 14 }),
       p(`- Ưu điểm: ${pros}`),
       p(`- Nhược điểm: ${cons}`),
@@ -150,32 +163,43 @@ export async function exportWeekDocxNoRank(s: AppState, week: Week): Promise<Blo
 }
 // Tổng hợp tháng: điểm trung bình của từng lớp qua các tuần trong tháng
 // (cứ 4 tuần là 1 tháng), kèm điểm từng tuần. Chỉ tính phiếu đã duyệt.
+// Lớp chưa có phiếu duyệt thì không có số TT (hiện "—") và hiện độ phủ
+// nộp "n/m tuần"; điểm trung bình vẫn chia cho số phiếu đã duyệt (D3).
 export async function exportMonthDocx(s: AppState, weeks: Week[], monthName: string): Promise<Blob> {
   const weekIds = weeks.map(w => w.id);
   const nameOf = (id: string) => s.classes.find(c => c.id === id)?.name ?? id;
-  const rows = s.classes.map(c => ({ c, a: classAvg(s, c.id, weekIds) })).sort((x, y) => (y.a ?? -1) - (x.a ?? -1));
+  const rows = s.classes
+    .map(c => ({ c, a: classAvg(s, c.id, weekIds), cov: classCoverage(s, c.id, weekIds) }))
+    .sort((x, y) => compareAvg(x.a, y.a));
+  // Số TT chỉ đếm lớp có điểm trung bình (lớp chưa có phiếu duyệt: "—").
+  let rank = 0;
+  const ranked = rows.map(r => ({ ...r, rank: r.a === null ? null : ++rank }));
+  const weekW = weeks.length ? Math.floor((9360 - 450 - 900 - 800 - 650 - 650) / weeks.length) : 0;
+  const monthCols = [450, 900, 800, 650, 650, ...weeks.map(() => weekW)];
   const tableRows = [
-    new TableRow({ children: [
-      cell('TT', { bold: true, align: AlignmentType.CENTER }),
-      cell('LỚP', { bold: true, align: AlignmentType.CENTER }),
-      cell('ĐIỂM TB', { bold: true, align: AlignmentType.CENTER }),
-      cell('LOẠI', { bold: true, align: AlignmentType.CENTER }),
-      ...weeks.map(w => cell(w.label, { bold: true, align: AlignmentType.CENTER })),
+    new TableRow({ tableHeader: true, children: [
+      cell('TT', { bold: true, align: AlignmentType.CENTER, w: monthCols[0] }),
+      cell('LỚP', { bold: true, align: AlignmentType.CENTER, w: monthCols[1] }),
+      cell('ĐIỂM TB', { bold: true, align: AlignmentType.CENTER, w: monthCols[2] }),
+      cell('LOẠI', { bold: true, align: AlignmentType.CENTER, w: monthCols[3] }),
+      cell('NỘP', { bold: true, align: AlignmentType.CENTER, w: monthCols[4] }),
+      ...weeks.map((w, i) => cell(w.label, { bold: true, align: AlignmentType.CENTER, w: monthCols[5 + i] })),
     ] }),
-    ...rows.map((r, i) => new TableRow({ children: [
-      cell(String(i + 1), { align: AlignmentType.CENTER }),
-      cell(nameOf(r.c.id), { bold: true }),
-      cell(r.a === null ? '—' : `${r.a.toFixed(1)}đ`, { align: AlignmentType.CENTER }),
-      cell(r.a === null ? '—' : clsOf(r.a), { bold: true, align: AlignmentType.CENTER }),
-      ...weeks.map(w => { const sc = s.scores.find(x => x.weekId === w.id && x.classId === r.c.id && x.status === 'approved'); return cell(sc ? `${calcScore(sc.details).final}đ-${calcScore(sc.details).cls}` : '—', { align: AlignmentType.CENTER }); }),
+    ...ranked.map((r) => new TableRow({ children: [
+      cell(r.rank === null ? '—' : String(r.rank), { align: AlignmentType.CENTER, w: monthCols[0] }),
+      cell(nameOf(r.c.id), { bold: true, w: monthCols[1] }),
+      cell(r.a === null ? '—' : `${r.a.toFixed(1)}đ`, { align: AlignmentType.CENTER, w: monthCols[2] }),
+      cell(r.a === null ? '—' : clsOf(r.a), { bold: true, align: AlignmentType.CENTER, w: monthCols[3] }),
+      cell(`${r.cov.approved}/${r.cov.total}`, { align: AlignmentType.CENTER, w: monthCols[4] }),
+      ...weeks.map((w, i) => { const sc = s.scores.find(x => x.weekId === w.id && x.classId === r.c.id && x.status === 'approved'); return cell(sc ? `${calcScore(sc.details).final}đ-${calcScore(sc.details).cls}` : '—', { align: AlignmentType.CENTER, w: monthCols[5 + i] }); }),
     ] })),
   ];
   const pros = s.settings.generalPros || `Các lớp đạt loại A trong tháng: ${rows.filter(r => r.a !== null && clsOf(r.a) === 'A').map(r => nameOf(r.c.id)).join(', ') || '—'}.`;
-  const cons = s.settings.generalCons || 'Vẫn còn một số học sinh vi phạm nội quy đi muộn, mang đồ ăn vào lớp.';
+  const cons = rows.every(r => r.a === null) ? 'Chưa có phiếu nào được duyệt trong tháng này.' : (s.settings.generalCons || 'Vẫn còn một số học sinh vi phạm nội quy đi muộn, mang đồ ăn vào lớp.');
   const doc = new Document({
     sections: [{ children: [
       ...headerRows(s, `TỔNG HỢP THI ĐUA ${monthName.toUpperCase()}`, '1. Tổng kết tháng', weeks.map(w => w.label).join(', ')),
-      new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: tableRows }),
+      new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: monthCols, rows: tableRows }),
       p('2. Nhận xét chung', { bold: true, size: 14 }),
       p(`- Ưu điểm: ${pros}`),
       p(`- Nhược điểm: ${cons}`),
@@ -189,12 +213,14 @@ export async function exportClassDocx(s: AppState, sc: Score): Promise<Blob> {
   const week = s.weeks.find(w => w.id === sc.weekId);
   const clsName = s.classes.find(c => c.id === sc.classId)?.name ?? sc.classId;
   const c = calcScore(sc.details);
+  const statusLabel = sc.status === 'approved' ? 'Đã duyệt' : sc.status === 'submitted' ? 'Chờ duyệt' : sc.status === 'returned' ? 'Bị trả lại' : 'Nháp';
   const doc = new Document({
     sections: [{ children: [
       ...headerRows(s, `TỔNG HỢP THI ĐUA ${(week ?? { label: 'Tuần' }).label.toUpperCase()}`, '1. Tổng kết tuần', week?.dateRange),
       p(`Tổng kết tuần — Lớp ${clsName}`, { bold: true, size: 14, align: AlignmentType.CENTER }),
-      p(`(1) Tổng điểm cộng: ${c.plus}đ`, {}),
-      p(`(2) Tổng điểm trừ: ${c.minus}đ`, {}),
+      p(`Trạng thái: ${statusLabel}${sc.status === 'returned' && sc.returnReason ? ` — Lý do trả lại: ${sc.returnReason}` : ''}`),
+      p(`1. Tổng điểm cộng: ${c.plus}đ`, {}),
+      p(`2. Tổng điểm trừ: ${c.minus}đ`, {}),
       p(`3. Điểm thi đua của lớp [Lấy 100 + (1) - (2)] = ${c.final}đ — Xếp loại: ${c.cls}`, { bold: true }),
       p('Về học tập:', { bold: true }),
       ...hocTapLines(sc.details).map(x => p('- ' + x)),
@@ -203,8 +229,7 @@ export async function exportClassDocx(s: AppState, sc: Score): Promise<Blob> {
       ...(sc.details.opinionClass ? [p(`Ý kiến của lớp: ${sc.details.opinionClass}`)] : []),
       ...(sc.details.opinionCodo ? [p(`Ý kiến của cờ đỏ: ${sc.details.opinionCodo}`)] : []),
       new Paragraph({ children: [new TextRun({ text: '', font: FONT })] }),
-      p('BAN THI ĐUA', { bold: true, align: AlignmentType.CENTER }),
-      p(s.settings.signer, { bold: true, align: AlignmentType.CENTER }),
+      signRows(s),
     ] }],
   });
   return Packer.toBlob(doc);

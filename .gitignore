@@ -32,3 +32,8 @@ public/logo.jpg
 
 # Số hiệu bản build, tạo tự động lúc build (scripts/gen-version.mjs)
 public/version.json
+
+# File sinh ra khi chạy test (tests/run-all.mjs)
+tests/dl-*.docx
+tests/seed-lock.json
+tests/seed-pick.json

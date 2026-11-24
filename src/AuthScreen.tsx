@@ -10,11 +10,14 @@
 //   Các tài khoản sau đều ở trạng thái chờ duyệt.
 // - Nếu Supabase yêu cầu xác nhận email, sau khi đăng ký sẽ hiện
 //   thông báo mở email để xác nhận rồi đăng nhập.
-import { useState } from 'react';
+// - Quên mật khẩu: gửi email rồi bấm link trong email sẽ mở màn hình
+//   "Đặt mật khẩu mới" (mã khôi phục trong link: ?code= hoặc
+//   #access_token=...&type=recovery, sự kiện PASSWORD_RECOVERY).
+import { useEffect, useState } from 'react';
 import { supabase } from './supabase';
 import { DUTY_CLASSES } from './lib';
 
-type Mode = 'login' | 'register' | 'forgot';
+type Mode = 'login' | 'register' | 'forgot' | 'reset';
 
 function friendlyError(message: string): string {
   if (/invalid login credentials/i.test(message)) return 'Email hoặc mật khẩu chưa đúng. Kiểm tra lại rồi thử lại nhé.';
@@ -26,12 +29,20 @@ function friendlyError(message: string): string {
   return message || 'Có lỗi xảy ra, thử lại sau.';
 }
 
-export default function AuthScreen() {
+export default function AuthScreen({ initialMode, onRecoveryDone }: { initialMode?: Mode; onRecoveryDone?: () => void }) {
   // Link mời GVCN (?lop=10B1&vai-tro=chi-xem&dang-ky=1) mở thẳng form
   // đăng ký với vai trò + lớp đã chọn sẵn.
-  const [mode, setMode] = useState<Mode>(() => new URLSearchParams(window.location.search).get('dang-ky') === '1' ? 'register' : 'login');
+  const [mode, setMode] = useState<Mode>(() => {
+    if (initialMode) return initialMode;
+    const search = new URLSearchParams(window.location.search);
+    // Link đặt lại mật khẩu trong email: Supabase trả về ?code= (hoặc
+    // #access_token=...&type=recovery) — mở thẳng form đặt mật khẩu mới.
+    if (search.get('code') || /type=recovery/.test(window.location.hash)) return 'reset';
+    return search.get('dang-ky') === '1' ? 'register' : 'login';
+  });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [password2, setPassword2] = useState('');
   const [fullName, setFullName] = useState('');
   const [requestedRole, setRequestedRole] = useState<'codo' | 'viewer'>(() => new URLSearchParams(window.location.search).get('vai-tro') === 'chi-xem' ? 'viewer' : 'codo');
   const [requestedClass, setRequestedClass] = useState(() => {
@@ -41,6 +52,17 @@ export default function AuthScreen() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
+
+  // Lắng nghe sự kiện khôi phục mật khẩu của Supabase (khi link trong
+  // email được bấm): chuyển sang form đặt mật khẩu mới ngay cả khi
+  // phiên khôi phục đã tự tạo trong App.
+  useEffect(() => {
+    if (!supabase) return;
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setMode('reset');
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
   async function onLogin() {
     if (!supabase) return;
@@ -99,9 +121,29 @@ export default function AuthScreen() {
     setMsg('Đã gửi email đặt lại mật khẩu. Bạn mở email và làm theo hướng dẫn nhé.');
   }
 
+  // Đặt mật khẩu mới sau khi bấm link trong email (phiên khôi phục).
+  async function onReset() {
+    if (!supabase) return;
+    if (password.length < 6) { setErr('Mật khẩu phải từ 6 ký tự trở lên.'); return; }
+    if (password !== password2) { setErr('Hai lần nhập mật khẩu chưa khớp.'); return; }
+    setBusy(true); setErr(''); setMsg('');
+    const { error } = await supabase.auth.updateUser({ password });
+    setBusy(false);
+    if (error) { setErr(friendlyError(error.message)); return; }
+    // Đổi xong thì đăng xuất khỏi phiên khôi phục và về màn hình đăng nhập.
+    await supabase.auth.signOut();
+    // Xóa mã khôi phục khỏi địa chỉ để tải lại trang không mở lại form này.
+    window.history.replaceState(null, '', window.location.pathname);
+    setPassword(''); setPassword2('');
+    setMsg('Đã đặt mật khẩu mới. Bạn đăng nhập lại nhé.');
+    setMode('login');
+    onRecoveryDone?.();
+  }
+
   return (
     <div className="card" style={{ maxWidth: 480, margin: '0 auto' }}>
-      <h2>{mode === 'login' ? 'Đăng nhập' : mode === 'register' ? 'Đăng ký tài khoản' : 'Quên mật khẩu'}</h2>
+      <h2>{mode === 'login' ? 'Đăng nhập' : mode === 'register' ? 'Đăng ký tài khoản' : mode === 'forgot' ? 'Quên mật khẩu' : 'Đặt mật khẩu mới'}</h2>
+      {mode === 'reset' && <p>Bạn vừa bấm link đặt lại mật khẩu trong email. Nhập mật khẩu mới bên dưới nhé.</p>}
       {mode === 'register' && (
         <p>Tài khoản đầu tiên đăng ký sẽ là <b>Ban thi đua</b> (quản trị). Các tài khoản đăng ký sau đều ở trạng thái <b>chờ duyệt</b> và chỉ được vào hệ thống sau khi Ban thi đua duyệt.</p>
       )}
@@ -126,9 +168,21 @@ export default function AuthScreen() {
           <p>Không tự đăng ký được vai trò Ban thi đua.</p>
         </>
       )}
-      <label>Email</label>
-      <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Vd: ten@email.com" autoComplete="email" />
-      {mode !== 'forgot' && (
+      {mode !== 'reset' && (
+        <>
+          <label>Email</label>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Vd: ten@email.com" autoComplete="email" />
+        </>
+      )}
+      {mode === 'reset' && (
+        <>
+          <label>Mật khẩu mới (tối thiểu 6 ký tự)</label>
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Nhập mật khẩu mới" autoComplete="new-password" />
+          <label>Nhập lại mật khẩu mới</label>
+          <input type="password" value={password2} onChange={e => setPassword2(e.target.value)} placeholder="Nhập lại mật khẩu mới" autoComplete="new-password" />
+        </>
+      )}
+      {mode !== 'forgot' && mode !== 'reset' && (
         <>
           <label>Mật khẩu{mode === 'register' ? ' (tối thiểu 6 ký tự)' : ''}</label>
           <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Nhập mật khẩu" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} />
@@ -140,13 +194,16 @@ export default function AuthScreen() {
         {mode === 'login' && <button className="btn" type="button" disabled={busy} onClick={onLogin}>{busy ? 'Đang đăng nhập…' : 'Đăng nhập'}</button>}
         {mode === 'register' && <button className="btn" type="button" disabled={busy} onClick={onRegister}>{busy ? 'Đang tạo tài khoản…' : 'Đăng ký'}</button>}
         {mode === 'forgot' && <button className="btn" type="button" disabled={busy} onClick={onForgot}>{busy ? 'Đang gửi email…' : 'Gửi link đặt lại mật khẩu'}</button>}
+        {mode === 'reset' && <button className="btn" type="button" disabled={busy} onClick={onReset}>{busy ? 'Đang đặt mật khẩu…' : 'Đặt mật khẩu mới'}</button>}
       </div>
-      <div className="row" style={{ marginTop: 10 }}>
-        {mode !== 'login' && <button className="btn ghost" type="button" onClick={() => { setMode('login'); setErr(''); setMsg(''); }}>Đã có tài khoản — Đăng nhập</button>}
-        {mode !== 'register' && <button className="btn ghost" type="button" onClick={() => { setMode('register'); setErr(''); setMsg(''); }}>Chưa có tài khoản — Đăng ký</button>}
-        {mode !== 'forgot' && <button className="btn ghost" type="button" onClick={() => { setMode('forgot'); setErr(''); setMsg(''); }}>Quên mật khẩu</button>}
-        {mode === 'login' && <button className="btn ghost" type="button" disabled={busy} onClick={onResend}>{busy ? 'Đang gửi…' : 'Chưa nhận được email? Gửi lại email xác nhận'}</button>}
-      </div>
+      {mode !== 'reset' && (
+        <div className="row" style={{ marginTop: 10 }}>
+          {mode !== 'login' && <button className="btn ghost" type="button" onClick={() => { setMode('login'); setErr(''); setMsg(''); }}>Đã có tài khoản — Đăng nhập</button>}
+          {mode !== 'register' && <button className="btn ghost" type="button" onClick={() => { setMode('register'); setErr(''); setMsg(''); }}>Chưa có tài khoản — Đăng ký</button>}
+          {mode !== 'forgot' && <button className="btn ghost" type="button" onClick={() => { setMode('forgot'); setErr(''); setMsg(''); }}>Quên mật khẩu</button>}
+          {mode === 'login' && <button className="btn ghost" type="button" disabled={busy} onClick={onResend}>{busy ? 'Đang gửi…' : 'Chưa nhận được email? Gửi lại email xác nhận'}</button>}
+        </div>
+      )}
     </div>
   );
 }

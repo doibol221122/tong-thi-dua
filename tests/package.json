@@ -1,0 +1,1 @@
+{"author":"","dependencies":{"playwright-core":"^1.65.1"},"description":"Bộ kiểm thử App Tổng Thi Đua (unit + Playwright, local mode)","keywords":[],"license":"ISC","name":"tong-thi-dua-tests","scripts":{"test":"node run-all.mjs"},"version":"1.0.0"}
