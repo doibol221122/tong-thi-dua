@@ -228,16 +228,20 @@ export interface SectionSums { hoursPlus: number; hoursMinus: number; hocTapPlus
 // (để tiêu đề mục thu gọn hiển thị đúng số điểm của mục đó).
 // Mỗi lỗi tách nhỏ tính đúng mức điểm của cụm cũ; phiếu cũ (trường gộp)
 // vẫn được cộng vào để không mất điểm.
+// Tích 100% giờ Tốt thì giờ Khá/Trung bình/Yếu lỡ nhập không bị trừ nữa;
+// tích 100% không vắng, không đi muộn thì vắng không phép/đi muộn lỡ nhập
+// cũng không bị trừ nữa (chỉ các lỗi vắng/muộn; tự ý ra ngoài trong sinh
+// hoạt 15p và các lỗi nề nếp khác vẫn trừ như thường).
 const num = (v?: number) => v ?? 0;
 export function sectionSums(d: Details): SectionSums {
   return {
     hoursPlus: is100Tot(d) ? 20 : 0,
-    hoursMinus: d.hoursKha * 1 + d.hoursTb * 3 + d.hoursYeu * 5,
+    hoursMinus: is100Tot(d) ? 0 : d.hoursKha * 1 + d.hoursTb * 3 + d.hoursYeu * 5,
     hocTapPlus: d.goodHigh * 1 + d.bonusYouth * 20 + d.bonusSweep * 10 + d.bonusNtvt * 10,
     hocTapMinus: d.goodLow * 1 + num(d.studyViol) * 1 + num(d.studyNoLearn) * 1 + num(d.studyNoPrepare) * 1 + num(d.studyNoMaterial) * 1 + d.cheating * 10,
     neNepPlus: isNoAbsentLate(d) ? 10 : 0,
-    neNepMinus: d.absentNoPermit * 5
-      + num(d.late) * 2 + num(d.lateLate) * 2 + num(d.lateOut) * 2
+    neNepMinus: (isNoAbsentLate(d) ? 0 : d.absentNoPermit * 5 + num(d.late) * 2 + num(d.lateLate) * 2)
+      + num(d.lateOut) * 2
       + d.noisy * 5
       + num(d.privateWork) * 2 + num(d.workPrivate) * 2 + num(d.workNotSerious) * 2 + num(d.workSleep) * 2
       + d.lateDuty * 2 + d.dirty * 5
@@ -295,9 +299,11 @@ export function neNepLines(d: Details): string[] {
   const out: string[] = [];
   if (isNoAbsentLate(d)) out.push('Không vắng, không đi muộn: +10đ');
   else if (absentTotalOf(d)) out.push(`Vắng: ${absentTotalOf(d)} (${d.absentPermit}p, ${d.absentNoPermit}Kp)${absentNamesSuffix(d)}`);
-  if (num(d.lateLate)) out.push(violLine(d, 'lateLate', 'Đi muộn', num(d.lateLate), -(num(d.lateLate) * 2)));
+  // Đã tích 100% không vắng, không đi muộn thì các dòng vắng/muộn lỡ nhập
+  // không hiện nữa (không bị trừ điểm); tự ý ra ngoài 15p vẫn hiện vì là lỗi khác.
+  if (!isNoAbsentLate(d) && num(d.lateLate)) out.push(violLine(d, 'lateLate', 'Đi muộn', num(d.lateLate), -(num(d.lateLate) * 2)));
   if (num(d.lateOut)) out.push(violLine(d, 'lateOut', 'Tự ý ra ngoài trong sinh hoạt 15p', num(d.lateOut), -(num(d.lateOut) * 2)));
-  if (num(d.late)) out.push(violLine(d, 'late', 'Đi muộn, sinh hoạt 15p tự ý ra ngoài', num(d.late), -(num(d.late) * 2)));
+  if (!isNoAbsentLate(d) && num(d.late)) out.push(violLine(d, 'late', 'Đi muộn, sinh hoạt 15p tự ý ra ngoài', num(d.late), -(num(d.late) * 2)));
   if (d.noisy) out.push(violLine(d, 'noisy', 'Lớp ồn trong sinh hoạt 15p', d.noisy, -(d.noisy * 5)));
   if (num(d.workPrivate)) out.push(violLine(d, 'workPrivate', 'Làm việc riêng', num(d.workPrivate), -(num(d.workPrivate) * 2)));
   if (num(d.workNotSerious)) out.push(violLine(d, 'workNotSerious', 'Không nghiêm túc', num(d.workNotSerious), -(num(d.workNotSerious) * 2)));

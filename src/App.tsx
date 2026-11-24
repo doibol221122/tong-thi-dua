@@ -1009,6 +1009,10 @@ function ScoreForm(props: {
           <div className="row"><button className="btn ghost" type="button" disabled={!canEdit} onClick={props.onCopyPrev}>Chép số liệu tuần trước</button><button className="btn ghost" type="button" onClick={props.onShowPhieu}>Xem phiếu tổng kết</button>{props.currentScore && <button className="btn ghost" type="button" onClick={props.onExportClass}>Xuất .docx phiếu này</button>}</div>
           <div className="grid2">
             <div>
+              <div className="top100">
+                <label><input type="checkbox" checked={calc.is100Tot} disabled={!canEdit} onChange={e => props.setD('allGood', e.target.checked)} style={{ width: 22, height: 22 }} /> 100% giờ Tốt (+20đ)</label>
+                <p className="note">Tích rồi thì giờ Khá/Trung bình/Yếu lỡ nhập không bị trừ điểm.</p>
+              </div>
               <Section title="Giờ học" sum={calc.totalHours > 0 ? `Tổng ${calc.totalHours} giờ${calc.is100Tot ? ' • +20đ' : ''}${sec.hoursMinus ? ` • −${sec.hoursMinus}đ` : ''}` : calc.is100Tot ? '+20đ' : '0đ'}>
               {f('hoursTot', 'Giờ Tốt', '', d.allGood === true)}
               {f('hoursKha', 'Giờ Khá', '-1đ/giờ', d.allGood === true)}
@@ -1017,8 +1021,7 @@ function ScoreForm(props: {
               {calc.is100Tot && calc.totalHours === 0
                 ? <p>100% giờ Tốt — không cần nhập tổng số giờ.</p>
                 : <p>Tổng giờ: {calc.totalHours} giờ.</p>}
-              <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 700, marginTop: 6 }}><input type="checkbox" checked={calc.is100Tot} disabled={!canEdit} onChange={e => props.setD('allGood', e.target.checked)} style={{ width: 22, height: 22 }} /> 100% giờ Tốt (+20đ)</label>
-              {calc.is100Tot && (d.hoursKha + d.hoursTb + d.hoursYeu > 0) && <p>Lưu ý: đã tích 100% giờ Tốt nhưng vẫn có giờ Khá/Trung bình/Yếu — kiểm tra lại nhé.</p>}
+              {calc.is100Tot && (d.hoursKha + d.hoursTb + d.hoursYeu > 0) && <p>Giờ Khá/Trung bình/Yếu đã nhập sẽ không bị trừ điểm vì đã tích 100% giờ Tốt.</p>}
               </Section>
               <Section title="Về học tập" sum={pm(sec.hocTapPlus, sec.hocTapMinus)}>
               {f('goodHigh', 'Tổng điểm tốt (≥5)', '+1đ/điểm')}
@@ -1033,6 +1036,10 @@ function ScoreForm(props: {
               </Section>
             </div>
             <div>
+              <div className="top100">
+                <label><input type="checkbox" checked={calc.noAbsentLate} disabled={!canEdit} onChange={e => props.setD('noAbsLate', e.target.checked)} style={{ width: 22, height: 22 }} /> 100% không vắng, không đi muộn (+10đ)</label>
+                <p className="note">Tích rồi thì vắng/đi muộn lỡ nhập không bị trừ điểm.</p>
+              </div>
               <Section title="Về nề nếp" sum={pm(sec.neNepPlus, sec.neNepMinus)}>
               <p>Vắng học (tổng): <b>{d.absentPermit + d.absentNoPermit} buổi</b> — tự tính từ có phép + không phép.</p>
               {f('absentPermit', 'Trong đó: có phép', '')}
@@ -1065,8 +1072,7 @@ function ScoreForm(props: {
               {fv('fightRude', 'Vô lễ với GV', '-20đ/lượt')}
               {fv('fightExplosive', 'Tàng trữ, sử dụng chất gây nổ', '-20đ/lượt')}
               {fv('fightDrug', 'Sử dụng thuốc lá, chất gây nghiện', '-20đ/lượt')}
-              <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 700, marginTop: 6 }}><input type="checkbox" checked={calc.noAbsentLate} disabled={!canEdit} onChange={e => props.setD('noAbsLate', e.target.checked)} style={{ width: 22, height: 22 }} /> 100% không vắng, không đi muộn (+10đ)</label>
-              {calc.noAbsentLate && ((d.absentPermit + d.absentNoPermit) > 0 || (d.late ?? 0) > 0 || (d.lateLate ?? 0) > 0) && <p>Lưu ý: đã tích 100% không vắng, không đi muộn nhưng vẫn có vắng/đi muộn — kiểm tra lại nhé.</p>}
+              {calc.noAbsentLate && (d.absentNoPermit > 0 || (d.late ?? 0) > 0 || (d.lateLate ?? 0) > 0) && <p>Vắng không phép/đi muộn đã nhập sẽ không bị trừ điểm vì đã tích 100% không vắng, không đi muộn.</p>}
               </Section>
             </div>
           </div>
