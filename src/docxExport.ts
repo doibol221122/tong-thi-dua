@@ -19,6 +19,16 @@ function cell(text: string, opts: { bold?: boolean; align?: Align } = {}) {
     children: [p(text, { bold: opts.bold, align: opts.align ?? AlignmentType.LEFT, size: 12 })],
   });
 }
+// Ô bảng có nhiều dòng (HỌC TẬP / NỀ NẾP): mỗi dòng một đoạn văn riêng để
+// Word xuống dòng thật. Nối bằng '\n' trong một TextRun thì thư viện docx
+// giữ nguyên ký tự xuống dòng trong một <w:t> duy nhất và Word hiển thị
+// thành một dòng dài (đã kiểm tra trên file tải về: 0 thẻ <w:br/>).
+function cellLines(lines: string[]) {
+  return new TableCell({
+    borders, width: { size: 0, type: WidthType.AUTO },
+    children: lines.map(x => p('- ' + x, { size: 12 })),
+  });
+}
 function headerRows(s: AppState, title: string, sectionTitle: string, dateRange?: string) {
   return [
     new Table({
@@ -71,8 +81,8 @@ export async function exportWeekDocx(s: AppState, week: Week, approvedOnly: bool
       return new TableRow({ children: [
         cell(String(i + 1), { align: AlignmentType.CENTER }),
         cell(clsOf(sc.classId), { bold: true }),
-        cell(hocTapLines(sc.details).map(x => '- ' + x).join('\n')),
-        cell(neNepLines(sc.details).map(x => '- ' + x).join('\n')),
+        cellLines(hocTapLines(sc.details)),
+        cellLines(neNepLines(sc.details)),
         cell(`${c.final}đ-${c.cls}`, { bold: true, align: AlignmentType.CENTER }),
         cell(sc.status === 'approved' ? 'Đã duyệt' : sc.status === 'submitted' ? 'Chờ duyệt' : sc.status === 'returned' ? 'Trả lại' : 'Nháp'),
       ]});
@@ -115,8 +125,8 @@ export async function exportWeekDocxNoRank(s: AppState, week: Week): Promise<Blo
       return new TableRow({ children: [
         cell(String(i + 1), { align: AlignmentType.CENTER }),
         cell(c.name, { bold: true }),
-        cell(hocTapLines(sc.details).map(x => '- ' + x).join('\n')),
-        cell(neNepLines(sc.details).map(x => '- ' + x).join('\n')),
+        cellLines(hocTapLines(sc.details)),
+        cellLines(neNepLines(sc.details)),
         cell(`${cc.final}đ-${cc.cls}`, { bold: true, align: AlignmentType.CENTER }),
         cell(statusLabel(sc.status)),
       ]});
