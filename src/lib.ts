@@ -18,7 +18,8 @@ export interface Details {
   hoursTot: number; hoursKha: number; hoursTb: number; hoursYeu: number;
   allGood?: boolean; // Tích tay: 100% giờ Tốt (+20đ)
   goodHigh: number; goodLow: number; cheating: number;
-  absentTotal: number; absentPermit: number; absentNoPermit: number;
+  absentTotal?: number; // Legacy: tổng vắng nhập tay — giờ tự tính từ có phép + không phép, không dùng nữa.
+  absentPermit: number; absentNoPermit: number;
   noAbsLate?: boolean; // Tích tay: 100% không vắng, không đi muộn (+10đ)
   noisy: number; lateDuty: number; dirty: number; skip: number; phone: number;
   // Lỗi vi phạm tách nhỏ theo đúng phiếu giấy (mỗi lỗi một dòng riêng để
@@ -68,6 +69,9 @@ export interface Details {
   extraPlus?: ExtraLine[]; // Cộng đột xuất: tối đa 5 dòng, mỗi dòng điểm + nội dung
   extraMinus?: ExtraLine[]; // Trừ đột xuất: tối đa 5 dòng, mỗi dòng điểm + nội dung
   names: string; opinionClass: string; opinionCodo: string;
+  // Tên HS vi phạm theo từng mục lỗi (key = tên trường vi phạm, vd
+  // lateLate -> "Lan, Sang"). Ghi dưới từng mục vi phạm trong phiếu.
+  violNames?: Partial<Record<string, string>>;
 }
 export interface Score {
   id: string; weekId: string; classId: string; details: Details;
@@ -161,7 +165,7 @@ export function emptyDetails(): Details {
   return {
     hoursTot: 0, hoursKha: 0, hoursTb: 0, hoursYeu: 0, allGood: false,
     goodHigh: 0, goodLow: 0, cheating: 0,
-    absentTotal: 0, absentPermit: 0, absentNoPermit: 0, noAbsLate: false,
+    absentPermit: 0, absentNoPermit: 0, noAbsLate: false,
     noisy: 0, lateDuty: 0, dirty: 0, skip: 0, phone: 0,
     studyNoLearn: 0, studyNoPrepare: 0, studyNoMaterial: 0,
     lateLate: 0, lateOut: 0,
@@ -190,8 +194,15 @@ export function emptyState(): AppState {
   return { settings: defaultSettings(), weeks: [], classes: [], roster: [], scores: [], logs: [] };
 }
 export interface Calc { plus: number; minus: number; final: number; cls: string; totalHours: number; is100Tot: boolean; noAbsentLate: boolean; }
+// Tổng vắng tự tính: có phép + không phép (không nhập tay nữa).
+export function absentTotalOf(d: Details): number { return num(d.absentPermit) + num(d.absentNoPermit); }
+// Tên HS vi phạm của một mục lỗi, để gắn vào dòng phiếu (" — HS: ...").
+export function violNamesOf(d: Details, key: string): string {
+  const s = (d.violNames?.[key] ?? '').trim();
+  return s ? ` — HS: ${s}` : '';
+}
 export function isNoAbsentLate(d: Details): boolean {
-  return d.noAbsLate === true || (d.noAbsLate === undefined && d.absentTotal === 0 && (d.late ?? 0) === 0 && (d.lateLate ?? 0) === 0);
+  return d.noAbsLate === true || (d.noAbsLate === undefined && absentTotalOf(d) === 0 && (d.late ?? 0) === 0 && (d.lateLate ?? 0) === 0);
 }
 export function is100Tot(d: Details): boolean {
   return d.allGood === true || (d.allGood === undefined && d.hoursTot > 0 && d.hoursKha === 0 && d.hoursTb === 0 && d.hoursYeu === 0);
@@ -246,15 +257,11 @@ export function validateDetails(d: Details): string[] {
   const errs: string[] = [];
   const total = d.hoursTot + d.hoursKha + d.hoursTb + d.hoursYeu;
   if (total === 0) errs.push('Chưa nhập giờ học: tổng số giờ đang bằng 0.');
-  if (d.absentNoPermit > d.absentTotal) errs.push('Số vắng không phép không được lớn hơn tổng số vắng.');
-  if (d.absentPermit + d.absentNoPermit > d.absentTotal)
-    errs.push('Số vắng có phép + không phép đang lớn hơn tổng số vắng.');
-  const conductViol = num(d.late) + num(d.lateLate) + num(d.lateOut) + d.noisy + num(d.privateWork) + num(d.workPrivate) + num(d.workNotSerious) + num(d.workSleep) + d.lateDuty + d.dirty + num(d.food) + num(d.foodEat) + num(d.foodPhone) + num(d.dress) + num(d.dressSlipper) + num(d.dressNoCard) + num(d.dressNoBadge) + num(d.dressHair) + num(d.dressEarring) + d.skip + num(d.dishonest) + num(d.dishonestLie) + num(d.dishonestSwear) + num(d.parking) + num(d.parkingWrong) + num(d.parkingRev) + d.phone + num(d.traffic) + num(d.trafficHelmet) + num(d.trafficMirror) + num(d.trafficThree) + num(d.fight) + num(d.fightHit) + num(d.fightRude) + num(d.fightExplosive) + num(d.fightDrug);
-  if (conductViol > 0 && d.names.trim() === '')
-    errs.push('Có vi phạm nề nếp nhưng chưa ghi tên học sinh vi phạm (ô "Tên HS vi phạm").');
-  const studyViolTotal = num(d.studyViol) + num(d.studyNoLearn) + num(d.studyNoPrepare) + num(d.studyNoMaterial);
-  if (studyViolTotal > 0 && d.names.trim() === '' && conductViol === 0)
-    errs.push('Có vi phạm học tập nhưng chưa ghi tên học sinh vi phạm.');
+  // Tên HS vi phạm: mỗi mục có lỗi phải có tên ghi dưới mục đó, hoặc ghi
+  // chung ở ô "Tên HS vi phạm" (phiếu cũ chỉ có tên chung vẫn hợp lệ).
+  const violatedKeys = VIOLATION_FIELDS.filter(f => num(d[f.key] as number | undefined) > 0).map(f => f.key as string);
+  if (violatedKeys.length > 0 && d.names.trim() === '' && violatedKeys.some(k => !(d.violNames?.[k] ?? '').trim()))
+    errs.push('Chưa ghi tên HS vi phạm ở một số mục — ghi dưới từng mục vi phạm hoặc ở ô "Tên HS vi phạm".');
   return errs;
 }
 export function hocTapLines(d: Details): string[] {
@@ -266,11 +273,11 @@ export function hocTapLines(d: Details): string[] {
   }
   if (d.goodHigh) out.push(`Điểm tốt (≥5): ${d.goodHigh}`);
   if (d.goodLow) out.push(`Điểm dưới 5: ${d.goodLow}`);
-  if (num(d.studyNoLearn)) out.push(`Không học bài: ${num(d.studyNoLearn)} lượt (-${num(d.studyNoLearn)})`);
-  if (num(d.studyNoPrepare)) out.push(`Không soạn bài: ${num(d.studyNoPrepare)} lượt (-${num(d.studyNoPrepare)})`);
-  if (num(d.studyNoMaterial)) out.push(`Không mang tài liệu, đồ dùng học tập: ${num(d.studyNoMaterial)} lượt (-${num(d.studyNoMaterial)})`);
-  if (num(d.studyViol)) out.push(`Vi phạm học tập: ${num(d.studyViol)} lượt (-${num(d.studyViol)})`);
-  if (d.cheating) out.push(`Gian lận trong thi: ${d.cheating} lượt (-${d.cheating * 10})`);
+  if (num(d.studyNoLearn)) out.push(`Không học bài: ${num(d.studyNoLearn)} lượt (-${num(d.studyNoLearn)})${violNamesOf(d, 'studyNoLearn')}`);
+  if (num(d.studyNoPrepare)) out.push(`Không soạn bài: ${num(d.studyNoPrepare)} lượt (-${num(d.studyNoPrepare)})${violNamesOf(d, 'studyNoPrepare')}`);
+  if (num(d.studyNoMaterial)) out.push(`Không mang tài liệu, đồ dùng học tập: ${num(d.studyNoMaterial)} lượt (-${num(d.studyNoMaterial)})${violNamesOf(d, 'studyNoMaterial')}`);
+  if (num(d.studyViol)) out.push(`Vi phạm học tập: ${num(d.studyViol)} lượt (-${num(d.studyViol)})${violNamesOf(d, 'studyViol')}`);
+  if (d.cheating) out.push(`Gian lận trong thi: ${d.cheating} lượt (-${d.cheating * 10})${violNamesOf(d, 'cheating')}`);
   if (d.bonusYouth) out.push(`Công trình thanh niên: +${d.bonusYouth * 20}đ`);
   if (d.bonusSweep) out.push(`Quét sân: +${d.bonusSweep * 10}đ`);
   if (d.bonusNtvt) out.push(`NTVT: +${d.bonusNtvt * 10}đ`);
@@ -280,43 +287,43 @@ export function hocTapLines(d: Details): string[] {
 export function neNepLines(d: Details): string[] {
   const out: string[] = [];
   if (isNoAbsentLate(d)) out.push('Không vắng, không đi muộn: +10đ');
-  else if (d.absentTotal) out.push(`Vắng: ${d.absentTotal} (${d.absentPermit}p, ${d.absentNoPermit}Kp)`);
-  if (num(d.lateLate)) out.push(`Đi muộn: ${num(d.lateLate)} lượt (-${num(d.lateLate) * 2})`);
-  if (num(d.lateOut)) out.push(`Tự ý ra ngoài trong sinh hoạt 15p: ${num(d.lateOut)} lượt (-${num(d.lateOut) * 2})`);
-  if (num(d.late)) out.push(`Đi muộn, sinh hoạt 15p tự ý ra ngoài: ${num(d.late)} lượt (-${num(d.late) * 2})`);
-  if (d.noisy) out.push(`Lớp ồn trong sinh hoạt 15p: ${d.noisy} lượt (-${d.noisy * 5})`);
-  if (num(d.workPrivate)) out.push(`Làm việc riêng: ${num(d.workPrivate)} lượt (-${num(d.workPrivate) * 2})`);
-  if (num(d.workNotSerious)) out.push(`Không nghiêm túc: ${num(d.workNotSerious)} lượt (-${num(d.workNotSerious) * 2})`);
-  if (num(d.workSleep)) out.push(`Ngủ gục: ${num(d.workSleep)} lượt (-${num(d.workSleep) * 2})`);
-  if (num(d.privateWork)) out.push(`Làm việc riêng, không nghiêm túc, ngủ gục: ${num(d.privateWork)} lượt (-${num(d.privateWork) * 2})`);
-  if (d.lateDuty) out.push(`Trực nhật muộn: ${d.lateDuty} lần (-${d.lateDuty * 2})`);
-  if (d.dirty) out.push(`Lớp bẩn: ${d.dirty} lượt (-${d.dirty * 5})`);
-  if (num(d.foodEat)) out.push(`Ăn/mang đồ ăn vào lớp: ${num(d.foodEat)} lượt (-${num(d.foodEat) * 2})`);
-  if (num(d.foodPhone)) out.push(`Không bỏ điện thoại vào tủ: ${num(d.foodPhone)} lượt (-${num(d.foodPhone) * 2})`);
-  if (num(d.food)) out.push(`Ăn/mang đồ ăn vào lớp: ${num(d.food)} lượt (-${num(d.food) * 2})`);
-  if (num(d.dressSlipper)) out.push(`Mang dép lê: ${num(d.dressSlipper)} lượt (-${num(d.dressSlipper)})`);
-  if (num(d.dressNoCard)) out.push(`Không đeo thẻ HS: ${num(d.dressNoCard)} lượt (-${num(d.dressNoCard)})`);
-  if (num(d.dressNoBadge)) out.push(`Không đeo huy hiệu đoàn: ${num(d.dressNoBadge)} lượt (-${num(d.dressNoBadge)})`);
-  if (num(d.dressHair)) out.push(`Nhuộm tóc: ${num(d.dressHair)} lượt (-${num(d.dressHair)})`);
-  if (num(d.dressEarring)) out.push(`Đeo bông tai (Nam): ${num(d.dressEarring)} lượt (-${num(d.dressEarring)})`);
-  if (num(d.dress)) out.push(`Mang dép lê, không đeo thẻ: ${num(d.dress)} lượt (-${num(d.dress)})`);
-  if (d.skip) out.push(`Bỏ tiết: ${d.skip} lượt (-${d.skip * 5})`);
-  if (num(d.dishonestLie)) out.push(`Không trung thực: ${num(d.dishonestLie)} lượt (-${num(d.dishonestLie) * 5})`);
-  if (num(d.dishonestSwear)) out.push(`Nói tục, chửi thề: ${num(d.dishonestSwear)} lượt (-${num(d.dishonestSwear) * 5})`);
-  if (num(d.dishonest)) out.push(`Không trung thực, nói tục: ${num(d.dishonest)} lượt (-${num(d.dishonest) * 5})`);
-  if (num(d.parkingWrong)) out.push(`Để xe sai quy định: ${num(d.parkingWrong)} lượt (-${num(d.parkingWrong) * 5})`);
-  if (num(d.parkingRev)) out.push(`Nẹt bô: ${num(d.parkingRev)} lượt (-${num(d.parkingRev) * 5})`);
-  if (num(d.parking)) out.push(`Để xe sai quy định, nẹt bô: ${num(d.parking)} lượt (-${num(d.parking) * 5})`);
-  if (d.phone) out.push(`Dùng điện thoại trong giờ học: ${d.phone} lượt (-${d.phone * 10})`);
-  if (num(d.trafficHelmet)) out.push(`Không đội mũ bảo hiểm: ${num(d.trafficHelmet)} lượt (-${num(d.trafficHelmet) * 10})`);
-  if (num(d.trafficMirror)) out.push(`Xe không có gương chiếu hậu: ${num(d.trafficMirror)} lượt (-${num(d.trafficMirror) * 10})`);
-  if (num(d.trafficThree)) out.push(`Chở ba: ${num(d.trafficThree)} lượt (-${num(d.trafficThree) * 10})`);
-  if (num(d.traffic)) out.push(`Vi phạm ATGT: ${num(d.traffic)} lượt (-${num(d.traffic) * 10})`);
-  if (num(d.fightHit)) out.push(`Đánh nhau: ${num(d.fightHit)} lượt (-${num(d.fightHit) * 20})`);
-  if (num(d.fightRude)) out.push(`Vô lễ với GV: ${num(d.fightRude)} lượt (-${num(d.fightRude) * 20})`);
-  if (num(d.fightExplosive)) out.push(`Tàng trữ, sử dụng chất gây nổ: ${num(d.fightExplosive)} lượt (-${num(d.fightExplosive) * 20})`);
-  if (num(d.fightDrug)) out.push(`Sử dụng thuốc lá, chất gây nghiện: ${num(d.fightDrug)} lượt (-${num(d.fightDrug) * 20})`);
-  if (num(d.fight)) out.push(`Đánh nhau, vô lễ với GV: ${num(d.fight)} lượt (-${num(d.fight) * 20})`);
+  else if (absentTotalOf(d)) out.push(`Vắng: ${absentTotalOf(d)} (${d.absentPermit}p, ${d.absentNoPermit}Kp)${violNamesOf(d, 'absentNoPermit')}`);
+  if (num(d.lateLate)) out.push(`Đi muộn: ${num(d.lateLate)} lượt (-${num(d.lateLate) * 2})${violNamesOf(d, 'lateLate')}`);
+  if (num(d.lateOut)) out.push(`Tự ý ra ngoài trong sinh hoạt 15p: ${num(d.lateOut)} lượt (-${num(d.lateOut) * 2})${violNamesOf(d, 'lateOut')}`);
+  if (num(d.late)) out.push(`Đi muộn, sinh hoạt 15p tự ý ra ngoài: ${num(d.late)} lượt (-${num(d.late) * 2})${violNamesOf(d, 'late')}`);
+  if (d.noisy) out.push(`Lớp ồn trong sinh hoạt 15p: ${d.noisy} lượt (-${d.noisy * 5})${violNamesOf(d, 'noisy')}`);
+  if (num(d.workPrivate)) out.push(`Làm việc riêng: ${num(d.workPrivate)} lượt (-${num(d.workPrivate) * 2})${violNamesOf(d, 'workPrivate')}`);
+  if (num(d.workNotSerious)) out.push(`Không nghiêm túc: ${num(d.workNotSerious)} lượt (-${num(d.workNotSerious) * 2})${violNamesOf(d, 'workNotSerious')}`);
+  if (num(d.workSleep)) out.push(`Ngủ gục: ${num(d.workSleep)} lượt (-${num(d.workSleep) * 2})${violNamesOf(d, 'workSleep')}`);
+  if (num(d.privateWork)) out.push(`Làm việc riêng, không nghiêm túc, ngủ gục: ${num(d.privateWork)} lượt (-${num(d.privateWork) * 2})${violNamesOf(d, 'privateWork')}`);
+  if (d.lateDuty) out.push(`Trực nhật muộn: ${d.lateDuty} lần (-${d.lateDuty * 2})${violNamesOf(d, 'lateDuty')}`);
+  if (d.dirty) out.push(`Lớp bẩn: ${d.dirty} lượt (-${d.dirty * 5})${violNamesOf(d, 'dirty')}`);
+  if (num(d.foodEat)) out.push(`Ăn/mang đồ ăn vào lớp: ${num(d.foodEat)} lượt (-${num(d.foodEat) * 2})${violNamesOf(d, 'foodEat')}`);
+  if (num(d.foodPhone)) out.push(`Không bỏ điện thoại vào tủ: ${num(d.foodPhone)} lượt (-${num(d.foodPhone) * 2})${violNamesOf(d, 'foodPhone')}`);
+  if (num(d.food)) out.push(`Ăn/mang đồ ăn vào lớp: ${num(d.food)} lượt (-${num(d.food) * 2})${violNamesOf(d, 'food')}`);
+  if (num(d.dressSlipper)) out.push(`Mang dép lê: ${num(d.dressSlipper)} lượt (-${num(d.dressSlipper)})${violNamesOf(d, 'dressSlipper')}`);
+  if (num(d.dressNoCard)) out.push(`Không đeo thẻ HS: ${num(d.dressNoCard)} lượt (-${num(d.dressNoCard)})${violNamesOf(d, 'dressNoCard')}`);
+  if (num(d.dressNoBadge)) out.push(`Không đeo huy hiệu đoàn: ${num(d.dressNoBadge)} lượt (-${num(d.dressNoBadge)})${violNamesOf(d, 'dressNoBadge')}`);
+  if (num(d.dressHair)) out.push(`Nhuộm tóc: ${num(d.dressHair)} lượt (-${num(d.dressHair)})${violNamesOf(d, 'dressHair')}`);
+  if (num(d.dressEarring)) out.push(`Đeo bông tai (Nam): ${num(d.dressEarring)} lượt (-${num(d.dressEarring)})${violNamesOf(d, 'dressEarring')}`);
+  if (num(d.dress)) out.push(`Mang dép lê, không đeo thẻ: ${num(d.dress)} lượt (-${num(d.dress)})${violNamesOf(d, 'dress')}`);
+  if (d.skip) out.push(`Bỏ tiết: ${d.skip} lượt (-${d.skip * 5})${violNamesOf(d, 'skip')}`);
+  if (num(d.dishonestLie)) out.push(`Không trung thực: ${num(d.dishonestLie)} lượt (-${num(d.dishonestLie) * 5})${violNamesOf(d, 'dishonestLie')}`);
+  if (num(d.dishonestSwear)) out.push(`Nói tục, chửi thề: ${num(d.dishonestSwear)} lượt (-${num(d.dishonestSwear) * 5})${violNamesOf(d, 'dishonestSwear')}`);
+  if (num(d.dishonest)) out.push(`Không trung thực, nói tục: ${num(d.dishonest)} lượt (-${num(d.dishonest) * 5})${violNamesOf(d, 'dishonest')}`);
+  if (num(d.parkingWrong)) out.push(`Để xe sai quy định: ${num(d.parkingWrong)} lượt (-${num(d.parkingWrong) * 5})${violNamesOf(d, 'parkingWrong')}`);
+  if (num(d.parkingRev)) out.push(`Nẹt bô: ${num(d.parkingRev)} lượt (-${num(d.parkingRev) * 5})${violNamesOf(d, 'parkingRev')}`);
+  if (num(d.parking)) out.push(`Để xe sai quy định, nẹt bô: ${num(d.parking)} lượt (-${num(d.parking) * 5})${violNamesOf(d, 'parking')}`);
+  if (d.phone) out.push(`Dùng điện thoại trong giờ học: ${d.phone} lượt (-${d.phone * 10})${violNamesOf(d, 'phone')}`);
+  if (num(d.trafficHelmet)) out.push(`Không đội mũ bảo hiểm: ${num(d.trafficHelmet)} lượt (-${num(d.trafficHelmet) * 10})${violNamesOf(d, 'trafficHelmet')}`);
+  if (num(d.trafficMirror)) out.push(`Xe không có gương chiếu hậu: ${num(d.trafficMirror)} lượt (-${num(d.trafficMirror) * 10})${violNamesOf(d, 'trafficMirror')}`);
+  if (num(d.trafficThree)) out.push(`Chở ba: ${num(d.trafficThree)} lượt (-${num(d.trafficThree) * 10})${violNamesOf(d, 'trafficThree')}`);
+  if (num(d.traffic)) out.push(`Vi phạm ATGT: ${num(d.traffic)} lượt (-${num(d.traffic) * 10})${violNamesOf(d, 'traffic')}`);
+  if (num(d.fightHit)) out.push(`Đánh nhau: ${num(d.fightHit)} lượt (-${num(d.fightHit) * 20})${violNamesOf(d, 'fightHit')}`);
+  if (num(d.fightRude)) out.push(`Vô lễ với GV: ${num(d.fightRude)} lượt (-${num(d.fightRude) * 20})${violNamesOf(d, 'fightRude')}`);
+  if (num(d.fightExplosive)) out.push(`Tàng trữ, sử dụng chất gây nổ: ${num(d.fightExplosive)} lượt (-${num(d.fightExplosive) * 20})${violNamesOf(d, 'fightExplosive')}`);
+  if (num(d.fightDrug)) out.push(`Sử dụng thuốc lá, chất gây nghiện: ${num(d.fightDrug)} lượt (-${num(d.fightDrug) * 20})${violNamesOf(d, 'fightDrug')}`);
+  if (num(d.fight)) out.push(`Đánh nhau, vô lễ với GV: ${num(d.fight)} lượt (-${num(d.fight) * 20})${violNamesOf(d, 'fight')}`);
   (d.extraMinus ?? []).filter(x => x.points > 0 || x.note.trim()).forEach(x => out.push(`${x.note.trim() || 'Trừ khác'}: -${Math.max(0, x.points || 0)}đ`));
   if (d.names.trim()) out.push(`HS vi phạm: ${d.names.trim()}`);
   return out.length ? out : ['—'];

@@ -403,6 +403,9 @@ export default function App() {
 
   function saveScore(status: 'draft' | 'submitted') {
     if (!draft || !week || !classId) return;
+    // Chốt khóa: phiếu đã nộp/duyệt hoặc tuần đã chốt thì không ai lưu đè
+    // được nữa (kể cả cờ đỏ tự chọn lại lớp) — Ban thi đua phải mở lại trước.
+    if (!canEdit) { setErrs(['Phiếu này không sửa được nữa (đã nộp, đã duyệt hoặc tuần đã chốt). Ban thi đua mở lại thì mới sửa được.']); return; }
     const errors = status === 'submitted' ? validateDetails(draft) : [];
     if (errors.length) { setErrs(errors); setMsg(''); return; }
     setErrs([]);
@@ -641,7 +644,7 @@ export default function App() {
         {tab === 'nhap-diem' && (!week ? (
           <div className="card"><h2>Nhập điểm</h2><p>Chưa có tuần nào nên chưa nhập điểm được.</p>{session.role === 'admin' ? <><p>Tạo tuần đầu tiên để bắt đầu chấm thi đua nhé.</p><div className="row"><button className="btn" type="button" onClick={() => setTab('quan-ly')}>Sang tab Quản lý tạo tuần</button></div></> : <p>Nhờ Ban thi đua tạo tuần nhé.</p>}</div>
         ) : session.role === 'codo' && (!assignment || showDutyPicker) ? (
-          <DutyPicker state={state} week={week} homeName={profile?.assigned_class_id ? state.classes.find(c => c.id === profile.assigned_class_id)?.name : undefined} initialClassId={assignment?.classId} onConfirm={confirmDutyPick} onCancel={assignment ? () => setShowDutyPicker(false) : undefined} />
+          <DutyPicker state={state} week={week} homeName={profile?.assigned_class_id ? state.classes.find(c => c.id === profile.assigned_class_id)?.name : undefined} myName={session.name} initialClassId={assignment?.classId} onConfirm={confirmDutyPick} onCancel={assignment ? () => setShowDutyPicker(false) : undefined} />
         ) : draft && (
           <>
             {session.role === 'codo' && assignment && (
@@ -686,14 +689,17 @@ export default function App() {
 
 // Cờ đỏ tự chọn lớp mình trực trong tuần hiện tại. Lớp gợi ý lấy theo
 // lịch trực từ lớp của chính cờ đỏ; chọn lớp khác vẫn được (vd trực thay).
-// Nếu lớp đã có phiếu đã nộp/duyệt thì chỉ xem, không sửa được.
-function DutyPicker({ state, week, homeName, initialClassId, onConfirm, onCancel }: {
-  state: AppState; week: Week; homeName?: string; initialClassId?: string;
+// Chặn nhập thay: lớp đã có cờ đỏ khác trực, hoặc phiếu đã nộp/duyệt thì
+// không chọn được nữa (phiếu đã duyệt là khóa hẳn, chỉ Ban thi đua mở lại).
+function DutyPicker({ state, week, homeName, myName, initialClassId, onConfirm, onCancel }: {
+  state: AppState; week: Week; homeName?: string; myName: string; initialClassId?: string;
   onConfirm: (classId: string) => void; onCancel?: () => void;
 }) {
   const suggested = homeName ? dutyMonitored(homeName, weekNumberOf(week, state.weeks.indexOf(week) + 1)) : null;
   const [sel, setSel] = useState(initialClassId ?? state.classes.find(c => c.name === suggested)?.id ?? '');
   const existing = sel ? state.scores.find(s => s.weekId === week.id && s.classId === sel) : undefined;
+  const otherDuty = sel ? state.roster.find(r => r.weekId === week.id && r.classId === sel && r.active && r.name !== myName) : undefined;
+  const locked = existing && (existing.status === 'submitted' || existing.status === 'approved');
   return (
     <div className="card"><h2>Chọn lớp trực — {week.label}</h2>
       <p>Tuần này bạn trực lớp nào? Chọn lớp rồi nhập điểm cho lớp đó nhé. Lớp đã chọn sẽ lưu lại để Ban thi đua thấy.</p>
@@ -703,9 +709,11 @@ function DutyPicker({ state, week, homeName, initialClassId, onConfirm, onCancel
         <option value="">— Chọn lớp —</option>
         {state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
-      {existing && <p>Lớp {state.classes.find(c => c.id === sel)?.name} đã có phiếu {STATUS_LABEL[existing.status]} — bạn chỉ xem được, không sửa được.</p>}
+      {otherDuty && <p>Lớp {state.classes.find(c => c.id === sel)?.name} đã có cờ đỏ {otherDuty.name} trực tuần này — bạn liên hệ Ban thi đua nếu trực thay nhé.</p>}
+      {existing && locked && <p>Lớp {state.classes.find(c => c.id === sel)?.name} đã có phiếu {STATUS_LABEL[existing.status]} — phiếu đã khóa, không nhập lại được.</p>}
+      {existing && !locked && <p>Lớp {state.classes.find(c => c.id === sel)?.name} đã có phiếu {STATUS_LABEL[existing.status]} — bấm vào để nhập tiếp.</p>}
       <div className="row" style={{ marginTop: 10 }}>
-        <button className="btn" type="button" disabled={!sel} onClick={() => onConfirm(sel)}>Bắt đầu nhập điểm lớp này</button>
+        <button className="btn" type="button" disabled={!sel || !!otherDuty || !!locked} onClick={() => onConfirm(sel)}>Bắt đầu nhập điểm lớp này</button>
         {onCancel && <button className="btn grey" type="button" onClick={onCancel}>Hủy</button>}
       </div>
     </div>
@@ -938,6 +946,17 @@ function ScoreForm(props: {
   const sec = sectionSums(d);
   const pm = (plus: number, minus: number) => [plus ? `+${plus}đ` : '', minus ? `−${minus}đ` : ''].filter(Boolean).join(' • ') || '0đ';
   const f = (key: keyof Details, label: string, pts: string) => <Stepper label={label} pts={pts} value={(d[key] as number) ?? 0} onChange={v => props.setD(key, v as never)} disabled={!canEdit} />;
+  // Hàng vi phạm: dưới ô đếm lượt có thêm ô ghi tên HS vi phạm đúng mục đó.
+  // Ô tên chỉ hiện khi có lượt vi phạm; tên cũ giữ lại nếu lượt về 0 rồi tăng lại.
+  const fv = (key: keyof Details, label: string, pts: string) => {
+    const v = (d[key] as number) ?? 0;
+    return (
+      <div key={key}>
+        <Stepper label={label} pts={pts} value={v} onChange={n => props.setD(key, n as never)} disabled={!canEdit} />
+        {v > 0 && <input type="text" placeholder={`HS vi phạm: ${label.toLowerCase()}…`} value={d.violNames?.[key as string] ?? ''} disabled={!canEdit} onChange={e => props.setD('violNames', { ...(d.violNames ?? {}), [key as string]: e.target.value })} aria-label={`HS vi phạm ${label}`} style={{ marginTop: -2, marginBottom: 8 }} />}
+      </div>
+    );
+  };
   return (
     <div>
       <div className="card">
@@ -951,7 +970,7 @@ function ScoreForm(props: {
       {week && props.classId && (
         <div className="card">
           <h2>Phiếu tổng kết — Lớp {state.classes.find(c => c.id === props.classId)?.name} — {week.label} {props.currentScore && <span className={`badge ${props.currentScore.status}`}>{STATUS_LABEL[props.currentScore.status]}</span>} {props.dirty && <span className="badge">Chưa lưu</span>}</h2>
-          <div className="row"><button className="btn ghost" type="button" onClick={props.onCopyPrev}>Chép số liệu tuần trước</button><button className="btn ghost" type="button" onClick={props.onShowPhieu}>Xem phiếu tổng kết</button>{props.currentScore && <button className="btn ghost" type="button" onClick={props.onExportClass}>Xuất .docx phiếu này</button>}</div>
+          <div className="row"><button className="btn ghost" type="button" disabled={!canEdit} onClick={props.onCopyPrev}>Chép số liệu tuần trước</button><button className="btn ghost" type="button" onClick={props.onShowPhieu}>Xem phiếu tổng kết</button>{props.currentScore && <button className="btn ghost" type="button" onClick={props.onExportClass}>Xuất .docx phiếu này</button>}</div>
           <div className="grid2">
             <div>
               <Section title="Giờ học" sum={`Tổng ${calc.totalHours} giờ${calc.is100Tot ? ' • +20đ' : ''}${sec.hoursMinus ? ` • −${sec.hoursMinus}đ` : ''}`}>
@@ -966,10 +985,10 @@ function ScoreForm(props: {
               <Section title="Về học tập" sum={pm(sec.hocTapPlus, sec.hocTapMinus)}>
               {f('goodHigh', 'Tổng điểm tốt (≥5)', '+1đ/điểm')}
               {f('goodLow', 'Tổng điểm tốt (<5)', '-1đ/điểm')}
-              {f('studyNoLearn', 'Không học bài', '-1đ/lượt')}
-              {f('studyNoPrepare', 'Không soạn bài', '-1đ/lượt')}
-              {f('studyNoMaterial', 'Không mang tài liệu, đồ dùng học tập', '-1đ/lượt')}
-              {f('cheating', 'Gian lận trong thi', '-10đ/lượt')}
+              {fv('studyNoLearn', 'Không học bài', '-1đ/lượt')}
+              {fv('studyNoPrepare', 'Không soạn bài', '-1đ/lượt')}
+              {fv('studyNoMaterial', 'Không mang tài liệu, đồ dùng học tập', '-1đ/lượt')}
+              {fv('cheating', 'Gian lận trong thi', '-10đ/lượt')}
               {f('bonusYouth', 'Công trình thanh niên', '+20đ/lần')}
               {f('bonusSweep', 'Quét sân', '+10đ/lần')}
               {f('bonusNtvt', 'NTVT', '+10đ/lần')}
@@ -977,39 +996,39 @@ function ScoreForm(props: {
             </div>
             <div>
               <Section title="Về nề nếp" sum={pm(sec.neNepPlus, sec.neNepMinus)}>
-              {f('absentTotal', 'Vắng học (tổng)', 'K phép -5đ/lượt')}
+              <p>Vắng học (tổng): <b>{d.absentPermit + d.absentNoPermit} buổi</b> — tự tính từ có phép + không phép.</p>
               {f('absentPermit', 'Trong đó: có phép', '')}
-              {f('absentNoPermit', 'Trong đó: không phép', '-5đ/lượt')}
-              {f('lateLate', 'Đi muộn', '-2đ/lượt')}
-              {f('lateOut', 'Tự ý ra ngoài trong sinh hoạt 15p', '-2đ/lượt')}
-              {f('noisy', 'Lớp ồn trong sinh hoạt 15p', '-5đ/lượt')}
-              {f('workPrivate', 'Làm việc riêng', '-2đ/lượt')}
-              {f('workNotSerious', 'Không nghiêm túc', '-2đ/lượt')}
-              {f('workSleep', 'Ngủ gục', '-2đ/lượt')}
-              {f('lateDuty', 'Trực nhật muộn', '-2đ/lượt')}
-              {f('dirty', 'Lớp bẩn', '-5đ/lượt')}
-              {f('foodEat', 'Ăn/mang đồ ăn vào lớp', '-2đ/lượt')}
-              {f('foodPhone', 'Không bỏ điện thoại vào tủ', '-2đ/lượt')}
-              {f('dressSlipper', 'Mang dép lê', '-1đ/lượt')}
-              {f('dressNoCard', 'Không đeo thẻ HS', '-1đ/lượt')}
-              {f('dressNoBadge', 'Không đeo huy hiệu đoàn', '-1đ/lượt')}
-              {f('dressHair', 'Nhuộm tóc', '-1đ/lượt')}
-              {f('dressEarring', 'Đeo bông tai (Nam)', '-1đ/lượt')}
-              {f('skip', 'Bỏ tiết', '-5đ/lượt')}
-              {f('dishonestLie', 'Không trung thực', '-5đ/lượt')}
-              {f('dishonestSwear', 'Nói tục, chửi thề', '-5đ/lượt')}
-              {f('parkingWrong', 'Để xe sai quy định', '-5đ/lượt')}
-              {f('parkingRev', 'Nẹt bô', '-5đ/lượt')}
-              {f('phone', 'Dùng điện thoại trong giờ học', '-10đ/lượt')}
-              {f('trafficHelmet', 'Không đội mũ bảo hiểm', '-10đ/lượt')}
-              {f('trafficMirror', 'Xe không có gương chiếu hậu', '-10đ/lượt')}
-              {f('trafficThree', 'Chở ba', '-10đ/lượt')}
-              {f('fightHit', 'Đánh nhau', '-20đ/lượt')}
-              {f('fightRude', 'Vô lễ với GV', '-20đ/lượt')}
-              {f('fightExplosive', 'Tàng trữ, sử dụng chất gây nổ', '-20đ/lượt')}
-              {f('fightDrug', 'Sử dụng thuốc lá, chất gây nghiện', '-20đ/lượt')}
+              {fv('absentNoPermit', 'Trong đó: không phép', '-5đ/lượt')}
+              {fv('lateLate', 'Đi muộn', '-2đ/lượt')}
+              {fv('lateOut', 'Tự ý ra ngoài trong sinh hoạt 15p', '-2đ/lượt')}
+              {fv('noisy', 'Lớp ồn trong sinh hoạt 15p', '-5đ/lượt')}
+              {fv('workPrivate', 'Làm việc riêng', '-2đ/lượt')}
+              {fv('workNotSerious', 'Không nghiêm túc', '-2đ/lượt')}
+              {fv('workSleep', 'Ngủ gục', '-2đ/lượt')}
+              {fv('lateDuty', 'Trực nhật muộn', '-2đ/lượt')}
+              {fv('dirty', 'Lớp bẩn', '-5đ/lượt')}
+              {fv('foodEat', 'Ăn/mang đồ ăn vào lớp', '-2đ/lượt')}
+              {fv('foodPhone', 'Không bỏ điện thoại vào tủ', '-2đ/lượt')}
+              {fv('dressSlipper', 'Mang dép lê', '-1đ/lượt')}
+              {fv('dressNoCard', 'Không đeo thẻ HS', '-1đ/lượt')}
+              {fv('dressNoBadge', 'Không đeo huy hiệu đoàn', '-1đ/lượt')}
+              {fv('dressHair', 'Nhuộm tóc', '-1đ/lượt')}
+              {fv('dressEarring', 'Đeo bông tai (Nam)', '-1đ/lượt')}
+              {fv('skip', 'Bỏ tiết', '-5đ/lượt')}
+              {fv('dishonestLie', 'Không trung thực', '-5đ/lượt')}
+              {fv('dishonestSwear', 'Nói tục, chửi thề', '-5đ/lượt')}
+              {fv('parkingWrong', 'Để xe sai quy định', '-5đ/lượt')}
+              {fv('parkingRev', 'Nẹt bô', '-5đ/lượt')}
+              {fv('phone', 'Dùng điện thoại trong giờ học', '-10đ/lượt')}
+              {fv('trafficHelmet', 'Không đội mũ bảo hiểm', '-10đ/lượt')}
+              {fv('trafficMirror', 'Xe không có gương chiếu hậu', '-10đ/lượt')}
+              {fv('trafficThree', 'Chở ba', '-10đ/lượt')}
+              {fv('fightHit', 'Đánh nhau', '-20đ/lượt')}
+              {fv('fightRude', 'Vô lễ với GV', '-20đ/lượt')}
+              {fv('fightExplosive', 'Tàng trữ, sử dụng chất gây nổ', '-20đ/lượt')}
+              {fv('fightDrug', 'Sử dụng thuốc lá, chất gây nghiện', '-20đ/lượt')}
               <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 700, marginTop: 6 }}><input type="checkbox" checked={calc.noAbsentLate} disabled={!canEdit} onChange={e => props.setD('noAbsLate', e.target.checked)} style={{ width: 22, height: 22 }} /> 100% không vắng, không đi muộn (+10đ)</label>
-              {calc.noAbsentLate && (d.absentTotal > 0 || (d.late ?? 0) > 0 || (d.lateLate ?? 0) > 0) && <p>Lưu ý: đã tích 100% không vắng, không đi muộn nhưng vẫn có vắng/đi muộn — kiểm tra lại nhé.</p>}
+              {calc.noAbsentLate && ((d.absentPermit + d.absentNoPermit) > 0 || (d.late ?? 0) > 0 || (d.lateLate ?? 0) > 0) && <p>Lưu ý: đã tích 100% không vắng, không đi muộn nhưng vẫn có vắng/đi muộn — kiểm tra lại nhé.</p>}
               </Section>
             </div>
           </div>
