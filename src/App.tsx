@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, ClassGroup, ClassItem, Details, ExtraLine, Role, Score, Week } from './lib';
 import { calcScore, classAvg, classGroup, clsOf, downloadBlob, emptyDetails, emptyState, groupLabel, hocTapLines, monthBlockOf, monthLabel, neNepLines, nowStr, sectionSums, toCsv, uid, validateDetails, violationStats } from './lib';
-import { exportClassDocx, exportWeekDocx } from './docxExport';
+import { exportClassDocx, exportMonthDocx, exportWeekDocx } from './docxExport';
 import { LOGO_DATA_URI } from './logoData';
 import AuthScreen from './AuthScreen';
 import { deleteProfile, ensureProfile, fetchSharedState, isSupabaseConfigured, listProfiles, saveSharedState, supabase, updateProfile } from './supabase';
@@ -400,6 +400,16 @@ export default function App() {
     update(prev => ({ ...prev, scores: prev.scores.map(s => s.id === currentScore.id ? { ...s, status: 'approved', approvedBy: session?.name, approvedAt: nowStr() } : s) }), 'Duyệt phiếu', `${clsName} — ${week?.label}`);
     setMsg(`Đã duyệt phiếu lớp ${clsName}.`); setDraft(currentScore.details);
   }
+  // Duyệt tất cả phiếu đã nộp của tuần hiện tại (chỉ Ban thi đua).
+  function approveAllScores() {
+    if (!week || session?.role !== 'admin') return;
+    const ids = pendingScores.map(s => s.id);
+    if (!ids.length) return;
+    if (!window.confirm(`Duyệt tất cả ${ids.length} phiếu đã nộp của ${week.label}?`)) return;
+    const idSet = new Set(ids);
+    update(prev => ({ ...prev, scores: prev.scores.map(s => idSet.has(s.id) ? { ...s, status: 'approved', approvedBy: session?.name, approvedAt: nowStr() } : s) }), 'Duyệt tất cả phiếu', `${week.label} — ${ids.length} phiếu`);
+    setMsg(`Đã duyệt tất cả ${ids.length} phiếu của ${week.label}.`);
+  }
   function returnScore() {
     if (!currentScore || session?.role !== 'admin' || !returnReason.trim()) { setErrs(['Trả lại phiếu phải ghi rõ lý do.']); return; }
     const clsName = state.classes.find(c => c.id === currentScore.classId)?.name ?? '';
@@ -438,6 +448,10 @@ export default function App() {
     try { const blob = await exportWeekDocx(state, week, false); downloadBlob(blob, `TONG_HOP_THI_DUA_${week.label.replace(/\s+/g, '_')}.docx`); update(s => s, 'Xuất file .docx', week.label); setMsg('Đã tải file .docx tổng hợp tuần.'); }
     catch { setErrs(['Không xuất được file .docx. Thử lại sau.']); }
   }
+  async function doExportDocxMonth(weeks: Week[], monthName: string) {
+    try { const blob = await exportMonthDocx(state, weeks, monthName); downloadBlob(blob, `TONG_HOP_THI_DUA_${monthName.replace(/\s+/g, '_').toUpperCase()}.docx`); update(s => s, 'Xuất file .docx tổng hợp tháng', monthName); setMsg(`Đã tải file .docx tổng hợp ${monthName}.`); }
+    catch { setErrs(['Không xuất được file .docx tổng hợp tháng. Thử lại sau.']); }
+  }
   async function doExportDocxClass() {
     if (!currentScore) return;
     try { const blob = await exportClassDocx(state, currentScore); downloadBlob(blob, `PHIEU_${state.classes.find(c => c.id === currentScore.classId)?.name}_${week?.label.replace(/\s+/g, '_')}.docx`); setMsg('Đã tải file .docx phiếu lớp.'); }
@@ -468,6 +482,14 @@ export default function App() {
     const rows = state.scores.filter(s => s.weekId === week.id && s.status === 'approved').sort((a, b) => calcScore(b.details).final - calcScore(a.details).final);
     const text = `TỔNG HỢP THI ĐUA ${week.label.toUpperCase()}\n` + rows.map((s, i) => `${i + 1}. ${state.classes.find(c => c.id === s.classId)?.name}: ${calcScore(s.details).final}đ-${calcScore(s.details).cls}`).join('\n');
     navigator.clipboard?.writeText(text).then(() => setMsg('Đã chép bảng xếp hạng để gửi Zalo.')).catch(() => setErrs(['Không chép được, trình duyệt chặn clipboard.']));
+  }
+  // Chép tin nhắn nhắc các lớp chưa nộp phiếu (để gửi Zalo).
+  function copyReminder() {
+    if (!week) return;
+    const missingNames = state.classes.filter(c => !state.scores.some(s => s.weekId === week.id && s.classId === c.id)).map(c => c.name);
+    if (!missingNames.length) { setMsg('Tất cả các lớp đã có phiếu.'); return; }
+    const text = `Nhắc nộp phiếu thi đua ${week.label.toUpperCase()}${week.dateRange ? ` (${week.dateRange})` : ''}:\nCác lớp chưa nộp phiếu: ${missingNames.join(', ')}.\nNhờ các lớp nộp phiếu đúng hạn nhé. Cảm ơn các lớp!`;
+    navigator.clipboard?.writeText(text).then(() => setMsg('Đã chép tin nhắc để gửi Zalo.')).catch(() => setErrs(['Không chép được, trình duyệt chặn clipboard.']));
   }
 
   const approvedScores = useMemo(() => week ? state.scores.filter(s => s.weekId === week.id && s.status === 'approved').sort((a, b) => calcScore(b.details).final - calcScore(a.details).final) : [], [state.scores, week]);
@@ -573,13 +595,18 @@ export default function App() {
         {session.role === 'codo' && assignment && <div className="warn">Bạn đang nhập cho lớp {state.classes.find(c => c.id === assignment.classId)?.name} — {state.weeks.find(w => w.id === assignment.weekId)?.label}. Chỉ nhập và nộp được lớp này.</div>}
         {currentScore?.status === 'returned' && <div className="err">Phiếu bị trả lại — lý do: {currentScore.returnReason}. Sửa lại rồi nộp lại nhé.</div>}
 
-        {tab === 'tong-quan' && <Overview state={state} week={week} role={session.role} assignment={assignment?.classId && assignment?.weekId ? { classId: assignment.classId, weekId: assignment.weekId } : undefined} onEnterScores={() => { if (assignment) { setWeekId(assignment.weekId); setClassId(assignment.classId); switchTab('nhap-diem'); } }} onGoTab={switchTab} onOpenClass={(cid: string) => { if (confirmDirty()) { setWeekId(effectiveWeekId); setClassId(cid); setTab('nhap-diem'); setDirty(false); } }} />}
+        {tab === 'tong-quan' && <Overview state={state} week={week} role={session.role} assignment={assignment?.classId && assignment?.weekId ? { classId: assignment.classId, weekId: assignment.weekId } : undefined} onEnterScores={() => { if (assignment) { setWeekId(assignment.weekId); setClassId(assignment.classId); switchTab('nhap-diem'); } }} onGoTab={switchTab} onCopyReminder={copyReminder} onOpenClass={(cid: string) => { if (confirmDirty()) { setWeekId(effectiveWeekId); setClassId(cid); setTab('nhap-diem'); setDirty(false); } }} />}
         {tab === 'nhap-diem' && (!week ? (
           <div className="card"><h2>Nhập điểm</h2><p>Chưa có tuần nào nên chưa nhập điểm được.</p>{session.role === 'admin' ? <><p>Tạo tuần đầu tiên để bắt đầu chấm thi đua nhé.</p><div className="row"><button className="btn" type="button" onClick={() => setTab('quan-ly')}>Sang tab Quản lý tạo tuần</button></div></> : <p>Nhờ Ban thi đua tạo tuần nhé.</p>}</div>
         ) : session.role === 'codo' && !assignment ? (
           <div className="card"><h2>Nhập điểm</h2><p>Bạn chưa được Ban thi đua phân công lớp/tuần nên chưa nhập điểm được. Bạn liên hệ Ban thi đua để được phân công nhé.</p></div>
         ) : draft && (
-          <ScoreForm state={state} week={week} draft={draft} calc={calc} canEdit={canEdit} classId={classId} setClassId={switchClass} weekId={effectiveWeekId} setWeekId={(id: string) => { if (confirmDirty()) setWeekId(id); }} search={search} setSearch={setSearch} classes={visibleClasses} currentScore={currentScore} setD={setD} dirty={dirty} onSaveDraft={() => saveScore('draft')} onSubmit={() => saveScore('submitted')} onApprove={approveScore} onReturn={returnScore} returnReason={returnReason} setReturnReason={setReturnReason} onReopen={reopenScore} onCopyPrev={copyPrevWeek} onShowPhieu={() => setShowPhieu(true)} showPhieu={showPhieu} onExportClass={doExportDocxClass} sessionRole={session.role} />
+          <>
+            {session.role === 'admin' && pendingScores.length > 0 && (
+              <div className="row" style={{ marginBottom: 10 }}><button className="btn green" type="button" onClick={approveAllScores}>Duyệt tất cả {pendingScores.length} phiếu đã nộp</button><span>Còn {pendingScores.length} phiếu chờ duyệt trong {week.label}.</span></div>
+            )}
+            <ScoreForm state={state} week={week} draft={draft} calc={calc} canEdit={canEdit} classId={classId} setClassId={switchClass} weekId={effectiveWeekId} setWeekId={(id: string) => { if (confirmDirty()) setWeekId(id); }} search={search} setSearch={setSearch} classes={visibleClasses} currentScore={currentScore} setD={setD} dirty={dirty} onSaveDraft={() => saveScore('draft')} onSubmit={() => saveScore('submitted')} onApprove={approveScore} onReturn={returnScore} returnReason={returnReason} setReturnReason={setReturnReason} onReopen={reopenScore} onCopyPrev={copyPrevWeek} onShowPhieu={() => setShowPhieu(true)} showPhieu={showPhieu} onExportClass={doExportDocxClass} sessionRole={session.role} />
+          </>
         ))}
         {tab === 'xep-hang' && (week ? (
           <div className="card"><h2>Xếp hạng — {week.label} {week.submittedAt ? <span className="badge approved">Đã nộp {week.submittedAt}</span> : <span className="badge draft">Chưa chốt tuần</span>}</h2>
@@ -595,7 +622,7 @@ export default function App() {
         ) : (
           <div className="card"><h2>Xếp hạng</h2><p>Chưa có tuần nào nên chưa có bảng xếp hạng.</p>{session.role === 'admin' ? <><p>Tạo tuần đầu tiên để bắt đầu chấm thi đua nhé.</p><div className="row"><button className="btn" type="button" onClick={() => setTab('quan-ly')}>Sang tab Quản lý tạo tuần</button></div></> : <p>Nhờ Ban thi đua tạo tuần nhé.</p>}</div>
         ))}
-        {tab === 'tong-hop' && <SummaryTab state={state} />}
+        {tab === 'tong-hop' && <SummaryTab state={state} onExportMonth={doExportDocxMonth} />}
         {tab === 'quan-ly' && <ManageTab state={state} setState={setState} session={session} onLog={(a: string, d: string) => update(s => s, a, d)} onExportJson={exportJson} onImportJson={importJson} profiles={profiles} onProfilePatch={patchProfile} onProfileDelete={removeProfile} onRefreshProfiles={() => { if (isSupabaseConfigured) listProfiles().then(setProfiles).catch(() => undefined); }} />}
         {tab === 'lich-su' && (
           <div className="card"><h2>Lịch sử hoạt động</h2>
@@ -612,12 +639,13 @@ export default function App() {
   );
 }
 
-function Overview({ state, week, role, assignment, onEnterScores, onGoTab, onOpenClass }: {
+function Overview({ state, week, role, assignment, onEnterScores, onGoTab, onCopyReminder, onOpenClass }: {
   state: AppState; week?: Week;
   role: Role;
   assignment?: { classId: string; weekId: string };
   onEnterScores: () => void;
   onGoTab?: (tab: string) => void;
+  onCopyReminder?: () => void;
   onOpenClass?: (classId: string) => void;
 }) {
   // Cờ đỏ: chỉ thấy phần việc của mình — lớp, tuần, trạng thái phiếu và
@@ -668,6 +696,8 @@ function Overview({ state, week, role, assignment, onEnterScores, onGoTab, onOpe
   const approved = week ? state.scores.filter(s => s.weekId === week.id && s.status === 'approved').length : 0;
   const submitted = week ? state.scores.filter(s => s.weekId === week.id && s.status === 'submitted').length : 0;
   const missing = state.classes.filter(c => !week || !state.scores.some(s => s.weekId === week.id && s.classId === c.id));
+  const pending = week ? state.scores.filter(s => s.weekId === week.id && s.status === 'submitted') : [];
+  const returned = week ? state.scores.filter(s => s.weekId === week.id && s.status === 'returned') : [];
   const anomalies = week ? state.scores.filter(s => s.weekId === week.id && (calcScore(s.details).final > 150 || calcScore(s.details).final < 50)) : [];
   // Vi phạm: chỉ tính phiếu đã duyệt của tuần hiện tại.
   const approvedWeek = week ? state.scores.filter(s => s.weekId === week.id && s.status === 'approved') : [];
@@ -681,6 +711,17 @@ function Overview({ state, week, role, assignment, onEnterScores, onGoTab, onOpe
         <button type="button" className="kpi-btn" onClick={() => onGoTab?.('nhap-diem')}><b>{submitted}</b>Chờ duyệt</button>
       </div>
       {week && <p>Tuần hiện tại: <b>{week.label}</b> {week.dateRange} {week.submittedAt ? `— Đã nộp ${week.submittedAt}` : '— Chưa chốt'}</p>}
+      <div className="card"><h2>Cần xử lý ngay{week ? ` — ${week.label}` : ''}</h2>
+        {!week ? <p>Chưa có tuần nào.</p> : pending.length === 0 && returned.length === 0 && missing.length === 0 ? <p>Không có việc nào cần xử lý — tất cả các lớp đã được duyệt.</p> : (<div>
+          {pending.length > 0 && <><p><b>Chờ duyệt ({pending.length}):</b></p>{pending.map(s => (
+            <div key={s.id} className="warn-row"><div><b>{state.classes.find(c => c.id === s.classId)?.name}</b> — {calcScore(s.details).final}đ, loại {calcScore(s.details).cls}</div><div className="row">{onOpenClass && <button className="btn ghost" type="button" onClick={() => onOpenClass(s.classId)}>Xem phiếu</button>}</div></div>
+          ))}</>}
+          {returned.length > 0 && <><p><b>Bị trả lại ({returned.length}):</b></p>{returned.map(s => (
+            <div key={s.id} className="warn-row"><div><b>{state.classes.find(c => c.id === s.classId)?.name}</b>{s.returnReason ? ` — ${s.returnReason}` : ''}</div><div className="row">{onOpenClass && <button className="btn ghost" type="button" onClick={() => onOpenClass(s.classId)}>Xem phiếu</button>}</div></div>
+          ))}</>}
+          {missing.length > 0 && <p><b>Chưa nộp phiếu ({missing.length}):</b> {missing.map(c => <span key={c.id} className="chip-mini">{c.name}</span>)}</p>}
+        </div>)}
+      </div>
       <div className="card"><h2>Vi phạm thường gặp{week ? ` — ${week.label}` : ''}</h2>
         {!week ? <p>Chưa có tuần nào nên chưa có thống kê vi phạm. Tạo tuần ở tab Quản lý để bắt đầu.</p> : viol.topViolations.length === 0 ? <p>Chưa ghi nhận lượt vi phạm nào trong các phiếu đã duyệt của tuần này.</p> : (
           <>
@@ -702,7 +743,7 @@ function Overview({ state, week, role, assignment, onEnterScores, onGoTab, onOpe
           ))}</div>
         )}
       </div>
-      <div className="card"><h2>Lớp cần nhắc</h2>{!week ? <p>Chưa có tuần nào — tạo tuần ở tab Quản lý để bắt đầu chấm.</p> : missing.length === 0 ? <p>Tất cả các lớp đã có phiếu.</p> : <p>{missing.map(c => <span key={c.id} className="chip-mini">{c.name}</span>)}</p>}</div>
+      <div className="card"><h2>Lớp cần nhắc</h2>{!week ? <p>Chưa có tuần nào — tạo tuần ở tab Quản lý để bắt đầu chấm.</p> : missing.length === 0 ? <p>Tất cả các lớp đã có phiếu.</p> : <><p>{missing.map(c => <span key={c.id} className="chip-mini">{c.name}</span>)}</p><div className="row"><button className="btn ghost" type="button" onClick={() => onCopyReminder?.()}>Chép tin nhắc Zalo</button></div></>}</div>
       {anomalies.length > 0 && <div className="card"><h2>Cảnh báo bất thường</h2>{anomalies.map(s => <p key={s.id}>Lớp {state.classes.find(c => c.id === s.classId)?.name}: {calcScore(s.details).final}đ — kiểm tra lại số liệu trước khi duyệt.</p>)}</div>}
       <div className="card"><h2>Quy trình làm việc</h2>
         <div className="steps"><span>1. Nháp</span><i>→</i><span>2. Cờ đỏ nộp</span><i>→</i><span>3. Ban thi đua duyệt</span><i>→</i><span>4. Chốt tuần</span></div>
@@ -711,7 +752,7 @@ function Overview({ state, week, role, assignment, onEnterScores, onGoTab, onOpe
   );
 }
 
-function SummaryTab({ state }: { state: AppState }) {
+function SummaryTab({ state, onExportMonth }: { state: AppState; onExportMonth?: (weeks: Week[], monthName: string) => void }) {
   const [mode, setMode] = useState<'week' | 'month' | 'group'>('week');
   // Các tháng có tuần, xếp theo khối 4 tuần của năm học (Tháng 9 rồi tới Tháng 10...).
   const months = useMemo(() => {
@@ -749,7 +790,7 @@ function SummaryTab({ state }: { state: AppState }) {
       {mode === 'month' && (
         <div className="card"><h2>Tổng hợp theo tháng</h2><p>Điểm trung bình của các phiếu đã duyệt trong các tuần thuộc tháng đã chọn. Cứ 4 tuần là 1 tháng (tuần 1–4 là Tháng 9, tuần 5–8 là Tháng 10…).</p>
           {months.length === 0 ? <p>Chưa có tuần nào. Tạo tuần ở tab Quản lý để xem tổng hợp theo tháng.</p> : <>
-            <div className="row"><label style={{ margin: 0 }}>Tháng</label><select value={selMonth} onChange={e => setMonthSel(Number(e.target.value))} style={{ maxWidth: 200 }}>{months.map(([m]) => <option key={m} value={m}>{monthLabel(m)}</option>)}</select><span>{monthWeeks.map(w => w.label).join(', ')}</span></div>
+            <div className="row"><label style={{ margin: 0 }}>Tháng</label><select value={selMonth} onChange={e => setMonthSel(Number(e.target.value))} style={{ maxWidth: 200 }}>{months.map(([m]) => <option key={m} value={m}>{monthLabel(m)}</option>)}</select><span>{monthWeeks.map(w => w.label).join(', ')}</span><button className="btn" type="button" onClick={() => onExportMonth?.(monthWeeks, monthLabel(selMonth))}>Xuất Word (.docx)</button></div>
             <div className="tablewrap"><table><thead><tr><th>Hạng</th><th>Lớp</th><th>Điểm TB</th><th>Loại</th>{monthWeeks.map(w => <th key={w.id}>{w.label}</th>)}</tr></thead><tbody>
               {monthRows.map(({ c, a }, i) => <tr key={c.id}><td>{a === null ? '—' : i + 1}</td><td><b>{c.name}</b></td><td>{a === null ? '—' : `${a.toFixed(1)}đ`}</td><td>{a === null ? '—' : <span className={`badge ${clsOf(a)}`}>{clsOf(a)}</span>}</td>{monthWeeks.map(w => { const s = state.scores.find(x => x.weekId === w.id && x.classId === c.id && x.status === 'approved'); return <td key={w.id}>{s ? `${calcScore(s.details).final}đ-${calcScore(s.details).cls}` : '—'}</td>; })}</tr>)}
             </tbody></table></div>
@@ -928,6 +969,7 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
 }) {
   const [weekLabel, setWeekLabel] = useState(''); const [weekRange, setWeekRange] = useState('');
   const [className, setClassName] = useState('');
+  const [editingClassId, setEditingClassId] = useState(''); const [editingClassName, setEditingClassName] = useState(''); const [classNote, setClassNote] = useState('');
   const [bulkBase, setBulkBase] = useState('10B'); const [bulkFrom, setBulkFrom] = useState(1); const [bulkTo, setBulkTo] = useState(5);
   const [codoName, setCodoName] = useState(''); const [codoClass, setCodoClass] = useState(''); const [codoWeek, setCodoWeek] = useState('');
   const isAdmin = session.role === 'admin';
@@ -974,7 +1016,37 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
       <div className="card"><h2>Lớp</h2>
         <div className="row"><input type="text" placeholder="Vd: 10B1" value={className} onChange={e => setClassName(e.target.value)} style={{ maxWidth: 200 }} /><button className="btn" type="button" onClick={() => { if (!className.trim()) return; const c: ClassItem = { id: uid(), name: className.trim().toUpperCase() }; setState({ ...state, classes: [...state.classes, c] }); onLog('Thêm lớp', c.name); setClassName(''); }}>Thêm lớp</button></div>
         <div className="row"><input type="text" value={bulkBase} onChange={e => setBulkBase(e.target.value)} style={{ maxWidth: 100 }} /><input type="number" value={bulkFrom} onChange={e => setBulkFrom(Number(e.target.value))} style={{ maxWidth: 80 }} /><span>đến</span><input type="number" value={bulkTo} onChange={e => setBulkTo(Number(e.target.value))} style={{ maxWidth: 80 }} /><button className="btn ghost" type="button" onClick={() => { const news: ClassItem[] = []; for (let i = bulkFrom; i <= bulkTo; i++) { const nm = `${bulkBase}${i}`; if (!state.classes.some(c => c.name === nm)) news.push({ id: uid(), name: nm }); } setState({ ...state, classes: [...state.classes, ...news] }); onLog('Thêm cả khối lớp', news.map(c => c.name).join(', ')); }}>Thêm cả khối (vd 10B1–10B5)</button></div>
-        <p>{state.classes.map(c => c.name).join(', ') || 'Chưa có lớp nào.'}</p>
+        <p>{state.classes.length === 0 ? 'Chưa có lớp nào.' : ''}</p>
+        {state.classes.map(c => {
+          const hasScores = state.scores.some(s => s.classId === c.id);
+          const editing = editingClassId === c.id;
+          return (
+            <div key={c.id} className="row" style={{ alignItems: 'center' }}>
+              {editing ? (<>
+                <input type="text" value={editingClassName} onChange={e => setEditingClassName(e.target.value)} style={{ maxWidth: 160 }} />
+                <button className="btn" type="button" onClick={() => {
+                  const nm = editingClassName.trim().toUpperCase();
+                  if (!nm) { setClassNote('Tên lớp không được để trống.'); return; }
+                  if (state.classes.some(x => x.id !== c.id && x.name.toUpperCase() === nm)) { setClassNote(`Đã có lớp ${nm} rồi.`); return; }
+                  setState({ ...state, classes: state.classes.map(x => x.id === c.id ? { ...x, name: nm } : x) });
+                  onLog('Sửa tên lớp', `${c.name} → ${nm}`); setClassNote(`Đã đổi tên lớp ${c.name} thành ${nm}.`); setEditingClassId(''); setEditingClassName('');
+                }}>Lưu</button>
+                <button className="btn grey" type="button" onClick={() => { setEditingClassId(''); setEditingClassName(''); }}>Hủy</button>
+              </>) : (<>
+                <b>{c.name}</b>
+                <button className="btn ghost" type="button" onClick={() => { setEditingClassId(c.id); setEditingClassName(c.name); setClassNote(''); }}>Sửa tên</button>
+                {hasScores ? <span style={{ color: '#9ca3af' }}>đã có phiếu</span> : (
+                  <button className="btn grey" type="button" onClick={() => {
+                    if (!window.confirm(`Xóa lớp ${c.name}? Lớp chưa có phiếu nào nên xóa được.`)) return;
+                    setState({ ...state, classes: state.classes.filter(x => x.id !== c.id), roster: state.roster.filter(r => r.classId !== c.id) });
+                    onLog('Xóa lớp', c.name); setClassNote(`Đã xóa lớp ${c.name}.`);
+                  }}>Xóa</button>
+                )}
+              </>)}
+            </div>
+          );
+        })}
+        {classNote && <p>{classNote}</p>}
       </div>
       <div className="card"><h2>Cờ đỏ trực — phân công</h2>
         <div className="row"><input type="text" placeholder="Tên cờ đỏ" value={codoName} onChange={e => setCodoName(e.target.value)} style={{ maxWidth: 200 }} />

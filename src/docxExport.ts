@@ -1,7 +1,7 @@
 // Xuất .docx đúng mẫu TỔNG HỢP THI ĐUA TUẦN 04 (THPT Hùng Vương-Quảng Phú)
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, HeadingLevel, BorderStyle } from 'docx';
 import type { AppState, Score, Week } from './lib';
-import { calcScore, hocTapLines, neNepLines } from './lib';
+import { calcScore, classAvg, clsOf, hocTapLines, neNepLines } from './lib';
 
 const FONT = 'Times New Roman';
 type Align = (typeof AlignmentType)[keyof typeof AlignmentType];
@@ -19,7 +19,7 @@ function cell(text: string, opts: { bold?: boolean; align?: Align } = {}) {
     children: [p(text, { bold: opts.bold, align: opts.align ?? AlignmentType.LEFT, size: 12 })],
   });
 }
-function headerRows(s: AppState, week: Week) {
+function headerRows(s: AppState, title: string, sectionTitle: string, dateRange?: string) {
   return [
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
@@ -35,10 +35,29 @@ function headerRows(s: AppState, week: Week) {
         ]}),
       ]})],
     }),
-    new Paragraph({ heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER, children: [new TextRun({ text: `TỔNG HỢP THI ĐUA ${week.label.toUpperCase()}`, bold: true, font: FONT, size: 32 })] }),
-    ...(week.dateRange ? [p(week.dateRange, { align: AlignmentType.CENTER, italic: true })] : []),
-    p('1. Tổng kết tuần', { bold: true, size: 14 }),
+    new Paragraph({ heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER, children: [new TextRun({ text: title, bold: true, font: FONT, size: 32 })] }),
+    ...(dateRange ? [p(dateRange, { align: AlignmentType.CENTER, italic: true })] : []),
+    p(sectionTitle, { bold: true, size: 14 }),
   ];
+}
+// Khối ký tên cuối văn bản (dùng chung cho tổng hợp tuần / tháng).
+function signRows(s: AppState) {
+  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [new TableRow({ children: [
+    new TableCell({ borders: { top: thin, left: thin, bottom: thin, right: thin }, children: [
+      p('Nơi nhận:', { bold: true, italic: true }),
+      p('- Hiệu trưởng (để b/c).', { italic: true }),
+      p('- Phó hiệu trưởng (để b/c).', { italic: true }),
+      p('- GVCN (để phối hợp).', { italic: true }),
+      p('- Lưu VP.', { italic: true }),
+    ]}),
+    new TableCell({ borders, children: [
+      p('TL. HIỆU TRƯỞNG', { bold: true, align: AlignmentType.CENTER }),
+      p(s.settings.signerTitle, { bold: true, align: AlignmentType.CENTER }),
+      new Paragraph({ children: [new TextRun({ text: '', font: FONT })] }),
+      new Paragraph({ children: [new TextRun({ text: '', font: FONT })] }),
+      p(s.settings.signer, { bold: true, align: AlignmentType.CENTER }),
+    ]}),
+  ]})] });
 }
 export async function exportWeekDocx(s: AppState, week: Week, approvedOnly: boolean): Promise<Blob> {
   const rows: Score[] = s.scores
@@ -63,28 +82,50 @@ export async function exportWeekDocx(s: AppState, week: Week, approvedOnly: bool
   const cons = s.settings.generalCons || 'Vẫn còn một số học sinh vi phạm nội quy đi muộn, mang đồ ăn vào lớp.';
   const doc = new Document({
     sections: [{ children: [
-      ...headerRows(s, week),
+      ...headerRows(s, `TỔNG HỢP THI ĐUA ${week.label.toUpperCase()}`, '1. Tổng kết tuần', week.dateRange),
       new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: tableRows }),
       p('2. Nhận xét chung', { bold: true, size: 14 }),
       p(`- Ưu điểm: ${pros}`),
       p(`- Nhược điểm: ${cons}`),
       new Paragraph({ children: [new TextRun({ text: '', font: FONT })] }),
-      new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [new TableRow({ children: [
-        new TableCell({ borders: { top: thin, left: thin, bottom: thin, right: thin }, children: [
-          p('Nơi nhận:', { bold: true, italic: true }),
-          p('- Hiệu trưởng (để b/c).', { italic: true }),
-          p('- Phó hiệu trưởng (để b/c).', { italic: true }),
-          p('- GVCN (để phối hợp).', { italic: true }),
-          p('- Lưu VP.', { italic: true }),
-        ]}),
-        new TableCell({ borders, children: [
-          p('TL. HIỆU TRƯỞNG', { bold: true, align: AlignmentType.CENTER }),
-          p(s.settings.signerTitle, { bold: true, align: AlignmentType.CENTER }),
-          new Paragraph({ children: [new TextRun({ text: '', font: FONT })] }),
-          new Paragraph({ children: [new TextRun({ text: '', font: FONT })] }),
-          p(s.settings.signer, { bold: true, align: AlignmentType.CENTER }),
-        ]}),
-      ]})] }),
+      signRows(s),
+    ] }],
+  });
+  return Packer.toBlob(doc);
+}
+// Tổng hợp tháng: điểm trung bình của từng lớp qua các tuần trong tháng
+// (cứ 4 tuần là 1 tháng), kèm điểm từng tuần. Chỉ tính phiếu đã duyệt.
+export async function exportMonthDocx(s: AppState, weeks: Week[], monthName: string): Promise<Blob> {
+  const weekIds = weeks.map(w => w.id);
+  const nameOf = (id: string) => s.classes.find(c => c.id === id)?.name ?? id;
+  const rows = s.classes.map(c => ({ c, a: classAvg(s, c.id, weekIds) })).sort((x, y) => (y.a ?? -1) - (x.a ?? -1));
+  const tableRows = [
+    new TableRow({ children: [
+      cell('TT', { bold: true, align: AlignmentType.CENTER }),
+      cell('LỚP', { bold: true, align: AlignmentType.CENTER }),
+      cell('ĐIỂM TB', { bold: true, align: AlignmentType.CENTER }),
+      cell('LOẠI', { bold: true, align: AlignmentType.CENTER }),
+      ...weeks.map(w => cell(w.label, { bold: true, align: AlignmentType.CENTER })),
+    ] }),
+    ...rows.map((r, i) => new TableRow({ children: [
+      cell(String(i + 1), { align: AlignmentType.CENTER }),
+      cell(nameOf(r.c.id), { bold: true }),
+      cell(r.a === null ? '—' : `${r.a.toFixed(1)}đ`, { align: AlignmentType.CENTER }),
+      cell(r.a === null ? '—' : clsOf(r.a), { bold: true, align: AlignmentType.CENTER }),
+      ...weeks.map(w => { const sc = s.scores.find(x => x.weekId === w.id && x.classId === r.c.id && x.status === 'approved'); return cell(sc ? `${calcScore(sc.details).final}đ-${calcScore(sc.details).cls}` : '—', { align: AlignmentType.CENTER }); }),
+    ] })),
+  ];
+  const pros = s.settings.generalPros || `Các lớp đạt loại A trong tháng: ${rows.filter(r => r.a !== null && clsOf(r.a) === 'A').map(r => nameOf(r.c.id)).join(', ') || '—'}.`;
+  const cons = s.settings.generalCons || 'Vẫn còn một số học sinh vi phạm nội quy đi muộn, mang đồ ăn vào lớp.';
+  const doc = new Document({
+    sections: [{ children: [
+      ...headerRows(s, `TỔNG HỢP THI ĐUA ${monthName.toUpperCase()}`, '1. Tổng kết tháng', weeks.map(w => w.label).join(', ')),
+      new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: tableRows }),
+      p('2. Nhận xét chung', { bold: true, size: 14 }),
+      p(`- Ưu điểm: ${pros}`),
+      p(`- Nhược điểm: ${cons}`),
+      new Paragraph({ children: [new TextRun({ text: '', font: FONT })] }),
+      signRows(s),
     ] }],
   });
   return Packer.toBlob(doc);
@@ -95,7 +136,7 @@ export async function exportClassDocx(s: AppState, sc: Score): Promise<Blob> {
   const c = calcScore(sc.details);
   const doc = new Document({
     sections: [{ children: [
-      ...headerRows(s, week ?? { id: '', label: 'Tuần', dateRange: '' }),
+      ...headerRows(s, `TỔNG HỢP THI ĐUA ${(week ?? { label: 'Tuần' }).label.toUpperCase()}`, '1. Tổng kết tuần', week?.dateRange),
       p(`Tổng kết tuần — Lớp ${clsName}`, { bold: true, size: 14, align: AlignmentType.CENTER }),
       p(`(1) Tổng điểm cộng: ${c.plus}đ`, {}),
       p(`(2) Tổng điểm trừ: ${c.minus}đ`, {}),
