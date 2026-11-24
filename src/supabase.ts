@@ -59,6 +59,18 @@ export async function ensureProfile(user: User): Promise<Profile> {
   const fullName = typeof meta.full_name === 'string' && meta.full_name.trim()
     ? meta.full_name.trim()
     : (user.email ?? 'Người dùng');
+  // Lớp đăng ký (requested_class): tìm id lớp theo tên trong dữ liệu dùng
+  // chung để gán sẵn cho hồ sơ, Ban thi đua duyệt là tài khoản hiện ngay
+  // "Họ và tên — Lớp ...". Lớp chưa có trong hệ thống thì để trống, học
+  // sinh tự chọn ở màn hình chờ duyệt.
+  let assignedClassId: string | null = null;
+  if (typeof meta.requested_class === 'string' && meta.requested_class.trim()) {
+    try {
+      const shared = await fetchSharedState();
+      const found = shared.data?.classes.find(c => c.name.toUpperCase() === (meta.requested_class as string).trim().toUpperCase());
+      if (found) assignedClassId = found.id;
+    } catch { /* dữ liệu chưa có / chưa tải được: để trống, chọn sau */ }
+  }
   // Đếm xem đã có hồ sơ nào chưa (cần quyền đọc profiles của tài khoản đã đăng nhập).
   const { count, error: countErr } = await supabase
     .from('profiles')
@@ -71,7 +83,7 @@ export async function ensureProfile(user: User): Promise<Profile> {
     full_name: fullName,
     role: isFirst ? ('admin' as Role) : requested,
     status: isFirst ? ('active' as ProfileStatus) : ('pending' as ProfileStatus),
-    assigned_class_id: null,
+    assigned_class_id: assignedClassId,
     assigned_week_id: null,
   };
   const { data, error } = await supabase

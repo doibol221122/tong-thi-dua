@@ -1,12 +1,15 @@
 // Màn hình Đăng nhập / Đăng ký / Quên mật khẩu (dùng chung qua Supabase).
-// - Đăng ký: họ tên, email, mật khẩu tối thiểu 6 ký tự, chọn vai trò
-//   Cờ đỏ trực hoặc Chỉ xem. Không cho tự đăng ký làm Ban thi đua.
+// - Đăng ký: họ tên, lớp (bắt buộc với Cờ đỏ), email, mật khẩu tối thiểu
+//   6 ký tự, chọn vai trò Cờ đỏ trực hoặc Chỉ xem. Không cho tự đăng ký
+//   làm Ban thi đua. Lớp đăng ký được lưu vào requested_class để hồ sơ
+//   tự gán sẵn lớp, Ban thi đua duyệt là tài khoản hiện "Họ tên — Lớp ...".
 // - Tài khoản đầu tiên đăng ký sẽ thành Ban thi đua (admin).
 //   Các tài khoản sau đều ở trạng thái chờ duyệt.
 // - Nếu Supabase yêu cầu xác nhận email, sau khi đăng ký sẽ hiện
 //   thông báo mở email để xác nhận rồi đăng nhập.
 import { useState } from 'react';
 import { supabase } from './supabase';
+import { DUTY_CLASSES } from './lib';
 
 type Mode = 'login' | 'register' | 'forgot';
 
@@ -26,6 +29,7 @@ export default function AuthScreen() {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [requestedRole, setRequestedRole] = useState<'codo' | 'viewer'>('codo');
+  const [requestedClass, setRequestedClass] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
@@ -43,13 +47,14 @@ export default function AuthScreen() {
   async function onRegister() {
     if (!supabase) return;
     if (!fullName.trim()) { setErr('Bạn nhập họ tên nhé.'); return; }
+    if (requestedRole === 'codo' && !requestedClass) { setErr('Bạn chọn lớp của mình nhé.'); return; }
     if (!email.trim()) { setErr('Bạn nhập email nhé.'); return; }
     if (password.length < 6) { setErr('Mật khẩu phải từ 6 ký tự trở lên.'); return; }
     setBusy(true); setErr(''); setMsg('');
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
-      options: { data: { full_name: fullName.trim(), requested_role: requestedRole }, emailRedirectTo: window.location.origin },
+      options: { data: { full_name: fullName.trim(), requested_role: requestedRole, requested_class: requestedRole === 'codo' ? requestedClass : '' }, emailRedirectTo: window.location.origin },
     });
     setBusy(false);
     if (error) { setErr(friendlyError(error.message)); return; }
@@ -102,6 +107,15 @@ export default function AuthScreen() {
             <option value="codo">Cờ đỏ trực — nhập điểm lớp được phân công</option>
             <option value="viewer">Chỉ xem (GVCN / BGH) — chỉ xem, không nhập</option>
           </select>
+          {requestedRole === 'codo' && (
+            <>
+              <label>Lớp của bạn</label>
+              <select value={requestedClass} onChange={e => setRequestedClass(e.target.value)}>
+                <option value="">— Chọn lớp —</option>
+                {DUTY_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </>
+          )}
           <p>Không tự đăng ký được vai trò Ban thi đua.</p>
         </>
       )}

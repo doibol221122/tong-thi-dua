@@ -115,6 +115,39 @@ export function monthOfBlock(b: number): number {
 }
 export function monthLabel(b: number): string { return `Tháng ${monthOfBlock(b)}`; }
 
+// Lịch trực cờ đỏ — Học kì 1, năm học 2026–2027 (ảnh "LỊCH TRỰC THI ĐUA").
+// Cách đọc bảng: cột là lớp được trực, ô là lớp cờ đỏ đi trực lớp đó.
+// Quy luật xoay (đã đối chiếu ảnh và được GV xác nhận "B3 trực B5" ở tuần 3):
+// - Nhóm A (10B1–10B5): cờ đỏ lớp C trực lớp C lùi s bước, s = ((tuần−1) % 4) + 1.
+// - Nhóm B (11A1–12C5): cờ đỏ lớp C trực lớp C lùi s bước, s = ((tuần−1) % 8) + 1.
+// - Trực cổng: SÁNG = nhóm B theo thứ tự tuần, CHIỀU = nhóm A theo thứ tự tuần (chu kì 4).
+export const DUTY_GROUP_A = ['10B1', '10B2', '10B3', '10B4', '10B5'];
+export const DUTY_GROUP_B = ['11A1', '11A2', '11A3', '11A4', '12C1', '12C2', '12C3', '12C4', '12C5'];
+export const DUTY_CLASSES = [...DUTY_GROUP_A, ...DUTY_GROUP_B];
+export const DUTY_WEEKS = 17;
+
+// Lớp mà cờ đỏ của lớp homeClass trực trong tuần weekNo (số tuần 1–17).
+// Trả về null nếu tên lớp không thuộc 2 nhóm trong lịch.
+export function dutyMonitored(homeClass: string, weekNo: number): string | null {
+  const name = homeClass.trim().toUpperCase();
+  for (const [group, cycle] of [[DUTY_GROUP_A, 4], [DUTY_GROUP_B, 8]] as const) {
+    const i = group.indexOf(name);
+    if (i >= 0) {
+      const shift = ((weekNo - 1) % cycle) + 1;
+      return group[(i - shift + group.length) % group.length];
+    }
+  }
+  return null;
+}
+
+// Lớp trực cổng chào cờ của tuần weekNo.
+export function gateDuty(weekNo: number): { sang: string; chieu: string } {
+  return {
+    sang: DUTY_GROUP_B[(weekNo - 1) % DUTY_GROUP_B.length],
+    chieu: DUTY_GROUP_A[(weekNo - 1) % 4],
+  };
+}
+
 // Xếp loại từ điểm trung bình (cùng ngưỡng với điểm thi đua tuần).
 export function clsOf(avg: number): string { return avg >= 80 ? 'A' : avg >= 65 ? 'B' : avg >= 50 ? 'C' : 'D'; }
 // Điểm trung bình của một lớp qua các tuần cho trước, chỉ tính phiếu đã duyệt.
