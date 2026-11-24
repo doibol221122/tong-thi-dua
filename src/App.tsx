@@ -477,10 +477,19 @@ export default function App() {
     update(prev => ({ ...prev, scores: prev.scores.map(s => s.id === currentScore.id ? { ...s, status: 'returned', returnReason: returnReason.trim() } : s) }), 'Trả lại phiếu', `${clsName} — Lý do: ${returnReason.trim()}`);
     setMsg(`Đã trả lại phiếu lớp ${clsName}.`); setReturnReason(''); setDraft(currentScore.details);
   }
+  // Hủy duyệt khi Ban thi đua lỡ duyệt nhầm: phiếu trở về nháp để sửa
+  // lại (xóa cả người/giờ duyệt cũ). Nếu tuần đã chốt thì mở lại luôn
+  // tuần — không thì phiếu thành nháp mà tuần vẫn khóa, không sửa được.
   function reopenScore() {
     if (!currentScore || session?.role !== 'admin') return;
-    update(prev => ({ ...prev, scores: prev.scores.map(s => s.id === currentScore.id ? { ...s, status: 'draft', returnReason: undefined } : s) }), 'Mở lại phiếu', `${state.classes.find(c => c.id === currentScore.classId)?.name}`);
-    setMsg('Đã mở lại phiếu để sửa.');
+    const clsName = state.classes.find(c => c.id === currentScore.classId)?.name ?? '';
+    const weekClosed = !!week?.submittedAt;
+    update(prev => ({
+      ...prev,
+      scores: prev.scores.map(s => s.id === currentScore.id ? { ...s, status: 'draft', returnReason: undefined, approvedBy: undefined, approvedAt: undefined } : s),
+      weeks: weekClosed && week ? prev.weeks.map(w => w.id === week.id ? { ...w, submittedAt: null, submittedBy: null } : w) : prev.weeks,
+    }), weekClosed ? 'Hủy duyệt phiếu + mở lại tuần' : 'Hủy duyệt phiếu', `${clsName} — ${week?.label}${weekClosed ? ' (tuần đã chốt nên mở lại luôn tuần)' : ''}`);
+    setMsg(weekClosed ? `Đã hủy duyệt phiếu lớp ${clsName} và mở lại ${week?.label} để sửa.` : `Đã hủy duyệt phiếu lớp ${clsName}. Phiếu trở về nháp để sửa lại.`);
   }
   function closeWeek() {
     if (!week || session?.role !== 'admin') return;
@@ -1083,9 +1092,19 @@ function ScoreForm(props: {
           </div>
           {props.sessionRole === 'admin' && props.currentScore && (
             <div className="card" style={{ marginTop: 12 }}><h3>Duyệt phiếu (Ban thi đua)</h3>
-              <div className="row"><button className="btn green" type="button" onClick={props.onApprove}>Duyệt phiếu</button><button className="btn grey" type="button" onClick={props.onReopen}>Mở lại để sửa</button></div>
-              <label>Lý do trả lại (bắt buộc khi trả)</label><input type="text" value={props.returnReason} onChange={e => props.setReturnReason(e.target.value)} placeholder="Vd: Thiếu tên HS đi muộn" />
-              <div className="row" style={{ marginTop: 8 }}><button className="btn" type="button" onClick={props.onReturn}>Trả lại phiếu</button></div>
+              {props.currentScore.status === 'approved' ? (
+                <>
+                  <p><span className="badge approved">Đã duyệt</span> Phiếu này đã được duyệt{props.currentScore.approvedBy ? ` bởi ${props.currentScore.approvedBy}` : ''}{props.currentScore.approvedAt ? ` lúc ${props.currentScore.approvedAt}` : ''}.</p>
+                  <div className="row"><button className="btn grey" type="button" onClick={props.onReopen}>Hủy duyệt (lỡ duyệt nhầm)</button></div>
+                  <p>Lỡ duyệt nhầm thì bấm “Hủy duyệt” — phiếu trở về bản nháp để sửa lại, rồi nộp và duyệt lại như bình thường. Nếu tuần đã chốt thì tuần cũng được mở lại luôn.</p>
+                </>
+              ) : (
+                <>
+                  <div className="row"><button className="btn green" type="button" onClick={props.onApprove}>Duyệt phiếu</button><button className="btn grey" type="button" onClick={props.onReopen}>Mở lại để sửa</button></div>
+                  <label>Lý do trả lại (bắt buộc khi trả)</label><input type="text" value={props.returnReason} onChange={e => props.setReturnReason(e.target.value)} placeholder="Vd: Thiếu tên HS đi muộn" />
+                  <div className="row" style={{ marginTop: 8 }}><button className="btn" type="button" onClick={props.onReturn}>Trả lại phiếu</button></div>
+                </>
+              )}
             </div>
           )}
           {props.showPhieu && (
