@@ -272,7 +272,7 @@ export function hocTapLines(d: Details): string[] {
     else out.push(`Giờ tốt: ${d.hoursTot} tốt, ${d.hoursKha} khá${d.hoursTb ? `, ${d.hoursTb} trung bình` : ''}${d.hoursYeu ? `, ${d.hoursYeu} yếu` : ''}`);
   }
   if (d.goodHigh) out.push(`Điểm tốt (≥5): ${d.goodHigh}`);
-  if (d.goodLow) out.push(`Điểm dưới 5: ${d.goodLow}`);
+  if (d.goodLow) out.push(`Điểm dưới 5: ${d.goodLow}${violNamesOf(d, 'goodLow')}`);
   if (num(d.studyNoLearn)) out.push(`Không học bài: ${num(d.studyNoLearn)} lượt (-${num(d.studyNoLearn)})${violNamesOf(d, 'studyNoLearn')}`);
   if (num(d.studyNoPrepare)) out.push(`Không soạn bài: ${num(d.studyNoPrepare)} lượt (-${num(d.studyNoPrepare)})${violNamesOf(d, 'studyNoPrepare')}`);
   if (num(d.studyNoMaterial)) out.push(`Không mang tài liệu, đồ dùng học tập: ${num(d.studyNoMaterial)} lượt (-${num(d.studyNoMaterial)})${violNamesOf(d, 'studyNoMaterial')}`);

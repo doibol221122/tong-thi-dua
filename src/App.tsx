@@ -24,15 +24,31 @@ function loadState(): AppState {
 
 function Stepper({ label, pts, value, onChange, disabled }: { label: string; pts: string; value: number; onChange: (v: number) => void; disabled?: boolean }) {
   const timer = useRef<number | null>(null);
-  const start = (dir: number) => { onChange(Math.max(0, value + dir)); timer.current = window.setInterval(() => onChange(Math.max(0, value + dir)), 120); };
+  const valueRef = useRef(value);
+  useEffect(() => { valueRef.current = value; }, [value]);
+  // Một lần bấm chỉ tính một lần: dùng pointer event (chuột hay cảm ứng
+  // đều chỉ bắn một lần) thay cho cặp mousedown + touchstart trước đây —
+  // trên điện thoại hai sự kiện đó bắn chồng nhau nên mỗi lần bấm nhảy 2.
+  // Giữ nút để tăng/giảm liên tục: interval đọc giá trị mới nhất qua ref
+  // (callback cũ đóng kín giá trị lúc bấm nên giữ nút chỉ nhảy 1 rồi đứng).
+  const start = (dir: number) => {
+    if (disabled) return;
+    const step = () => {
+      const next = Math.max(0, valueRef.current + dir);
+      valueRef.current = next;
+      onChange(next);
+    };
+    step();
+    timer.current = window.setInterval(step, 120);
+  };
   const stop = () => { if (timer.current) { clearInterval(timer.current); timer.current = null; } };
   return (
     <div className="field">
       <div className="nm">{label}<div className="pts">{pts}</div></div>
       <div className="stepper">
-        <button type="button" disabled={disabled} onMouseDown={() => start(-1)} onMouseUp={stop} onMouseLeave={stop} onTouchStart={() => start(-1)} onTouchEnd={stop} aria-label="Giảm">−</button>
+        <button type="button" disabled={disabled} onPointerDown={() => start(-1)} onPointerUp={stop} onPointerLeave={stop} onPointerCancel={stop} aria-label="Giảm">−</button>
         <input type="number" min={0} value={value} disabled={disabled} onChange={e => onChange(Math.max(0, Number(e.target.value) || 0))} aria-label={label} />
-        <button type="button" disabled={disabled} onMouseDown={() => start(1)} onMouseUp={stop} onMouseLeave={stop} onTouchStart={() => start(1)} onTouchEnd={stop} aria-label="Tăng">+</button>
+        <button type="button" disabled={disabled} onPointerDown={() => start(1)} onPointerUp={stop} onPointerLeave={stop} onPointerCancel={stop} aria-label="Tăng">+</button>
       </div>
     </div>
   );
@@ -946,14 +962,14 @@ function ScoreForm(props: {
   const sec = sectionSums(d);
   const pm = (plus: number, minus: number) => [plus ? `+${plus}đ` : '', minus ? `−${minus}đ` : ''].filter(Boolean).join(' • ') || '0đ';
   const f = (key: keyof Details, label: string, pts: string) => <Stepper label={label} pts={pts} value={(d[key] as number) ?? 0} onChange={v => props.setD(key, v as never)} disabled={!canEdit} />;
-  // Hàng vi phạm: dưới ô đếm lượt có thêm ô ghi tên HS vi phạm đúng mục đó.
-  // Ô tên chỉ hiện khi có lượt vi phạm; tên cũ giữ lại nếu lượt về 0 rồi tăng lại.
+  // Hàng vi phạm: dưới ô đếm lượt luôn có ô ghi tên HS vi phạm đúng mục đó
+  // (hiện cả khi chưa có lượt, để cờ đỏ thấy chỗ ghi ngay từ đầu).
   const fv = (key: keyof Details, label: string, pts: string) => {
     const v = (d[key] as number) ?? 0;
     return (
       <div key={key}>
         <Stepper label={label} pts={pts} value={v} onChange={n => props.setD(key, n as never)} disabled={!canEdit} />
-        {v > 0 && <input type="text" placeholder={`HS vi phạm: ${label.toLowerCase()}…`} value={d.violNames?.[key as string] ?? ''} disabled={!canEdit} onChange={e => props.setD('violNames', { ...(d.violNames ?? {}), [key as string]: e.target.value })} aria-label={`HS vi phạm ${label}`} style={{ marginTop: -2, marginBottom: 8 }} />}
+        <input type="text" placeholder={`HS vi phạm: ${label.toLowerCase()}…`} value={d.violNames?.[key as string] ?? ''} disabled={!canEdit} onChange={e => props.setD('violNames', { ...(d.violNames ?? {}), [key as string]: e.target.value })} aria-label={`HS vi phạm ${label}`} style={{ marginTop: -2, marginBottom: 8 }} />
       </div>
     );
   };
@@ -984,7 +1000,7 @@ function ScoreForm(props: {
               </Section>
               <Section title="Về học tập" sum={pm(sec.hocTapPlus, sec.hocTapMinus)}>
               {f('goodHigh', 'Tổng điểm tốt (≥5)', '+1đ/điểm')}
-              {f('goodLow', 'Tổng điểm tốt (<5)', '-1đ/điểm')}
+              {fv('goodLow', 'Tổng điểm tốt (<5)', '-1đ/điểm')}
               {fv('studyNoLearn', 'Không học bài', '-1đ/lượt')}
               {fv('studyNoPrepare', 'Không soạn bài', '-1đ/lượt')}
               {fv('studyNoMaterial', 'Không mang tài liệu, đồ dùng học tập', '-1đ/lượt')}
