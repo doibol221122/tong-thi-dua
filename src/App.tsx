@@ -689,14 +689,20 @@ export default function App() {
         {tab === 'xep-hang' && (week ? (
           <div className="card"><h2>Xếp hạng — {week.label} {week.submittedAt ? <span className="badge approved">Đã nộp {week.submittedAt}</span> : <span className="badge draft">Chưa chốt tuần</span>}</h2>
             <p>Chỉ phiếu <b>đã duyệt</b> mới vào xếp hạng chính thức. Còn {pendingScores.length} phiếu chờ duyệt, {state.classes.length - approvedScores.length} lớp chưa có phiếu duyệt.</p>
-            <div className="row"><span><b>Khối:</b></span>{(['all', 'tu-nhien', 'xa-hoi'] as const).map(g => <button key={g} type="button" className={rankGroup === g ? 'btn' : 'btn ghost'} onClick={() => setRankGroup(g)}>{g === 'all' ? 'Tất cả các khối' : groupLabel(g)}</button>)}</div>
-            {rankedScores.length >= 3 && <div className="podium" style={{ marginTop: 10 }}>{rankedScores.slice(0, 3).map((s, i) => <div key={s.id} className={`p${i + 1}`}><b>{i + 1}. {state.classes.find(c => c.id === s.classId)?.name}</b><br /><span style={{ fontSize: 22 }}>{calcScore(s.details).final}đ-{calcScore(s.details).cls}</span></div>)}</div>}
-            <div className="row" style={{ marginTop: 10 }}><button className="btn" type="button" onClick={doExportDocxWeek}>Xuất Word (.docx)</button><button className="btn ghost" type="button" onClick={doExportDocxWeekNoRank}>Xuất .docx (không xếp hạng)</button><button className="btn ghost" type="button" onClick={exportCsv}>Tải CSV</button><button className="btn ghost" type="button" onClick={copyZalo}>Chép gửi Zalo</button>
-            {session.role === 'admin' && (week.submittedAt ? <button className="btn grey" type="button" onClick={reopenWeek}>Mở lại tuần</button> : <button className="btn green" type="button" onClick={closeWeek}>Nộp &amp; chốt tuần này</button>)}</div>
-            <div className="tablewrap"><table><thead><tr><th>Hạng</th><th>Lớp</th><th>Điểm</th><th>Loại</th><th>Người nhập</th><th>Trạng thái</th></tr></thead><tbody>
-              {rankedScores.map((s, i) => <tr key={s.id}><td>{i + 1}</td><td><b>{state.classes.find(c => c.id === s.classId)?.name}</b></td><td>{calcScore(s.details).final}đ</td><td><span className={`badge ${calcScore(s.details).cls}`}>{calcScore(s.details).cls}</span></td><td>{s.submittedBy ?? '—'}<br /><small>{s.submittedAt ?? ''}</small></td><td><span className="badge approved">Đã duyệt</span></td></tr>)}
-              {rankedScores.length === 0 && <tr><td colSpan={6}>Chưa có lớp nào được duyệt trong tuần này{rankGroup === 'all' ? '' : ` ở ${groupLabel(rankGroup)}`}.</td></tr>}
-            </tbody></table></div></div>
+            <div className="row"><span><b>Khối:</b></span>{(['all', 'tu-nhien', 'xa-hoi'] as const).map(g => <button key={g} type="button" className={rankGroup === g ? 'seg on' : 'seg'} onClick={() => setRankGroup(g)}>{g === 'all' ? 'Tất cả' : groupLabel(g)}</button>)}</div>
+            <ol className="ranklist">
+              {rankedScores.map((s, i) => { const c = calcScore(s.details); const clsName = state.classes.find(x => x.id === s.classId)?.name ?? s.classId; return (
+                <li key={s.id} className={i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : ''}>
+                  <span className="rank">{i + 1}</span>
+                  <span className="rclass"><b>{clsName}</b><small>{s.submittedBy ?? '—'}{s.submittedAt ? ` · ${s.submittedAt}` : ''}</small></span>
+                  <span className="rscore"><b>{c.final}đ</b><span className={`badge ${c.cls}`}>{c.cls}</span></span>
+                </li>); })}
+              {rankedScores.length === 0 && <li>Chưa có lớp nào được duyệt trong tuần này{rankGroup === 'all' ? '' : ` ở ${groupLabel(rankGroup)}`}.</li>}
+            </ol>
+            <h3>Xuất file</h3>
+            <div className="exportgrid"><button className="btn ghost" type="button" onClick={doExportDocxWeek}>Xuất Word (.docx)</button><button className="btn ghost" type="button" onClick={doExportDocxWeekNoRank}>Xuất .docx (không xếp hạng)</button><button className="btn ghost" type="button" onClick={exportCsv}>Tải CSV</button><button className="btn ghost" type="button" onClick={copyZalo}>Chép gửi Zalo</button></div>
+            {session.role === 'admin' && <div className="divider">{week.submittedAt ? <button className="btn grey" type="button" onClick={reopenWeek}>Mở lại tuần</button> : <button className="btn green" type="button" onClick={closeWeek}>Nộp &amp; chốt tuần này</button>}</div>}
+          </div>
         ) : (
           <div className="card"><h2>Xếp hạng</h2><p>Chưa có tuần nào nên chưa có bảng xếp hạng.</p>{session.role === 'admin' ? <><p>Tạo tuần đầu tiên để bắt đầu chấm thi đua nhé.</p><div className="row"><button className="btn" type="button" onClick={() => setTab('quan-ly')}>Sang tab Quản lý tạo tuần</button></div></> : <p>Nhờ Ban thi đua tạo tuần nhé.</p>}</div>
         ))}

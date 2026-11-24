@@ -71,10 +71,26 @@ table{width:100%;border-collapse:collapse;font-size:14px}
 th,td{border-bottom:1px solid #e5e7eb;padding:8px 6px;text-align:left;vertical-align:top}
 th{background:#f8fafc;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
 tbody tr:hover{background:#f8fafc}
-.podium{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center}
-.podium div{border-radius:12px;padding:12px;background:#fff;border:1px solid var(--line);box-shadow:var(--shadow-sm)}
-.podium .p1{background:var(--amber-soft);border-color:var(--amber-border)}.podium .p2{background:#f1f5f9}.podium .p3{background:#fff7ed}
-@media(max-width:760px){.podium{grid-template-columns:1fr}.scorebar{position:fixed;left:8px;right:8px;bottom:8px;z-index:10}}
+/* Lọc khối ở tab Xếp hạng: viên thuốc nhỏ, vừa một hàng trên điện thoại. */
+.seg{border:1px solid var(--line);background:#fff;color:#334155;padding:6px 10px;border-radius:999px;font-weight:600;font-size:13px;min-height:34px;cursor:pointer;white-space:nowrap}
+.seg.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+/* Bảng xếp hạng gọn: một dòng một lớp, hạng 1-3 có huy hiệu màu. */
+.ranklist{list-style:none;margin:12px 0 0;padding:0;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.ranklist li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--line-soft)}
+.ranklist li:first-child{border-top:none}
+.ranklist li.top1{background:var(--amber-soft)}
+.ranklist .rank{flex:0 0 28px;width:28px;height:28px;border-radius:50%;background:#f1f5f9;color:#475569;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px}
+.ranklist li.top1 .rank{background:#fde68a;color:#92400e}
+.ranklist li.top2 .rank{background:#e2e8f0;color:#334155}
+.ranklist li.top3 .rank{background:#ffedd5;color:#9a3412}
+.ranklist .rclass{flex:1;min-width:0}
+.ranklist .rclass small{display:block;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ranklist .rscore{display:flex;align-items:center;gap:6px;font-size:15px;white-space:nowrap}
+/* Nhóm nút xuất file: lưới 2 cột, các nút bằng nhau. */
+.exportgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.exportgrid .btn{width:100%}
+.divider{border-top:1px solid var(--line-soft);margin-top:14px;padding-top:12px}
+@media(max-width:760px){.scorebar{position:fixed;left:8px;right:8px;bottom:8px;z-index:10}}
 .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 @media(max-width:760px){.kpi{grid-template-columns:1fr 1fr}}
 .kpi div{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:var(--shadow-sm)}
