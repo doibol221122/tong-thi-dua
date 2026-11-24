@@ -1,8 +1,11 @@
 // Màn hình Đăng nhập / Đăng ký / Quên mật khẩu (dùng chung qua Supabase).
-// - Đăng ký: họ tên, lớp (bắt buộc với Cờ đỏ), email, mật khẩu tối thiểu
-//   6 ký tự, chọn vai trò Cờ đỏ trực hoặc Chỉ xem. Không cho tự đăng ký
-//   làm Ban thi đua. Lớp đăng ký được lưu vào requested_class để hồ sơ
-//   tự gán sẵn lớp, Ban thi đua duyệt là tài khoản hiện "Họ tên — Lớp ...".
+// - Đăng ký: họ tên, lớp, email, mật khẩu tối thiểu 6 ký tự, chọn vai trò
+//   Cờ đỏ trực hoặc Chỉ xem. Không cho tự đăng ký làm Ban thi đua.
+//   Lớp bắt buộc với Cờ đỏ; với Chỉ xem thì GVCN chọn lớp chủ nhiệm,
+//   BGH để trống. Lớp đăng ký được lưu vào requested_class để hồ sơ tự
+//   gán sẵn lớp, Ban thi đua duyệt là tài khoản hiện "Họ tên — Lớp ...".
+// - Link mời GVCN (?lop=10B1&vai-tro=chi-xem&dang-ky=1) mở thẳng form
+//   đăng ký với vai trò + lớp đã chọn sẵn.
 // - Tài khoản đầu tiên đăng ký sẽ thành Ban thi đua (admin).
 //   Các tài khoản sau đều ở trạng thái chờ duyệt.
 // - Nếu Supabase yêu cầu xác nhận email, sau khi đăng ký sẽ hiện
@@ -24,12 +27,17 @@ function friendlyError(message: string): string {
 }
 
 export default function AuthScreen() {
-  const [mode, setMode] = useState<Mode>('login');
+  // Link mời GVCN (?lop=10B1&vai-tro=chi-xem&dang-ky=1) mở thẳng form
+  // đăng ký với vai trò + lớp đã chọn sẵn.
+  const [mode, setMode] = useState<Mode>(() => new URLSearchParams(window.location.search).get('dang-ky') === '1' ? 'register' : 'login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [requestedRole, setRequestedRole] = useState<'codo' | 'viewer'>('codo');
-  const [requestedClass, setRequestedClass] = useState('');
+  const [requestedRole, setRequestedRole] = useState<'codo' | 'viewer'>(() => new URLSearchParams(window.location.search).get('vai-tro') === 'chi-xem' ? 'viewer' : 'codo');
+  const [requestedClass, setRequestedClass] = useState(() => {
+    const v = (new URLSearchParams(window.location.search).get('lop') ?? '').trim().toUpperCase();
+    return DUTY_CLASSES.includes(v) ? v : '';
+  });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
@@ -54,7 +62,7 @@ export default function AuthScreen() {
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
-      options: { data: { full_name: fullName.trim(), requested_role: requestedRole, requested_class: requestedRole === 'codo' ? requestedClass : '' }, emailRedirectTo: window.location.origin },
+      options: { data: { full_name: fullName.trim(), requested_role: requestedRole, requested_class: requestedClass }, emailRedirectTo: window.location.origin },
     });
     setBusy(false);
     if (error) { setErr(friendlyError(error.message)); return; }
@@ -104,18 +112,17 @@ export default function AuthScreen() {
           <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Vd: Trần Thị Hương" />
           <label>Vai trò muốn đăng ký</label>
           <select value={requestedRole} onChange={e => setRequestedRole(e.target.value as 'codo' | 'viewer')}>
-            <option value="codo">Cờ đỏ trực — nhập điểm lớp được phân công</option>
+            <option value="codo">Cờ đỏ trực — nhập điểm lớp mình trực</option>
             <option value="viewer">Chỉ xem (GVCN / BGH) — chỉ xem, không nhập</option>
           </select>
-          {requestedRole === 'codo' && (
-            <>
-              <label>Lớp của bạn</label>
-              <select value={requestedClass} onChange={e => setRequestedClass(e.target.value)}>
-                <option value="">— Chọn lớp —</option>
-                {DUTY_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </>
-          )}
+          <>
+            <label>{requestedRole === 'codo' ? 'Lớp của bạn' : 'Lớp chủ nhiệm'}</label>
+            <select value={requestedClass} onChange={e => setRequestedClass(e.target.value)}>
+              <option value="">— Chọn lớp —</option>
+              {DUTY_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            {requestedRole === 'viewer' && <p style={{ margin: 0 }}>GVCN chọn lớp mình chủ nhiệm để theo dõi lớp mình; BGH để trống.</p>}
+          </>
           <p>Không tự đăng ký được vai trò Ban thi đua.</p>
         </>
       )}

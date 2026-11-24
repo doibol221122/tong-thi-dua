@@ -79,6 +79,8 @@ export default function App() {
   const [returnReason, setReturnReason] = useState('');
   const [showPhieu, setShowPhieu] = useState(false);
   const [rankGroup, setRankGroup] = useState<'all' | ClassGroup>('all');
+  // Cờ đỏ tự chọn lớp trực: đang mở ô chọn lớp thì true.
+  const [showDutyPicker, setShowDutyPicker] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   // Cài đặt app (PWA): trình duyệt báo khi app cài được.
@@ -434,6 +436,22 @@ export default function App() {
     update(prev => ({ ...prev, scores: prev.scores.map(s => idSet.has(s.id) ? { ...s, status: 'approved', approvedBy: session?.name, approvedAt: nowStr() } : s) }), 'Duyệt tất cả phiếu', `${week.label} — ${ids.length} phiếu`);
     setMsg(`Đã duyệt tất cả ${ids.length} phiếu của ${week.label}.`);
   }
+  // Cờ đỏ tự chọn lớp trực tuần hiện tại: ghi thành phân công (roster) để
+  // Ban thi đua thấy trong Quản lý; chọn lại thì cập nhật dòng cũ, không
+  // nhân đôi. Sau khi chọn, phân công này được ưu tiên như gán tay.
+  function confirmDutyPick(classId: string) {
+    if (!week || session?.role !== 'codo' || !classId) return;
+    const clsName = state.classes.find(c => c.id === classId)?.name ?? '';
+    update(prev => {
+      const roster = [...prev.roster];
+      const i = roster.findIndex(r => r.name === session.name && r.weekId === week.id);
+      if (i >= 0) roster[i] = { ...roster[i], classId, active: true };
+      else roster.push({ id: uid(), name: session.name, classId, weekId: week.id, active: true });
+      return { ...prev, roster };
+    }, 'Tự chọn lớp trực', `${session.name} — ${clsName} — ${week.label}`);
+    setShowDutyPicker(false);
+    setWeekId(week.id); setClassId(classId);
+  }
   function returnScore() {
     if (!currentScore || session?.role !== 'admin' || !returnReason.trim()) { setErrs(['Trả lại phiếu phải ghi rõ lý do.']); return; }
     const clsName = state.classes.find(c => c.id === currentScore.classId)?.name ?? '';
@@ -619,13 +637,16 @@ export default function App() {
         {session.role === 'codo' && assignment && <div className="warn">Bạn đang nhập cho lớp {state.classes.find(c => c.id === assignment.classId)?.name}{assignment.source === 'roster' ? ' (lớp bạn trực)' : ''} — {state.weeks.find(w => w.id === assignment.weekId)?.label}. Chỉ nhập và nộp được lớp này.</div>}
         {currentScore?.status === 'returned' && <div className="err">Phiếu bị trả lại — lý do: {currentScore.returnReason}. Sửa lại rồi nộp lại nhé.</div>}
 
-        {tab === 'tong-quan' && <Overview state={state} week={week} role={session.role} assignment={assignment?.classId && assignment?.weekId ? { classId: assignment.classId, weekId: assignment.weekId, homeClassId: assignment.homeClassId ?? undefined } : undefined} onEnterScores={() => { if (assignment) { setWeekId(assignment.weekId); setClassId(assignment.classId); switchTab('nhap-diem'); } }} onGoTab={switchTab} onCopyReminder={copyReminder} onOpenClass={(cid: string) => { if (confirmDirty()) { setWeekId(effectiveWeekId); setClassId(cid); setTab('nhap-diem'); setDirty(false); } }} />}
+        {tab === 'tong-quan' && <Overview state={state} week={week} role={session.role} assignment={assignment?.classId && assignment?.weekId ? { classId: assignment.classId, weekId: assignment.weekId, homeClassId: assignment.homeClassId ?? undefined, source: assignment.source } : undefined} homeClassId={profile?.assigned_class_id ?? undefined} onEnterScores={() => { if (assignment) { setWeekId(assignment.weekId); setClassId(assignment.classId); switchTab('nhap-diem'); } }} onGoTab={switchTab} onCopyReminder={copyReminder} onOpenClass={(cid: string) => { if (confirmDirty()) { setWeekId(effectiveWeekId); setClassId(cid); setTab('nhap-diem'); setDirty(false); } }} />}
         {tab === 'nhap-diem' && (!week ? (
           <div className="card"><h2>Nhập điểm</h2><p>Chưa có tuần nào nên chưa nhập điểm được.</p>{session.role === 'admin' ? <><p>Tạo tuần đầu tiên để bắt đầu chấm thi đua nhé.</p><div className="row"><button className="btn" type="button" onClick={() => setTab('quan-ly')}>Sang tab Quản lý tạo tuần</button></div></> : <p>Nhờ Ban thi đua tạo tuần nhé.</p>}</div>
-        ) : session.role === 'codo' && !assignment ? (
-          <div className="card"><h2>Nhập điểm</h2><p>Bạn chưa được Ban thi đua phân công lớp/tuần nên chưa nhập điểm được. Bạn liên hệ Ban thi đua để được phân công nhé.</p></div>
+        ) : session.role === 'codo' && (!assignment || showDutyPicker) ? (
+          <DutyPicker state={state} week={week} homeName={profile?.assigned_class_id ? state.classes.find(c => c.id === profile.assigned_class_id)?.name : undefined} initialClassId={assignment?.classId} onConfirm={confirmDutyPick} onCancel={assignment ? () => setShowDutyPicker(false) : undefined} />
         ) : draft && (
           <>
+            {session.role === 'codo' && assignment && (
+              <div className="row" style={{ marginBottom: 10 }}><button className="btn ghost" type="button" onClick={() => setShowDutyPicker(true)}>Đổi lớp trực</button><span>Bạn đang trực lớp {state.classes.find(c => c.id === assignment.classId)?.name} — {week.label}.</span></div>
+            )}
             {session.role === 'admin' && pendingScores.length > 0 && (
               <div className="row" style={{ marginBottom: 10 }}><button className="btn green" type="button" onClick={approveAllScores}>Duyệt tất cả {pendingScores.length} phiếu đã nộp</button><span>Còn {pendingScores.length} phiếu chờ duyệt trong {week.label}.</span></div>
             )}
@@ -663,10 +684,39 @@ export default function App() {
   );
 }
 
-function Overview({ state, week, role, assignment, onEnterScores, onGoTab, onCopyReminder, onOpenClass }: {
+// Cờ đỏ tự chọn lớp mình trực trong tuần hiện tại. Lớp gợi ý lấy theo
+// lịch trực từ lớp của chính cờ đỏ; chọn lớp khác vẫn được (vd trực thay).
+// Nếu lớp đã có phiếu đã nộp/duyệt thì chỉ xem, không sửa được.
+function DutyPicker({ state, week, homeName, initialClassId, onConfirm, onCancel }: {
+  state: AppState; week: Week; homeName?: string; initialClassId?: string;
+  onConfirm: (classId: string) => void; onCancel?: () => void;
+}) {
+  const suggested = homeName ? dutyMonitored(homeName, weekNumberOf(week, state.weeks.indexOf(week) + 1)) : null;
+  const [sel, setSel] = useState(initialClassId ?? state.classes.find(c => c.name === suggested)?.id ?? '');
+  const existing = sel ? state.scores.find(s => s.weekId === week.id && s.classId === sel) : undefined;
+  return (
+    <div className="card"><h2>Chọn lớp trực — {week.label}</h2>
+      <p>Tuần này bạn trực lớp nào? Chọn lớp rồi nhập điểm cho lớp đó nhé. Lớp đã chọn sẽ lưu lại để Ban thi đua thấy.</p>
+      {suggested && <p>Theo lịch trực, cờ đỏ lớp {homeName} trực lớp <b>{suggested}</b> tuần này.</p>}
+      <label>Lớp trực</label>
+      <select value={sel} onChange={e => setSel(e.target.value)}>
+        <option value="">— Chọn lớp —</option>
+        {state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+      {existing && <p>Lớp {state.classes.find(c => c.id === sel)?.name} đã có phiếu {STATUS_LABEL[existing.status]} — bạn chỉ xem được, không sửa được.</p>}
+      <div className="row" style={{ marginTop: 10 }}>
+        <button className="btn" type="button" disabled={!sel} onClick={() => onConfirm(sel)}>Bắt đầu nhập điểm lớp này</button>
+        {onCancel && <button className="btn grey" type="button" onClick={onCancel}>Hủy</button>}
+      </div>
+    </div>
+  );
+}
+
+function Overview({ state, week, role, assignment, homeClassId, onEnterScores, onGoTab, onCopyReminder, onOpenClass }: {
   state: AppState; week?: Week;
   role: Role;
-  assignment?: { classId: string; weekId: string; homeClassId?: string };
+  assignment?: { classId: string; weekId: string; homeClassId?: string; source?: 'roster' | 'profile' };
+  homeClassId?: string;
   onEnterScores: () => void;
   onGoTab?: (tab: string) => void;
   onCopyReminder?: () => void;
@@ -686,11 +736,16 @@ function Overview({ state, week, role, assignment, onEnterScores, onGoTab, onCop
       <div>
         <div className="card"><h2>Lớp của bạn</h2>
           {!assignment || !clsName || !wk ? (
-            <p>Bạn chưa được Ban thi đua phân công lớp/tuần. Bạn liên hệ Ban thi đua để được phân công nhé.</p>
+            <>
+              <p>Bạn chưa có phân công tuần này. Bạn tự chọn lớp mình trực ở tab Nhập điểm nhé.</p>
+              <div className="row"><button className="btn" type="button" onClick={() => onGoTab?.('nhap-diem')}>Chọn lớp trực để nhập điểm</button></div>
+            </>
           ) : (
             <>
               {homeName && homeName !== clsName ? (
                 <p>Lớp của bạn: <b>{homeName}</b> — Tuần này bạn trực lớp <b>{clsName}</b> — {wk.label} {wk.dateRange}</p>
+              ) : assignment?.source === 'roster' ? (
+                <p>Tuần này bạn trực lớp <b>{clsName}</b> — {wk.label} {wk.dateRange}</p>
               ) : (
                 <p><b>{clsName}</b> — {wk.label} {wk.dateRange}</p>
               )}
@@ -730,10 +785,26 @@ function Overview({ state, week, role, assignment, onEnterScores, onGoTab, onCop
   const anomalies = week ? state.scores.filter(s => s.weekId === week.id && (calcScore(s.details).final > 150 || calcScore(s.details).final < 50)) : [];
   // Vi phạm: chỉ tính phiếu đã duyệt của tuần hiện tại.
   const approvedWeek = week ? state.scores.filter(s => s.weekId === week.id && s.status === 'approved') : [];
+  // Lớp của tôi (GVCN): tài khoản Chỉ xem được gán lớp chủ nhiệm thì thấy
+  // ngay điểm, hạng và vi phạm của lớp mình ở đầu trang.
+  const myHomeClass = role === 'viewer' && homeClassId ? state.classes.find(c => c.id === homeClassId) : undefined;
+  const myHomeScore = myHomeClass && week ? state.scores.find(s => s.weekId === week.id && s.classId === myHomeClass.id) : undefined;
+  const myHomeCalc = myHomeScore ? calcScore(myHomeScore.details) : undefined;
+  const myHomeRank = myHomeScore && approvedWeek.length ? [...approvedWeek].sort((a, b) => calcScore(b.details).final - calcScore(a.details).final).findIndex(s => s.classId === myHomeClass!.id) + 1 : 0;
+  const myHomeViol = myHomeScore ? violationStats([myHomeScore], state.classes) : null;
   const viol = violationStats(approvedWeek, state.classes);
   const violMax = viol.topViolations.length ? viol.topViolations[0].count : 0;
   return (
     <div>
+      {myHomeClass && (
+        <div className="card"><h2>Lớp của tôi — {myHomeClass.name}</h2>
+          {!week ? <p>Chưa có tuần nào.</p> : !myHomeScore ? <p>{week.label}: lớp bạn chưa có phiếu.</p> : (
+            <p>{week.label}: <b>{myHomeCalc?.final}đ, loại {myHomeCalc?.cls}</b> — {STATUS_LABEL[myHomeScore.status]}{myHomeRank > 0 ? ` — hạng ${myHomeRank}/${approvedWeek.length}` : ''}</p>
+          )}
+          {myHomeViol && myHomeViol.topViolations.length > 0 && <p>Vi phạm thường gặp: {myHomeViol.topViolations.slice(0, 3).map(v => `${v.label} ×${v.count}`).join(', ')}.</p>}
+          <div className="row"><button className="btn ghost" type="button" onClick={() => onGoTab?.('xep-hang')}>Xem xếp hạng</button></div>
+        </div>
+      )}
       <div className="kpi">
         <div><b>{state.weeks.length}</b>Tuần</div><div><b>{total}</b>Lớp</div>
         <button type="button" className="kpi-btn" onClick={() => onGoTab?.('xep-hang')}><b>{approved}/{total}</b>Đã duyệt</button>
@@ -1002,6 +1073,16 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
   const [bulkBase, setBulkBase] = useState('10B'); const [bulkFrom, setBulkFrom] = useState(1); const [bulkTo, setBulkTo] = useState(5);
   const [codoName, setCodoName] = useState(''); const [codoClass, setCodoClass] = useState(''); const [codoWeek, setCodoWeek] = useState('');
   const [dutyWeekId, setDutyWeekId] = useState(''); const [dutyNote, setDutyNote] = useState('');
+  // Mời GVCN: chọn lớp rồi chép link mời (form đăng ký mở sẵn đúng lớp).
+  const [inviteClass, setInviteClass] = useState(''); const [inviteNote, setInviteNote] = useState('');
+  function copyInvite() {
+    if (!inviteClass) return;
+    const clsName = state.classes.find(c => c.id === inviteClass)?.name ?? '';
+    const link = `${window.location.origin}/?lop=${encodeURIComponent(clsName)}&vai-tro=chi-xem&dang-ky=1`;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(link).then(() => setInviteNote(`Đã chép link mời GVCN lớp ${clsName}. Gửi link cho GVCN, họ đăng ký rồi bạn bấm Duyệt ở mục Tài khoản là xong.`)).catch(() => setInviteNote(`Không chép được tự động — link mời lớp ${clsName}: ${link}`));
+    } else setInviteNote(`Link mời lớp ${clsName}: ${link}`);
+  }
   const isAdmin = session.role === 'admin';
   if (!isAdmin) return <div className="card"><h2>Quản lý</h2><p>Chỉ Ban thi đua mới quản lý tuần, lớp, cờ đỏ và cài đặt.</p></div>;
   return (
@@ -1013,7 +1094,7 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
             <div className="row"><button className="btn ghost" type="button" onClick={onRefreshProfiles}>Làm mới danh sách</button></div>
             {profiles.length === 0 && <p>Chưa có tài khoản nào.</p>}
             {profiles.map(p => {
-              const clsName = p.role === 'codo' ? state.classes.find(c => c.id === p.assigned_class_id)?.name : undefined;
+              const clsName = (p.role === 'codo' || p.role === 'viewer') ? state.classes.find(c => c.id === p.assigned_class_id)?.name : undefined;
               // Gợi ý lớp trực theo lịch cho tuần đã gán (hoặc tuần hiện tại).
               const dutyWk = p.role === 'codo' && clsName ? (p.assigned_week_id ? state.weeks.find(w => w.id === p.assigned_week_id) : state.weeks[state.weeks.length - 1]) : undefined;
               const dutyMon = dutyWk && clsName ? dutyMonitored(clsName, weekNumberOf(dutyWk, state.weeks.indexOf(dutyWk) + 1)) : null;
@@ -1025,10 +1106,10 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
                   <div style={{ minWidth: 150 }}><label>Vai trò</label><select value={p.role} disabled={session.id === p.id} onChange={e => onProfilePatch(p.id, { role: e.target.value as Role })}><option value="admin">Ban thi đua</option><option value="codo">Cờ đỏ trực</option><option value="viewer">Chỉ xem</option></select></div>
                   <div style={{ minWidth: 150 }}><label>Trạng thái</label><span className={`badge ${p.status === 'active' ? 'approved' : p.status === 'pending' ? 'submitted' : 'returned'}`}>{p.status === 'active' ? 'Đang dùng' : p.status === 'pending' ? 'Chờ duyệt' : 'Đã khóa'}</span></div>
                 </div>
-                {p.role === 'codo' && (
+                {(p.role === 'codo' || p.role === 'viewer') && (
                   <div className="row">
-                    <div style={{ minWidth: 150 }}><label>Gán lớp</label><select value={p.assigned_class_id ?? ''} onChange={e => onProfilePatch(p.id, { assigned_class_id: e.target.value || null })}><option value="">Chưa gán</option>{state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-                    <div style={{ minWidth: 150 }}><label>Gán tuần</label><select value={p.assigned_week_id ?? ''} onChange={e => onProfilePatch(p.id, { assigned_week_id: e.target.value || null })}><option value="">Chưa gán</option>{state.weeks.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}</select></div>
+                    <div style={{ minWidth: 150 }}><label>{p.role === 'viewer' ? 'Lớp chủ nhiệm' : 'Gán lớp'}</label><select value={p.assigned_class_id ?? ''} onChange={e => onProfilePatch(p.id, { assigned_class_id: e.target.value || null })}><option value="">Chưa gán</option>{state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                    {p.role === 'codo' && <div style={{ minWidth: 150 }}><label>Gán tuần</label><select value={p.assigned_week_id ?? ''} onChange={e => onProfilePatch(p.id, { assigned_week_id: e.target.value || null })}><option value="">Chưa gán</option>{state.weeks.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}</select></div>}
                   </div>
                 )}
                 <div className="row" style={{ marginTop: 8 }}>
@@ -1042,6 +1123,15 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
             })}
           </>
         )}
+      </div>
+      <div className="card"><h2>Mời giáo viên chủ nhiệm</h2>
+        <p>Gửi link mời cho GVCN theo từng lớp: họ mở link là form đăng ký đã chọn sẵn vai trò Chỉ xem và đúng lớp đó. Họ đăng ký xong, bạn bấm Duyệt ở mục Tài khoản là xong — GVCN vào app sẽ thấy ngay thẻ “Lớp của tôi” với điểm, hạng và vi phạm của lớp mình.</p>
+        <div className="row"><select value={inviteClass} onChange={e => setInviteClass(e.target.value)}><option value="">— Chọn lớp —</option>{state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select><button className="btn" type="button" disabled={!inviteClass} onClick={copyInvite}>Chép link mời GVCN</button></div>
+        {inviteNote && <p>{inviteNote}</p>}
+        <div style={{ marginTop: 10 }}>{state.classes.map(c => {
+          const gvcn = profiles.find(p => p.role === 'viewer' && p.assigned_class_id === c.id);
+          return <p key={c.id}>{c.name} — {gvcn ? <>GVCN: <b>{gvcn.full_name}</b> ({gvcn.status === 'active' ? 'đang dùng' : gvcn.status === 'pending' ? 'chờ duyệt' : 'đã khóa'})</> : <span style={{ color: '#9ca3af' }}>Chưa có GVCN</span>}</p>;
+        })}</div>
       </div>
       <div className="card"><h2>Tuần</h2>
         <div className="row"><input type="text" placeholder="Vd: Tuần 4" value={weekLabel} onChange={e => setWeekLabel(e.target.value)} style={{ maxWidth: 200 }} /><input type="text" placeholder="Vd: 17/11 – 22/11" value={weekRange} onChange={e => setWeekRange(e.target.value)} style={{ maxWidth: 220 }} /><button className="btn" type="button" onClick={() => { if (!weekLabel.trim()) return; const w: Week = { id: uid(), label: weekLabel.trim(), dateRange: weekRange.trim() }; setState({ ...state, weeks: [...state.weeks, w] }); onLog('Tạo tuần', `${w.label} — ${monthLabel(monthBlockOf(w, state.weeks.length + 1))}`); setWeekLabel(''); setWeekRange(''); }}>Thêm tuần</button></div>
