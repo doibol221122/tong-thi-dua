@@ -961,7 +961,7 @@ function ScoreForm(props: {
   const d = draft;
   const sec = sectionSums(d);
   const pm = (plus: number, minus: number) => [plus ? `+${plus}đ` : '', minus ? `−${minus}đ` : ''].filter(Boolean).join(' • ') || '0đ';
-  const f = (key: keyof Details, label: string, pts: string) => <Stepper label={label} pts={pts} value={(d[key] as number) ?? 0} onChange={v => props.setD(key, v as never)} disabled={!canEdit} />;
+  const f = (key: keyof Details, label: string, pts: string, forceDisabled?: boolean) => <Stepper label={label} pts={pts} value={(d[key] as number) ?? 0} onChange={v => props.setD(key, v as never)} disabled={!canEdit || !!forceDisabled} />;
   // Hàng vi phạm: dưới ô đếm lượt luôn có ô ghi tên HS vi phạm đúng mục đó
   // (hiện cả khi chưa có lượt, để cờ đỏ thấy chỗ ghi ngay từ đầu).
   const fv = (key: keyof Details, label: string, pts: string) => {
@@ -989,12 +989,14 @@ function ScoreForm(props: {
           <div className="row"><button className="btn ghost" type="button" disabled={!canEdit} onClick={props.onCopyPrev}>Chép số liệu tuần trước</button><button className="btn ghost" type="button" onClick={props.onShowPhieu}>Xem phiếu tổng kết</button>{props.currentScore && <button className="btn ghost" type="button" onClick={props.onExportClass}>Xuất .docx phiếu này</button>}</div>
           <div className="grid2">
             <div>
-              <Section title="Giờ học" sum={`Tổng ${calc.totalHours} giờ${calc.is100Tot ? ' • +20đ' : ''}${sec.hoursMinus ? ` • −${sec.hoursMinus}đ` : ''}`}>
-              {f('hoursTot', 'Giờ Tốt', '')}
-              {f('hoursKha', 'Giờ Khá', '-1đ/giờ')}
-              {f('hoursTb', 'Giờ Trung bình', '-3đ/giờ')}
-              {f('hoursYeu', 'Giờ Yếu', '-5đ/giờ')}
-              <p>Tổng giờ: {calc.totalHours} giờ.</p>
+              <Section title="Giờ học" sum={calc.totalHours > 0 ? `Tổng ${calc.totalHours} giờ${calc.is100Tot ? ' • +20đ' : ''}${sec.hoursMinus ? ` • −${sec.hoursMinus}đ` : ''}` : calc.is100Tot ? '+20đ' : '0đ'}>
+              {f('hoursTot', 'Giờ Tốt', '', d.allGood === true)}
+              {f('hoursKha', 'Giờ Khá', '-1đ/giờ', d.allGood === true)}
+              {f('hoursTb', 'Giờ Trung bình', '-3đ/giờ', d.allGood === true)}
+              {f('hoursYeu', 'Giờ Yếu', '-5đ/giờ', d.allGood === true)}
+              {calc.is100Tot && calc.totalHours === 0
+                ? <p>100% giờ Tốt — không cần nhập tổng số giờ.</p>
+                : <p>Tổng giờ: {calc.totalHours} giờ.</p>}
               <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 700, marginTop: 6 }}><input type="checkbox" checked={calc.is100Tot} disabled={!canEdit} onChange={e => props.setD('allGood', e.target.checked)} style={{ width: 22, height: 22 }} /> 100% giờ Tốt (+20đ)</label>
               {calc.is100Tot && (d.hoursKha + d.hoursTb + d.hoursYeu > 0) && <p>Lưu ý: đã tích 100% giờ Tốt nhưng vẫn có giờ Khá/Trung bình/Yếu — kiểm tra lại nhé.</p>}
               </Section>
@@ -1060,7 +1062,7 @@ function ScoreForm(props: {
             </div>
           </div>
           </Section>
-          <label>Tên HS vi phạm (bắt buộc khi có vi phạm)</label>
+          <label>Tên HS vi phạm (không bắt buộc)</label>
           <input type="text" placeholder="Vd: Lan Anh, Sang, Ngân…" value={d.names} disabled={!canEdit} onChange={e => props.setD('names', e.target.value)} />
           <label>Ý kiến của lớp theo dõi</label>
           <textarea value={d.opinionClass} disabled={!canEdit} onChange={e => props.setD('opinionClass', e.target.value)} />

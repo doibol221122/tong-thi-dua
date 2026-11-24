@@ -256,21 +256,16 @@ export function calcScore(d: Details): Calc {
 export function validateDetails(d: Details): string[] {
   const errs: string[] = [];
   const total = d.hoursTot + d.hoursKha + d.hoursTb + d.hoursYeu;
-  if (total === 0) errs.push('Chưa nhập giờ học: tổng số giờ đang bằng 0.');
-  // Tên HS vi phạm: mỗi mục có lỗi phải có tên ghi dưới mục đó, hoặc ghi
-  // chung ở ô "Tên HS vi phạm" (phiếu cũ chỉ có tên chung vẫn hợp lệ).
-  const violatedKeys = VIOLATION_FIELDS.filter(f => num(d[f.key] as number | undefined) > 0).map(f => f.key as string);
-  if (violatedKeys.length > 0 && d.names.trim() === '' && violatedKeys.some(k => !(d.violNames?.[k] ?? '').trim()))
-    errs.push('Chưa ghi tên HS vi phạm ở một số mục — ghi dưới từng mục vi phạm hoặc ở ô "Tên HS vi phạm".');
+  // Tích 100% giờ Tốt thì không cần nhập tổng số giờ nữa.
+  if (total === 0 && !is100Tot(d)) errs.push('Chưa nhập giờ học: tổng số giờ đang bằng 0.');
   return errs;
 }
 export function hocTapLines(d: Details): string[] {
   const out: string[] = [];
   const total = d.hoursTot + d.hoursKha + d.hoursTb + d.hoursYeu;
-  if (total > 0) {
-    if (d.hoursKha === 0 && d.hoursTb === 0 && d.hoursYeu === 0) out.push(`Giờ tốt: 100% tốt`);
-    else out.push(`Giờ tốt: ${d.hoursTot} tốt, ${d.hoursKha} khá${d.hoursTb ? `, ${d.hoursTb} trung bình` : ''}${d.hoursYeu ? `, ${d.hoursYeu} yếu` : ''}`);
-  }
+  // Tích 100% giờ Tốt thì phiếu ghi 100% tốt ngay cả khi chưa nhập số giờ.
+  if (is100Tot(d)) out.push(`Giờ tốt: 100% tốt`);
+  else if (total > 0) out.push(`Giờ tốt: ${d.hoursTot} tốt, ${d.hoursKha} khá${d.hoursTb ? `, ${d.hoursTb} trung bình` : ''}${d.hoursYeu ? `, ${d.hoursYeu} yếu` : ''}`);
   if (d.goodHigh) out.push(`Điểm tốt (≥5): ${d.goodHigh}`);
   if (d.goodLow) out.push(`Điểm dưới 5: ${d.goodLow}${violNamesOf(d, 'goodLow')}`);
   if (num(d.studyNoLearn)) out.push(`Không học bài: ${num(d.studyNoLearn)} lượt (-${num(d.studyNoLearn)})${violNamesOf(d, 'studyNoLearn')}`);
