@@ -34,7 +34,7 @@ const noOverflow = async (page, label) => {
   ok(!!hb && hb.height <= 150, 'mobile-390: header gọn ≤150px (dòng tóm tắt 2 dòng khi có tên; thấy: ' + (hb ? Math.round(hb.height) : '?') + 'px)');
   ok(await page.locator('.header-summary').isVisible(), 'mobile-390: có dòng tóm tắt header');
   const sum = await page.locator('.header-summary').innerText();
-  ok(sum.includes('Tuần 05') && sum.includes('Ban thi đua') && sum.includes('Y Đôi Bol') && !sum.includes('…'), 'mobile-390: tóm tắt header hiện đủ tuần + vai trò + tên, không bị cắt (thấy: ' + sum.trim().replace(/\n/g, ' / ') + ')');
+  ok(sum.includes('Tuần 05') && sum.includes('Ban thi đua') && sum.includes('Y Đôi Bol') && !sum.includes('…') && sum.includes('\n'), 'mobile-390: tóm tắt header 2 dòng cố định — dòng 1 tuần + vai trò, dòng 2 tên, không bị cắt (thấy: ' + sum.trim().replace(/\n/g, ' / ') + ')');
   ok((await page.locator('.userbox .chip.hide-m').first().isVisible()) === false, 'mobile-390: chip lẻ trong header bị ẩn, chỉ còn dòng tóm tắt');
   // P2-06: menu đăng xuất.
   ok(await page.locator('.menu-btn').isVisible(), 'mobile-390: có nút menu ⋮');

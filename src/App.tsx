@@ -1244,7 +1244,7 @@ export default function App() {
           <span className="chip hide-m"><span className="who">{session.name}</span></span>
           {showInstall && <button type="button" className="btn logout hide-m" onClick={installApp}>Cài app</button>}
           <button type="button" className="btn logout hide-m" onClick={handleSignOut}>{isSupabaseConfigured ? 'Đăng xuất' : 'Đổi vai trò'}</button>
-          <span className="chip header-summary">{week ? week.label : 'Chưa có tuần'}{session.role === 'codo' && assignment?.classId ? ` • Trực lớp ${state.classes.find(c => c.id === assignment.classId)?.name}` : ''} • {roleLabel} • {session.name}</span>
+          <span className="chip header-summary"><span>{week ? week.label : 'Chưa có tuần'}{session.role === 'codo' && assignment?.classId ? ` • Trực lớp ${state.classes.find(c => c.id === assignment.classId)?.name}` : ''} • {roleLabel}</span><span>{session.name}</span></span>
           <button type="button" className="btn logout menu-btn" aria-label="Mở menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(o => !o)}>⋮</button>
         </div>
         {menuOpen && (<>
