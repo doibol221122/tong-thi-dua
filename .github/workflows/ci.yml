@@ -1,0 +1,31 @@
+# Build + kiểm thử App Tổng Thi Đua trên mỗi lần push lên main.
+# Suite chạy ở chế độ local (seed localStorage, không cần Supabase thật):
+#   tests/run-all.mjs build lại lib.mjs, build app, mở preview 4177,
+#   chạy đủ 5 suite rồi tắt preview.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            tests/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm --prefix tests ci
+      # Trình duyệt cho Playwright (chromium + headless shell). Suite tự
+      # tìm binary ở ~/.cache/ms-playwright/chromium_headless_shell-*/...;
+      # đặt CHROMIUM_EXE nếu đường dẫn khác.
+      - run: npx -y playwright@1.65.1 install --with-deps chromium
+      - run: npm --prefix tests test
