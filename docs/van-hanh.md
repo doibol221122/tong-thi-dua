@@ -14,9 +14,9 @@
 > Tài khoản cờ đỏ / Tài khoản GVCN / Tài khoản BTĐ / Cài đặt) và
 > **admin dự phòng đã chốt** (tài khoản dự phòng của thầy đã nâng lên
 > Ban thi đua trong app — xem mục 6). Code tách dữ liệu phiếu sang bảng
-> riêng (`migration-split.sql` "split-1") đã lên live ngày 25/11/2026;
-> app vẫn chạy bằng `app_state` cho đến khi thầy chạy SQL này trong
-> Supabase (xem mục 2). Mục không đánh dấu là đã có sẵn trong app.
+> riêng (`migration-split.sql` "split-1") đã lên live và thầy đã chạy SQL
+> xong ngày 25/11/2026, app nay đọc/ghi theo bảng riêng (`app_state`
+> vẫn được ghi kèm làm bản sao lưu). Mục không đánh dấu là đã có sẵn trong app.
 
 ## 1. Checklist Supabase Dashboard (kiểm tra sau mỗi lần deploy)
 
@@ -28,7 +28,7 @@ Làm trong [Supabase Dashboard](https://supabase.com/dashboard) → đúng proje
       (cần cho email "Quên mật khẩu" quay lại đúng app) — đã xác nhận 25/11/2026
 - [x] **Confirm email: BẬT** (Authentication → Providers → Email) — đã xác nhận 25/11/2026
 - [x] **Schema đã chạy:** `migration-pro.sql` "pro-1" đã chạy ngày 25/11/2026 — xem bảng phiên bản ở mục 2
-- [ ] **Schema bảng riêng:** chạy `migration-split.sql` "split-1" trong SQL Editor lúc không ai đang nhập điểm, xong tải lại app — xem mục 2
+- [x] **Schema bảng riêng:** `migration-split.sql` "split-1" đã chạy ngày 25/11/2026 (3 phần), app tải lại dữ liệu đủ — xem mục 2
 - [ ] **Khóa `service_role`: KHÔNG BAO GIỜ chia sẻ, không nhập vào app,
       không gửi qua chat/Zalo.** App chỉ dùng `VITE_SUPABASE_ANON_KEY`
       (khóa này nằm trong code là đúng thiết kế; an toàn nhờ RLS).
@@ -57,7 +57,7 @@ Làm trong [Supabase Dashboard](https://supabase.com/dashboard) → đúng proje
 |---|---|---|---|---|
 | `schema.sql` (gốc) | Bảng `profiles`, `app_state`, RLS cơ bản | SQL Editor | _(ghi ngày đã chạy)_ | |
 | `migration-pro.sql` "pro-1" ✅ | Siết RLS (chống tự lên admin), bảng `app_state_history`, trạng thái tài khoản `rejected`, cột `version` cho `app_state` | SQL Editor | 25/11/2026 | Thầy (tài khoản admin) |
-| `migration-split.sql` "split-1" ⏳ | Tách tuần/lớp/phân công/phiếu/nhật ký/cài đặt thành bảng riêng, RLS theo vai trò (cờ đỏ chỉ ghi phiếu lớp mình trực); `app_state` giữ làm bản sao lưu | SQL Editor | _(chưa chạy)_ | |
+| `migration-split.sql` "split-1" ✅ | Tách tuần/lớp/phân công/phiếu/nhật ký/cài đặt thành bảng riêng, RLS theo vai trò (cờ đỏ chỉ ghi phiếu lớp mình trực); `app_state` giữ làm bản sao lưu | SQL Editor | 25/11/2026 | Thầy (tài khoản admin) |
 
 Quy tắc: **mỗi lần đổi schema thì tăng số phiên bản và ghi ngày vào bảng
 trên.** Không chạy SQL nào ngoài file đã chốt trong repo.
