@@ -901,3 +901,21 @@ export function autoGeneralComment(state: AppState, weekId: string): { pros: str
   if (!consParts.length) consParts.push('Chưa ghi nhận tồn tại đáng kể trong tuần này.');
   return { pros: prosParts.join(' '), cons: consParts.join(' ') };
 }
+
+// Số liệu tổng hợp của tuần gửi cho AI soạn nhận xét: bảng điểm các lớp
+// đã duyệt + bản tự soạn. Không kèm tên học sinh.
+export function commentFacts(state: AppState, weekId: string): string {
+  const nameOf = (id: string) => state.classes.find(c => c.id === id)?.name ?? id;
+  const approved = state.scores
+    .filter(s => s.weekId === weekId && s.status === 'approved')
+    .map(s => ({ name: nameOf(s.classId), c: calcScore(s.details) }))
+    .sort((a, b) => b.c.final - a.c.final);
+  const auto = autoGeneralComment(state, weekId);
+  const lines = [
+    `Số lớp đã duyệt: ${approved.length}/${state.classes.length}.`,
+    approved.length ? `Bảng điểm: ${approved.map(x => `${x.name} ${x.c.final}đ loại ${x.c.cls}`).join('; ')}.` : 'Chưa có lớp nào được duyệt.',
+    `Ưu điểm (bản tự soạn): ${auto.pros}`,
+    `Nhược điểm (bản tự soạn): ${auto.cons}`,
+  ];
+  return lines.join('\n');
+}

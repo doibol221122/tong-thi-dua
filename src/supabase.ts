@@ -37,6 +37,14 @@ export interface Profile {
   created_at: string;
 }
 
+// Mã phiên hiện tại để gọi điểm AI phía máy chủ (máy chủ tự kiểm tra
+// lại vai trò Ban thi đua, trình duyệt không giữ khóa AI).
+export async function getAccessToken(): Promise<string | null> {
+  if (!supabase) return null;
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+}
+
 export async function fetchProfile(userId: string): Promise<Profile | null> {
   if (!supabase) return null;
   const { data, error } = await supabase

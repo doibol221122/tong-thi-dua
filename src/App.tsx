@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, ClassGroup, ClassItem, Details, ExtraLine, Role, Score, Week } from './lib';
-import { assignedClassName, autoGeneralComment, calcScore, classAvg, classCoverage, classGroup, classIdFromAssigned, cleanLogDetail, clsOf, compareAvg, deadlineInfo, detailsDiff, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, logScoreIds, monthBlockOf, monthLabel, neNepLines, notSubmittedClasses, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekDeadline, weekNumberOf } from './lib';
+import { assignedClassName, autoGeneralComment, calcScore, classAvg, classCoverage, classGroup, classIdFromAssigned, cleanLogDetail, clsOf, commentFacts, compareAvg, deadlineInfo, detailsDiff, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, logScoreIds, monthBlockOf, monthLabel, neNepLines, notSubmittedClasses, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekDeadline, weekNumberOf } from './lib';
 import { exportClassDocx, exportMonthDocx, exportWeekDocx, exportWeekDocxNoRank } from './docxExport';
 import { LOGO_DATA_URI } from './logoData';
 import AuthScreen from './AuthScreen';
-import { deleteProfile, ensureProfile, fetchHistory, fetchHistoryData, fetchSharedState, isSupabaseConfigured, listProfiles, saveSharedState, supabase, updateProfile } from './supabase';
+import { deleteProfile, ensureProfile, fetchHistory, fetchHistoryData, fetchSharedState, getAccessToken, isSupabaseConfigured, listProfiles, saveSharedState, supabase, updateProfile } from './supabase';
 import type { HistoryVersion, Profile } from './supabase';
 
 // Sự kiện trình duyệt báo app web cài được (beforeinstallprompt).
@@ -1485,6 +1485,26 @@ function GeneralCommentCard({ state, weekId, weekLabel, isAdmin, onSave }: { sta
   const [pros, setPros] = useState(state.settings.generalPros || auto.pros);
   const [cons, setCons] = useState(state.settings.generalCons || auto.cons);
   const [note, setNote] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  async function askAi() {
+    setAiBusy(true); setNote('');
+    try {
+      const token = await getAccessToken();
+      if (!token) { setNote('Chưa có phiên đăng nhập để gọi AI.'); return; }
+      const res = await fetch('/api/ai-comment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ weekLabel, facts: commentFacts(state, weekId) }),
+      });
+      const data = await res.json().catch(() => ({})) as { pros?: string; cons?: string; error?: string };
+      if (!res.ok) { setNote(data.error || 'AI chưa trả lời được. App vẫn giữ nhận xét tự soạn từ số liệu.'); return; }
+      if (data.pros) setPros(data.pros);
+      if (data.cons) setCons(data.cons);
+      setNote('AI đã soạn nhận xét từ số liệu tuần. Thầy sửa lại nếu cần rồi bấm Lưu.');
+    } catch {
+      setNote('Không gọi được AI lúc này. App vẫn giữ nhận xét tự soạn từ số liệu.');
+    } finally { setAiBusy(false); }
+  }
   return (
     <div className="card general-comment" style={{ marginTop: 12 }}><h3>Nhận xét chung — {weekLabel}</h3>
       <p>App tự soạn từ số liệu phiếu đã duyệt của tuần (lớp dẫn đầu, tiến bộ/tụt điểm, lỗi hay gặp). Ban thi đua sửa lại rồi lưu; file .docx sẽ dùng bản đã lưu.</p>
@@ -1494,6 +1514,7 @@ function GeneralCommentCard({ state, weekId, weekLabel, isAdmin, onSave }: { sta
       <textarea aria-label="Nhận xét chung — Nhược điểm" value={cons} disabled={!isAdmin} onChange={e => setCons(e.target.value)} rows={3} />
       {isAdmin && <div className="row" style={{ marginTop: 8 }}>
         <button className="btn ghost" type="button" onClick={() => { const a = autoGeneralComment(state, weekId); setPros(a.pros); setCons(a.cons); setNote('Đã tạo nhận xét tự động từ số liệu tuần. Sửa lại nếu cần rồi bấm Lưu.'); }}>Tạo nhận xét tự động</button>
+        {isSupabaseConfigured && <button className="btn ghost" type="button" disabled={aiBusy} onClick={() => void askAi()}>{aiBusy ? 'AI đang soạn…' : 'Nhờ AI viết nhận xét'}</button>}
         <button className="btn" type="button" onClick={() => onSave(pros, cons)}>Lưu nhận xét chung</button>
       </div>}
       {note && <p className="ok">{note}</p>}
