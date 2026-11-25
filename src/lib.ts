@@ -421,6 +421,42 @@ export function validateDetails(d: Details): string[] {
   }
   return errs;
 }
+// So sánh hai bản chi tiết phiếu để ghi nhật ký thay đổi từng mục.
+export function detailsDiff(before: Details | undefined, after: Details): string[] {
+  const out: string[] = [];
+  const labelOf = (k: string): string => (NUM_LABELS[k as keyof Details] ?? VIOLATION_FIELDS.find(f => f.key === k)?.label ?? k);
+  const numOf = (d: Details | undefined, k: keyof Details): number => (d?.[k] as number | undefined) ?? 0;
+  for (const k of NUM_INT_FIELDS) {
+    const a = numOf(before, k); const b = numOf(after, k);
+    if (a !== b) out.push(`${labelOf(k)}: ${a} → ${b}`);
+  }
+  const boolText = (v?: boolean) => v ? 'Đã tích' : 'Chưa tích';
+  if (!!before?.allGood !== !!after.allGood) out.push(`100% giờ Tốt: ${boolText(before?.allGood)} → ${boolText(after.allGood)}`);
+  if (!!before?.noAbsLate !== !!after.noAbsLate) out.push(`100% không vắng/không đi muộn: ${boolText(before?.noAbsLate)} → ${boolText(after.noAbsLate)}`);
+  const short = (s?: string) => { const t = (s ?? '').trim(); return t ? (t.length > 40 ? `${t.slice(0, 40)}…` : t) : '(trống)'; };
+  for (const [k, label] of [['names', 'Tên HS vi phạm'], ['opinionClass', 'Ý kiến của lớp theo dõi'], ['opinionCodo', 'Ý kiến của cờ đỏ']] as const) {
+    if ((before?.[k] ?? '') !== (after[k] ?? '')) out.push(`${label}: ${short(before?.[k])} → ${short(after[k])}`);
+  }
+  const violKeys = new Set([...Object.keys(before?.violNames ?? {}), ...Object.keys(after.violNames ?? {})]);
+  for (const k of violKeys) {
+    const a = before?.violNames?.[k] ?? ''; const b = after.violNames?.[k] ?? '';
+    if (a !== b) out.push(`HS vi phạm (${labelOf(k)}): ${short(a)} → ${short(b)}`);
+  }
+  for (const [k, label] of [['extraPlus', 'Cộng khác'], ['extraMinus', 'Trừ khác']] as const) {
+    const sum = (d: Details | undefined) => { const list = d?.[k] ?? []; return { n: list.length, pts: list.reduce((s, x) => s + (x.points || 0), 0), raw: JSON.stringify(list) }; };
+    const a = sum(before); const b = sum(after);
+    if (a.raw !== b.raw) out.push(`${label}: ${a.n} dòng (${a.pts}đ) → ${b.n} dòng (${b.pts}đ)`);
+  }
+  return out.length > 12 ? [...out.slice(0, 12), `… và ${out.length - 12} mục khác`] : out;
+}
+// Nhật ký gắn mã phiếu ở cuối chi tiết dạng [score:<id>] để lọc nhật ký
+// riêng của từng phiếu; hiển thị thì bỏ mã này đi.
+export function logScoreIds(detail: string): string[] {
+  return [...detail.matchAll(/\[score:([^\]]+)\]/g)].map(m => m[1]);
+}
+export function cleanLogDetail(detail: string): string {
+  return detail.replace(/\s*\[score:[^\]]+\]/g, '').trim();
+}
 // So sánh điểm trung bình để xếp hạng: lớp chưa có phiếu duyệt (null)
 // luôn xếp sau lớp có điểm (không dùng -1 làm mốc — điểm thật có thể âm).
 export function compareAvg(a: number | null, b: number | null): number {

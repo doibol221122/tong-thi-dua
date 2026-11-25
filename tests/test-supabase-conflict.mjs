@@ -20,6 +20,11 @@ stub.seedProfile({ user: admin, role: 'admin', status: 'active' });
 
 const { ctx, page } = await newSbPage(browser, stub, { seedSession: admin });
 await waitText(page, 'Tổng quan');
+// Chờ app tải xong dữ liệu dùng chung (GET app_state) rồi mới giả lập
+// máy khác lưu — bump sớm khi lần tải đầu chưa xong thì app sẽ nhận
+// luôn bản mới làm mốc và không còn xung đột để kiểm tra.
+for (let i = 0; i < 100 && !stub.saw('GET', '/rest/v1/app_state'); i++) await page.waitForTimeout(200);
+await page.waitForTimeout(1000);
 const v0 = stub.appState.version;
 
 // Đổi tên lớp: thao tác local sẽ kích hoạt lưu có điều kiện (debounce ~1s).

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, ClassGroup, ClassItem, Details, ExtraLine, Role, Score, Week } from './lib';
-import { assignedClassName, calcScore, classAvg, classCoverage, classGroup, classIdFromAssigned, clsOf, compareAvg, deadlineInfo, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, monthBlockOf, monthLabel, neNepLines, notSubmittedClasses, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekDeadline, weekNumberOf } from './lib';
+import { assignedClassName, calcScore, classAvg, classCoverage, classGroup, classIdFromAssigned, cleanLogDetail, clsOf, compareAvg, deadlineInfo, detailsDiff, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, logScoreIds, monthBlockOf, monthLabel, neNepLines, notSubmittedClasses, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekDeadline, weekNumberOf } from './lib';
 import { exportClassDocx, exportMonthDocx, exportWeekDocx, exportWeekDocxNoRank } from './docxExport';
 import { LOGO_DATA_URI } from './logoData';
 import AuthScreen from './AuthScreen';
@@ -858,11 +858,14 @@ export default function App() {
     });
   }
 
-  function update(fn: (s: AppState) => AppState, logAction?: string, logDetail?: string) {
+  function update(fn: (s: AppState) => AppState, logAction?: string, logDetail?: string, logScoreRefs?: string | string[]) {
     setState(prev => {
       const next = fn(prev);
       // Nhật ký giữ tối đa 300 dòng gần nhất (tránh phình bộ nhớ local).
-      if (logAction) next.logs = [...next.logs, { id: uid(), time: nowStr(), actor: session?.name ?? 'Hệ thống', role: roleLabel, action: logAction, detail: logDetail ?? '' }].slice(-300);
+      if (logAction) {
+        const refs = (Array.isArray(logScoreRefs) ? logScoreRefs : logScoreRefs ? [logScoreRefs] : []).map(id => `[score:${id}]`).join(' ');
+        next.logs = [...next.logs, { id: uid(), time: nowStr(), actor: session?.name ?? 'Hệ thống', role: roleLabel, action: logAction, detail: `${logDetail ?? ''}${refs ? ` ${refs}` : ''}` }].slice(-300);
+      }
       return next;
     });
   }
@@ -912,15 +915,17 @@ export default function App() {
     setErrs([]);
     const clsName = state.classes.find(c => c.id === classId)?.name ?? classId;
     const c = calcScore(draft);
+    const scoreId = latestScore?.id ?? uid();
+    const diff = detailsDiff(latestScore?.details, draft);
     update(prev => {
       const ex = prev.scores.find(s => s.weekId === week.id && s.classId === classId);
-      const base: Score = ex ?? { id: uid(), weekId: week.id, classId, details: draft, status: 'draft' };
+      const base: Score = ex ?? { id: scoreId, weekId: week.id, classId, details: draft, status: 'draft' };
       const ns: Score = { ...base, details: draft, status, updatedBy: session?.name, updatedAt: nowStr(),
         submittedBy: status === 'submitted' ? session?.name : base.submittedBy,
         submittedAt: status === 'submitted' ? nowStr() : base.submittedAt,
         returnReason: status === 'submitted' ? undefined : base.returnReason };
       return { ...prev, scores: ex ? prev.scores.map(s => s.id === ex.id ? ns : s) : [...prev.scores, ns] };
-    }, status === 'submitted' ? 'Nộp phiếu' : 'Lưu nháp', `${clsName} — ${week.label}: ${c.final}đ-${c.cls}`);
+    }, status === 'submitted' ? 'Nộp phiếu' : 'Lưu nháp', `${clsName} — ${week.label}: ${c.final}đ-${c.cls}${diff.length ? `; thay đổi: ${diff.join('; ')}` : '; không thay đổi số liệu'}`, scoreId);
     setDirty(false);
     // "Đã lưu" chỉ hiện sau khi máy chủ xác nhận (đồng bộ xong) — trước
     // đó chỉ báo "đang đồng bộ". Chế độ máy này (không Supabase) thì lưu
@@ -944,7 +949,7 @@ export default function App() {
       body: `Phiếu ${c.final}đ, loại ${c.cls}. Phiếu đã duyệt sẽ vào xếp hạng chính thức.`,
       confirmLabel: 'Duyệt phiếu',
       onConfirm: () => {
-        update(prev => ({ ...prev, scores: prev.scores.map(s => s.id === currentScore.id ? { ...s, status: 'approved', approvedBy: session?.name, approvedAt: nowStr() } : s) }), 'Duyệt phiếu', `${clsName} — ${week?.label}`);
+        update(prev => ({ ...prev, scores: prev.scores.map(s => s.id === currentScore.id ? { ...s, status: 'approved', approvedBy: session?.name, approvedAt: nowStr() } : s) }), 'Duyệt phiếu', `${clsName} — ${week?.label}: ${c.final}đ-${c.cls}`, currentScore.id);
         setMsg(`Đã duyệt phiếu lớp ${clsName}.`); setDraft(currentScore.details);
       },
     });
@@ -969,7 +974,7 @@ export default function App() {
         }
         if (!okIds.length) { setErrs([`Không duyệt được phiếu nào: ${skipped.join('; ')}`]); return; }
         const idSet = new Set(okIds);
-        update(prev => ({ ...prev, scores: prev.scores.map(s => idSet.has(s.id) ? { ...s, status: 'approved', approvedBy: session?.name, approvedAt: nowStr() } : s) }), 'Duyệt tất cả phiếu', `${week.label} — ${okIds.length} phiếu`);
+        update(prev => ({ ...prev, scores: prev.scores.map(s => idSet.has(s.id) ? { ...s, status: 'approved', approvedBy: session?.name, approvedAt: nowStr() } : s) }), 'Duyệt tất cả phiếu', `${week.label} — ${okIds.length} phiếu`, okIds);
         setMsg(`Đã duyệt ${okIds.length} phiếu của ${week.label}.${skipped.length ? ` Bỏ qua ${skipped.length} phiếu chưa đủ điều kiện: ${skipped.join('; ')}.` : ''}`);
       },
     });
@@ -1007,7 +1012,7 @@ export default function App() {
       body: `Lý do: “${returnReason.trim()}”. Cờ đỏ sẽ sửa lại rồi nộp lại.`,
       confirmLabel: 'Trả lại phiếu',
       onConfirm: () => {
-        update(prev => ({ ...prev, scores: prev.scores.map(s => s.id === currentScore.id ? { ...s, status: 'returned', returnReason: returnReason.trim() } : s) }), 'Trả lại phiếu', `${clsName} — Lý do: ${returnReason.trim()}`);
+        update(prev => ({ ...prev, scores: prev.scores.map(s => s.id === currentScore.id ? { ...s, status: 'returned', returnReason: returnReason.trim() } : s) }), 'Trả lại phiếu', `${clsName} — ${week?.label} — Lý do: ${returnReason.trim()}`, currentScore.id);
         setMsg(`Đã trả lại phiếu lớp ${clsName}.`); setReturnReason(''); setDraft(currentScore.details);
       },
     });
@@ -1032,7 +1037,7 @@ export default function App() {
           ...prev,
           scores: prev.scores.map(s => s.id === currentScore.id ? { ...s, status: 'draft', returnReason: undefined, approvedBy: undefined, approvedAt: undefined, submittedBy: undefined, submittedAt: undefined } : s),
           weeks: weekClosed && week ? prev.weeks.map(w => w.id === week.id ? { ...w, submittedAt: null, submittedBy: null } : w) : prev.weeks,
-        }), weekClosed ? 'Hủy duyệt phiếu + mở lại tuần' : 'Hủy duyệt phiếu', `${clsName} — ${week?.label}${weekClosed ? ' (tuần đã chốt nên mở lại luôn tuần)' : ''}`);
+        }), weekClosed ? 'Hủy duyệt phiếu + mở lại tuần' : 'Hủy duyệt phiếu', `${clsName} — ${week?.label}${weekClosed ? ' (tuần đã chốt nên mở lại luôn tuần)' : ''}`, currentScore.id);
         setMsg(weekClosed ? `Đã hủy duyệt phiếu lớp ${clsName} và mở lại ${week?.label} để sửa.` : `Đã hủy duyệt phiếu lớp ${clsName}. Phiếu trở về nháp để sửa lại.`);
       },
     });
@@ -1419,12 +1424,12 @@ export default function App() {
           <div className="card"><h2>Lịch sử hoạt động</h2>
           {session.role === 'admin' ? (state.logs.length === 0 ? <p>Chưa có hoạt động nào.</p> : <>
             {isNarrow ? (
-              <div className="log-list">{[...state.logs].reverse().map(l => <div key={l.id} className="log-item"><b>{l.action}</b>{l.detail ? ` — ${l.detail}` : ''}<div className="meta">{l.actor} • {l.role} • {l.time}</div></div>)}</div>
+              <div className="log-list">{[...state.logs].reverse().map(l => <div key={l.id} className="log-item"><b>{l.action}</b>{cleanLogDetail(l.detail) ? ` — ${cleanLogDetail(l.detail)}` : ''}<div className="meta">{l.actor} • {l.role} • {l.time}</div></div>)}</div>
             ) : (
-              <div className="tablewrap log-table-wrap"><table className="log-table"><thead><tr><th>Thời gian</th><th>Người làm</th><th>Vai trò</th><th>Việc làm</th><th>Chi tiết</th></tr></thead><tbody>{[...state.logs].reverse().map(l => <tr key={l.id}><td>{l.time}</td><td>{l.actor}</td><td>{l.role}</td><td>{l.action}</td><td>{l.detail}</td></tr>)}</tbody></table></div>
+              <div className="tablewrap log-table-wrap"><table className="log-table"><thead><tr><th>Thời gian</th><th>Người làm</th><th>Vai trò</th><th>Việc làm</th><th>Chi tiết</th></tr></thead><tbody>{[...state.logs].reverse().map(l => <tr key={l.id}><td>{l.time}</td><td>{l.actor}</td><td>{l.role}</td><td>{l.action}</td><td>{cleanLogDetail(l.detail)}</td></tr>)}</tbody></table></div>
             )}
           </>) : session.role === 'codo' ? (
-            myLogs.length === 0 ? <p>Bạn chưa có hoạt động nào được ghi lại.</p> : <div className="log-list always">{myLogs.map(l => <div key={l.id} className="log-item"><b>{l.action}</b>{l.detail ? ` — ${l.detail}` : ''}<div className="meta">{l.time}</div></div>)}</div>
+            myLogs.length === 0 ? <p>Bạn chưa có hoạt động nào được ghi lại.</p> : <div className="log-list always">{myLogs.map(l => <div key={l.id} className="log-item"><b>{l.action}</b>{cleanLogDetail(l.detail) ? ` — ${cleanLogDetail(l.detail)}` : ''}<div className="meta">{l.time}</div></div>)}</div>
           ) : <p>Vai trò Chỉ xem không xem được nhật ký chi tiết.</p>}
           </div>
         )}
@@ -1928,6 +1933,15 @@ function ScoreForm(props: {
               )}
             </div>
           )}
+          {props.currentScore && (() => {
+            const clsName = state.classes.find(c => c.id === props.currentScore!.classId)?.name ?? '';
+            const journal = [...state.logs].reverse().filter(l => logScoreIds(l.detail).includes(props.currentScore!.id) || cleanLogDetail(l.detail).includes(`${clsName} — ${week.label}`));
+            return (
+              <div className="card score-journal" style={{ marginTop: 12 }}><h3>Nhật ký thay đổi của phiếu này</h3>
+                {journal.length === 0 ? <p>Chưa có thay đổi nào được ghi cho phiếu này.</p> : <div className="log-list always">{journal.map(l => <div key={l.id} className="log-item"><b>{l.action}</b>{cleanLogDetail(l.detail) ? ` — ${cleanLogDetail(l.detail)}` : ''}<div className="meta">{l.actor} • {l.role} • {l.time}</div></div>)}</div>}
+              </div>
+            );
+          })()}
           {props.showPhieu && (
             <div className="card"><h3>Phiếu tổng kết — in / chụp lưu hồ sơ</h3>
               <p><b>Tổng kết {week.label} — Lớp {state.classes.find(c => c.id === props.classId)?.name}</b></p>
