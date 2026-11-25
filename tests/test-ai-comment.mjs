@@ -24,7 +24,9 @@ let lastBody = null;
 await page.route('**/api/ai-comment', async route => {
   lastAuth = route.request().headers()['authorization'] || '';
   lastBody = route.request().postDataJSON();
-  if (aiMode === 'ok') {
+  if (aiMode === 'ok' && lastBody?.mode === 'score') {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ text: 'AI: lớp thực hiện tốt giờ học, cần khắc phục đi muộn.', model: 'gemini-flash-lite-latest' }) });
+  } else if (aiMode === 'ok') {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ pros: 'AI: các lớp dẫn đầu giữ phong độ tốt.', cons: 'AI: vẫn còn lớp chưa hoàn thành phiếu.', model: 'gemini-3.5-flash-lite' }) });
   } else {
     await route.fulfill({ status: 501, contentType: 'application/json', body: JSON.stringify({ error: 'Chưa đặt khóa AI trên máy chủ (GEMINI_API_KEY).' }) });
@@ -51,6 +53,18 @@ await page.waitForTimeout(800);
 const pros2 = await card.locator('textarea[aria-label="Nhận xét chung — Ưu điểm"]').inputValue();
 ok(pros2.includes('AI: các lớp dẫn đầu'), 'ai: máy chủ chưa đặt khóa thì giữ nguyên nội dung đang có');
 ok((await card.innerText()).includes('Chưa đặt khóa AI'), 'ai: báo rõ chưa đặt khóa AI trên máy chủ');
+
+// AI soạn ý kiến cho từng phiếu: mở phiếu mới 10B2 (chưa có phiếu, sửa được) rồi bấm nút AI.
+aiMode = 'ok';
+await page.getByRole('button', { name: 'Nhập điểm', exact: true }).click();
+await page.waitForTimeout(600);
+await page.locator('.class-btns button', { hasText: '10B2' }).first().click();
+await page.waitForTimeout(600);
+await page.getByRole('button', { name: 'Nhờ AI soạn ý kiến' }).click();
+await page.waitForTimeout(800);
+const opinion = await page.locator('label', { hasText: 'Ý kiến của cờ đỏ' }).locator('xpath=following-sibling::textarea[1]').inputValue();
+ok(opinion.includes('AI: lớp thực hiện tốt'), 'ai: AI soạn ý kiến điền vào ô Ý kiến của cờ đỏ (thấy: ' + opinion.slice(0, 80) + ')');
+ok(lastBody?.mode === 'score' && String(lastBody.facts || '').includes('Lớp 10B2'), 'ai: app gửi số liệu phiếu của lớp cho AI');
 
 await ctx.close();
 await browser.close();

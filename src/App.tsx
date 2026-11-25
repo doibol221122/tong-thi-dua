@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, ClassGroup, ClassItem, Details, ExtraLine, Role, Score, Week } from './lib';
-import { assignedClassName, autoGeneralComment, calcScore, classAvg, classCoverage, classGroup, classIdFromAssigned, cleanLogDetail, clsOf, commentFacts, compareAvg, deadlineInfo, detailsDiff, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, logScoreIds, monthBlockOf, monthLabel, neNepLines, notSubmittedClasses, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekDeadline, weekNumberOf } from './lib';
+import { assignedClassName, autoGeneralComment, calcScore, classAvg, classCoverage, classFacts, classGroup, classIdFromAssigned, cleanLogDetail, clsOf, commentFacts, compareAvg, deadlineInfo, detailsDiff, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, logScoreIds, monthBlockOf, monthLabel, neNepLines, notSubmittedClasses, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekDeadline, weekNumberOf } from './lib';
 import { exportClassDocx, exportMonthDocx, exportWeekDocx, exportWeekDocxNoRank } from './docxExport';
 import { LOGO_DATA_URI } from './logoData';
 import AuthScreen from './AuthScreen';
@@ -1825,6 +1825,27 @@ function ScoreForm(props: {
   };
   const { state, week, draft, calc, canEdit } = props;
   const d = draft;
+  const [aiNote, setAiNote] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  async function askAiOpinion() {
+    setAiBusy(true); setAiNote('');
+    try {
+      const token = await getAccessToken();
+      if (!token) { setAiNote('Chưa có phiên đăng nhập để gọi AI.'); return; }
+      const tmp: Score = props.currentScore ?? { id: 'draft', classId: props.classId, weekId: props.weekId, details: d, status: 'draft', updatedAt: '', submittedBy: '', submittedAt: '', approvedBy: '', approvedAt: '', returnReason: '' };
+      const res = await fetch('/api/ai-comment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ mode: 'score', weekLabel: week?.label ?? '', facts: classFacts(state, { ...tmp, details: d }) }),
+      });
+      const data = await res.json().catch(() => ({})) as { text?: string; error?: string; model?: string };
+      if (!res.ok || !data.text) { setAiNote(data.error || 'AI chưa soạn được ý kiến.'); return; }
+      props.setD('opinionCodo', data.text);
+      setAiNote('AI đã soạn ý kiến' + (data.model ? ` (model ${data.model})` : '') + '. Sửa lại nếu cần rồi lưu phiếu.');
+    } catch {
+      setAiNote('Không gọi được AI lúc này.');
+    } finally { setAiBusy(false); }
+  }
   const sec = sectionSums(d);
   // Phiếu trộn cả số liệu cũ (gộp) và mới (tách nhỏ) thì đang tính cả hai
   // (trừ trùng) — chỉ cảnh báo, không tự sửa điểm phiếu đã duyệt.
@@ -1949,6 +1970,10 @@ function ScoreForm(props: {
           <textarea value={d.opinionClass} disabled={!canEdit} onChange={e => props.setD('opinionClass', e.target.value)} />
           <label>Ý kiến của cờ đỏ</label>
           <textarea value={d.opinionCodo} disabled={!canEdit} onChange={e => props.setD('opinionCodo', e.target.value)} />
+          {canEdit && isSupabaseConfigured && <div className="row" style={{ marginTop: 6 }}>
+            <button className="btn ghost" type="button" disabled={aiBusy} onClick={() => void askAiOpinion()}>{aiBusy ? 'AI đang soạn…' : 'Nhờ AI soạn ý kiến'}</button>
+          </div>}
+          {aiNote && <p className="ok">{aiNote}</p>}
           {week && !week.submittedAt && (() => { const dl = deadlineInfo(weekDeadline(state.settings, week.id)); return dl ? <div className={dl.overdue ? 'err' : 'warn'}>{dl.overdue ? `Đã quá hạn nộp (${dl.label}) — nộp phiếu ngay nhé.` : `Hạn nộp: ${dl.label}.`}</div> : null; })()}
           {week?.submittedAt ? <div className="err">Tuần này đã chốt sổ — cờ đỏ không nhập lại được. Ban thi đua mở lại sổ thì mới nhập tiếp được.</div> : !canEdit && <div className="warn">Phiếu này bạn không được sửa (xem phân quyền / phiếu đã nộp hoặc đã duyệt / tuần đã chốt).</div>}
           <div className="scorebar">

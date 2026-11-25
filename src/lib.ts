@@ -885,20 +885,69 @@ export function autoGeneralComment(state: AppState, weekId: string): { pros: str
   return { pros, cons: consParts.join(' ') };
 }
 
-// Số liệu tổng hợp của tuần gửi cho AI soạn nhận xét: bảng điểm các lớp
-// đã duyệt + bản tự soạn. Không kèm tên học sinh.
+// Số liệu tổng hợp của tuần gửi cho AI soạn nhận xét tổng thể: bảng
+// điểm, giờ học, điểm tốt, phong trào, tiến bộ/tụt điểm, lỗi vi phạm.
+// Không kèm tên học sinh.
 export function commentFacts(state: AppState, weekId: string): string {
   const nameOf = (id: string) => state.classes.find(c => c.id === id)?.name ?? id;
   const approved = state.scores
     .filter(s => s.weekId === weekId && s.status === 'approved')
-    .map(s => ({ name: nameOf(s.classId), c: calcScore(s.details) }))
+    .map(s => ({ s, name: nameOf(s.classId), c: calcScore(s.details) }))
     .sort((a, b) => b.c.final - a.c.final);
   const auto = autoGeneralComment(state, weekId);
+  const sum = (f: (d: Details) => number) => approved.reduce((a, x) => a + f(x.s.details), 0);
+  const tot100 = approved.filter(x => x.c.is100Tot).map(x => x.name);
+  const phongTrao = new Map<string, number>();
+  for (const x of approved) for (const e of x.s.details.extraPlus ?? []) {
+    const label = e.note.trim();
+    if (label && e.points > 0) phongTrao.set(label, (phongTrao.get(label) ?? 0) + 1);
+  }
+  const weekIdx = state.weeks.findIndex(w => w.id === weekId);
+  const curNum = weekIdx >= 0 ? weekNumberOf(state.weeks[weekIdx], weekIdx + 1) : 0;
+  const deltas: { name: string; d: number }[] = [];
+  for (const x of approved) {
+    const prev = state.scores
+      .filter(s => s.classId === x.s.classId && s.status === 'approved' && s.weekId !== weekId)
+      .map(s => ({ s, n: weekNumberOf(state.weeks.find(w => w.id === s.weekId) ?? { id: s.weekId, label: '', dateRange: '' }, state.weeks.findIndex(w => w.id === s.weekId) + 1) }))
+      .filter(y => y.n < curNum)
+      .sort((a, b) => b.n - a.n)[0];
+    if (prev) deltas.push({ name: x.name, d: x.c.final - calcScore(prev.s.details).final });
+  }
+  const improved = deltas.filter(x => x.d > 0).sort((a, b) => b.d - a.d).slice(0, 3);
+  const dropped = deltas.filter(x => x.d < 0).sort((a, b) => a.d - b.d).slice(0, 3);
+  const stats = violationStats(approved.map(x => x.s), state.classes);
   const lines = [
     `Số lớp đã duyệt: ${approved.length}/${state.classes.length}.`,
     approved.length ? `Bảng điểm: ${approved.map(x => `${x.name} ${x.c.final}đ loại ${x.c.cls}`).join('; ')}.` : 'Chưa có lớp nào được duyệt.',
+    `Giờ học toàn trường: ${sum(d => d.hoursTot)} giờ Tốt, ${sum(d => d.hoursKha)} giờ Khá, ${sum(d => d.hoursTb)} giờ Trung bình, ${sum(d => d.hoursYeu)} giờ Yếu.`,
+    tot100.length ? `Lớp đạt 100% giờ học tốt: ${tot100.join(', ')}.` : 'Chưa có lớp đạt 100% giờ học tốt.',
+    `Điểm tốt: ${sum(d => d.goodHigh)} điểm từ 5 trở lên, ${sum(d => d.goodLow)} điểm dưới 5.`,
+    phongTrao.size ? `Phong trào/cộng khác: ${[...phongTrao.entries()].map(([k, v]) => `${k} (${v} lớp)`).join(', ')}.` : 'Không ghi nhận phong trào/cộng khác.',
+    `Vắng học: ${sum(d => d.absentPermit)} có phép, ${sum(d => d.absentNoPermit)} không phép.`,
+    stats.topViolations.length ? `Lỗi vi phạm hay gặp: ${stats.topViolations.slice(0, 5).map(v => `${v.label} (${v.count} lượt)`).join(', ')}.` : 'Không ghi nhận lỗi vi phạm.',
+    improved.length ? `Tiến bộ so với tuần duyệt trước: ${improved.map(x => `${x.name} (+${x.d}đ)`).join(', ')}.` : 'Chưa có lớp tiến bộ so với tuần duyệt trước.',
+    dropped.length ? `Giảm điểm so với tuần duyệt trước: ${dropped.map(x => `${x.name} (${x.d}đ)`).join(', ')}.` : 'Không có lớp giảm điểm so với tuần duyệt trước.',
     `Ưu điểm (bản tự soạn): ${auto.pros}`,
     `Nhược điểm (bản tự soạn): ${auto.cons}`,
+  ];
+  return lines.join('\n');
+}
+
+// Số liệu của một phiếu lớp gửi cho AI soạn ý kiến cờ đỏ: điểm, giờ
+// học, điểm tốt, lỗi vi phạm theo số lượt. Không kèm tên học sinh.
+export function classFacts(state: AppState, score: Score): string {
+  const cls = state.classes.find(c => c.id === score.classId);
+  const week = state.weeks.find(w => w.id === score.weekId);
+  const d = score.details;
+  const c = calcScore(d);
+  // Bỏ tên học sinh trước khi gửi AI: chỉ giữ số lượt vi phạm.
+  const clean: Details = { ...d, names: '', violNames: {} };
+  const lines = [
+    `Lớp ${cls?.name ?? score.classId}, ${week?.label ?? ''}: điểm thi đua ${c.final}đ, loại ${c.cls}.`,
+    c.is100Tot ? 'Giờ học: 100% giờ Tốt.' : `Giờ học: ${d.hoursTot} Tốt, ${d.hoursKha} Khá, ${d.hoursTb} Trung bình, ${d.hoursYeu} Yếu.`,
+    `Điểm tốt: ${d.goodHigh} điểm từ 5 trở lên, ${d.goodLow} điểm dưới 5.`,
+    ...hocTapLines(clean).map(x => `Học tập: ${x}`),
+    ...neNepLines(clean).map(x => `Nề nếp: ${x}`),
   ];
   return lines.join('\n');
 }

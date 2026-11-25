@@ -235,3 +235,21 @@ button.chip{cursor:pointer;font:inherit}
 /* Lưới hồ sơ ở Quản lý: co được theo chiều rộng, không dùng minWidth inline. */
 .prof-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
 .prof-grid>*{min-width:0}
+
+/* Giao diện hiện đại gọn nhẹ: thẻ mềm, nút bo tròn, thanh điều hướng
+   dưới cùng trên điện thoại như các ứng dụng hiện hành. */
+body{background:linear-gradient(180deg,#f8fafc 0,#f4f6f8 220px)}
+.card{border-radius:18px;box-shadow:0 1px 2px rgba(15,23,42,.04),0 6px 20px rgba(15,23,42,.05)}
+.card h2{border-left:none;padding-left:0;font-size:16px}
+.btn{border-radius:12px}
+input,select,textarea{border-radius:12px}
+input:focus,select:focus,textarea:focus{outline:2px solid rgba(153,27,27,.35);outline-offset:1px;border-color:var(--brand)}
+.tabs{background:rgba(255,255,255,.85);border:1px solid var(--line);border-radius:999px;padding:4px;box-shadow:var(--shadow-sm);backdrop-filter:blur(8px)}
+.tabs button{border:none;background:transparent;box-shadow:none}
+.tabs button.on{box-shadow:0 2px 8px rgba(153,27,27,.3)}
+@media(max-width:760px){
+  .tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tabs button{flex:0 0 auto;padding:9px 12px;min-height:40px}
+  .card{padding:14px}
+}

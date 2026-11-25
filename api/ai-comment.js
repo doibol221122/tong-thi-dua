@@ -10,7 +10,7 @@ function json(status, obj) {
   return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-async function requireAdmin(request) {
+async function requireUser(request) {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const anon = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
   if (!url || !anon) return { error: 'Máy chủ chưa có cấu hình Supabase.' };
@@ -27,12 +27,12 @@ async function requireAdmin(request) {
   if (!profRes.ok) return { error: 'Không kiểm tra được vai trò tài khoản.' };
   const rows = await profRes.json();
   const profile = Array.isArray(rows) ? rows[0] : null;
-  if (!profile || profile.role !== 'admin' || profile.status !== 'active') return { error: 'Chỉ Ban thi đua mới dùng được AI nhận xét.' };
-  return { userId: user.id };
+  if (!profile || profile.status !== 'active') return { error: 'Tài khoản chưa được kích hoạt.' };
+  return { userId: user.id, role: profile.role };
 }
 
 export async function POST(request) {
-  const gate = await requireAdmin(request);
+  const gate = await requireUser(request);
   if (gate.error) return json(403, { error: gate.error });
   const now = Date.now();
   if (now - (rate.get(gate.userId) || 0) < 5000) return json(429, { error: 'Vừa gọi AI xong, chờ vài giây rồi thử lại nhé.' });
@@ -48,17 +48,26 @@ export async function POST(request) {
   let body;
   try { body = await request.json(); } catch { return json(400, { error: 'Dữ liệu gửi lên không đúng định dạng.' }); }
   const weekLabel = String(body?.weekLabel || '').slice(0, 80);
-  const facts = String(body?.facts || '').slice(0, 6000);
-  if (!facts.trim()) return json(400, { error: 'Chưa có số liệu tuần để AI soạn nhận xét.' });
+  const facts = String(body?.facts || '').slice(0, 8000);
+  const mode = body?.mode === 'score' ? 'score' : 'week';
+  if (mode === 'week' && gate.role !== 'admin') return json(403, { error: 'Chỉ Ban thi đua mới dùng được AI nhận xét chung.' });
+  if (mode === 'score' && gate.role !== 'admin' && gate.role !== 'codo') return json(403, { error: 'Chỉ Ban thi đua và cờ đỏ mới dùng được AI soạn ý kiến.' });
+  if (!facts.trim()) return json(400, { error: 'Chưa có số liệu để AI soạn nhận xét.' });
 
-  const prompt = [
+  const prompt = mode === 'score' ? [
+    'Bạn là trợ lý soạn ý kiến của cờ đỏ theo dõi thi đua một lớp THPT ở Việt Nam.',
+    'Dưới đây là số liệu phiếu thi đua của lớp trong tuần (chỉ gồm điểm, giờ học và số lượt vi phạm, không có tên học sinh):',
+    facts,
+    'Hãy soạn một đoạn ý kiến ngắn (2-3 câu) bằng tiếng Việt: nêu mặt tốt của lớp trước, sau đó nêu tồn tại cần khắc phục nếu có, chỉ dựa trên số liệu trên, không bịa thêm số liệu.',
+    'Trả về đúng JSON dạng {"text":"..."} không kèm chữ nào khác.',
+  ].join('\n') : [
     'Bạn là trợ lý soạn nhận xét thi đua tuần cho Ban thi đua một trường THPT ở Việt Nam.',
     `Tuần: ${weekLabel || 'tuần hiện tại'}.`,
-    'Dưới đây là số liệu tổng hợp của tuần (chỉ gồm điểm, loại và lỗi vi phạm theo lớp, không có tên học sinh):',
+    'Dưới đây là số liệu tổng hợp của tuần (điểm, giờ học, điểm tốt, phong trào, vắng học, lỗi vi phạm, tiến bộ/tụt điểm theo lớp; không có tên học sinh):',
     facts,
-    'Hãy soạn phần Nhận xét chung gồm Ưu điểm và Nhược điểm đúng văn phong bản Tổng hợp thi đua tuần của trường: ngắn gọn, mỗi phần chỉ 1-2 câu, chỉ dựa trên số liệu trên, không bịa thêm số liệu hay tên lớp ngoài dữ liệu.',
-    'Ưu điểm viết theo mẫu: "Các lớp 10B1, 10B2 đạt 100% giờ học tốt." — nêu tên các lớp đạt 100% giờ học tốt; nếu không có lớp nào đạt 100% thì nêu các lớp dẫn đầu tuần.',
-    'Nhược điểm viết theo mẫu: "Vẫn còn một số học sinh vi phạm nội quy đi muộn, mang đồ ăn vào lớp." — nêu các lỗi vi phạm còn tồn tại, không nêu tên học sinh, không nêu điểm số.',
+    'Hãy soạn phần Nhận xét chung tổng thể của tuần gồm Ưu điểm và Nhược điểm, đúng văn phong bản Tổng hợp thi đua tuần của trường, chỉ dựa trên số liệu trên, không bịa thêm số liệu hay tên lớp ngoài dữ liệu.',
+    'Ưu điểm (2-3 câu): mở đầu theo mẫu "Các lớp 10B1, 10B2 đạt 100% giờ học tốt." rồi nêu thêm điểm tốt, phong trào hoặc lớp tiến bộ nổi bật nếu có.',
+    'Nhược điểm (2-3 câu): mở đầu theo mẫu "Vẫn còn một số học sinh vi phạm nội quy đi muộn, mang đồ ăn vào lớp." rồi nêu thêm giờ học chưa tốt, lớp giảm điểm hoặc lớp chưa hoàn thành phiếu nếu có. Không nêu tên học sinh.',
     'Trả về đúng JSON dạng {"pros":"...","cons":"..."} không kèm chữ nào khác.',
   ].join('\n');
 
@@ -84,6 +93,11 @@ export async function POST(request) {
       try { parsed = JSON.parse(text); } catch {
         const m = text.match(/\{[\s\S]*\}/);
         if (m) { try { parsed = JSON.parse(m[0]); } catch { /* bỏ qua */ } }
+      }
+      if (mode === 'score') {
+        const textOut = String(parsed?.text || '').trim();
+        if (!textOut) continue;
+        return json(200, { text: textOut, model });
       }
       const pros = String(parsed?.pros || '').trim();
       const cons = String(parsed?.cons || '').trim();
