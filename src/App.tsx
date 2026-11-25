@@ -1764,7 +1764,7 @@ function ScoreForm(props: {
           <textarea value={d.opinionClass} disabled={!canEdit} onChange={e => props.setD('opinionClass', e.target.value)} />
           <label>Ý kiến của cờ đỏ</label>
           <textarea value={d.opinionCodo} disabled={!canEdit} onChange={e => props.setD('opinionCodo', e.target.value)} />
-          {!canEdit && <div className="warn">Phiếu này bạn không được sửa (xem phân quyền / phiếu đã nộp hoặc đã duyệt / tuần đã chốt).</div>}
+          {week?.submittedAt ? <div className="err">Tuần này đã chốt sổ — cờ đỏ không nhập lại được. Ban thi đua mở lại sổ thì mới nhập tiếp được.</div> : !canEdit && <div className="warn">Phiếu này bạn không được sửa (xem phân quyền / phiếu đã nộp hoặc đã duyệt / tuần đã chốt).</div>}
           <div className="scorebar">
             <div className="scorebar-scores"><span>(1) Cộng: <b>+{calc.plus}đ</b></span><span>(2) Trừ: <b>-{calc.minus}đ</b></span><span>Điểm thi đua: <b>{calc.final}đ</b></span><span className={`badge ${calc.cls}`}>Loại {calc.cls}</span></div>
             <div className="scorebar-btns">

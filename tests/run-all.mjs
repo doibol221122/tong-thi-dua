@@ -15,7 +15,7 @@ const candidates = [`${HERE}/../tong-thi-dua`, `${HERE}/..`];
 const APP_DIR = process.env.APP_DIR || candidates.find(d => existsSync(`${d}/package.json`) && existsSync(`${d}/src/App.tsx`));
 if (!APP_DIR) { console.error('Không tìm thấy thư mục app (tong-thi-dua). Đặt APP_DIR rồi chạy lại.'); process.exit(1); }
 
-const SUITES = ['test-violnames.mjs', 'test-stepper.mjs', 'test-lock-names.mjs', 'test-week-norank.mjs', 'test-smoke.mjs', 'test-autofill.mjs', 'test-lock-duty.mjs', 'test-mobile.mjs', 'test-codo-tabs.mjs', 'test-confirm.mjs'];
+const SUITES = ['test-violnames.mjs', 'test-stepper.mjs', 'test-lock-names.mjs', 'test-week-norank.mjs', 'test-smoke.mjs', 'test-autofill.mjs', 'test-lock-duty.mjs', 'test-mobile.mjs', 'test-codo-tabs.mjs', 'test-confirm.mjs', 'test-closed-week.mjs'];
 const SB_SUITES = ['test-supabase-register.mjs', 'test-supabase-duty.mjs', 'test-supabase-invite.mjs', 'test-supabase-recovery.mjs', 'test-supabase-conflict.mjs'];
 // Khóa anon public của project tong-thi-dua (dùng cho build test; khóa này
 // vốn đã nằm trong bundle public, không phải service_role).
