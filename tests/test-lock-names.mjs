@@ -39,6 +39,8 @@ async function newPage(seed, session) {
   // Ô tên hiện ở MỌI mục vi phạm, kể cả mục đang 0 lượt và mục điểm dưới 5.
   ok(await page.getByLabel('HS vi phạm Đi muộn').count() === 1, 'A: mục Đi muộn (0 lượt) vẫn có ô ghi tên HS');
   ok(await page.getByLabel('HS vi phạm Tổng điểm tốt (<5)').count() === 1, 'A: mục điểm dưới 5 có ô ghi tên HS');
+  ok(await page.getByLabel('HS vi phạm Rác trong hộc bàn').count() === 1, 'A: mục Rác trong hộc bàn (-2đ/lượt) có ô ghi tên HS');
+  ok(await page.getByLabel('HS vi phạm Không tắt điện ra về').count() === 1, 'A: mục Không tắt điện ra về (-5đ/lượt) có ô ghi tên HS');
   await nameInput.fill('Lan Anh');
   // Vắng: không còn ô nhập tổng tay; chỉ nhập có phép + không phép.
   ok((await page.getByLabel('Vắng học (tổng)', { exact: true }).count()) === 0, 'A: không còn ô nhập tổng vắng tay');

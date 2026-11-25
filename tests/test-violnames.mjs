@@ -33,6 +33,28 @@ ok(hocTapLines(d).some(x => x === 'Điểm dưới 5: Huy, Phúc (-2)'), 'dòng 
 d.lateLate = 0; d.violNames.lateLate = ''; // về 0 thì xóa luôn tên đã ghi
 ok(!neNepLines(d).some(x => x.startsWith('Đi muộn:')), 'lượt về 0 thì dòng vi phạm biến mất');
 
+// Rác trong hộc bàn (-2đ/lượt).
+d = emptyDetails(); d.hoursTot = 25; d.allGood = true;
+d.trashDesk = 3;
+ok(sectionSums(d).neNepMinus === 6, 'rác trong hộc bàn: 3 lượt -> trừ 6đ');
+ok(neNepLines(d).some(x => x === 'Rác trong hộc bàn: 3 lượt (-6)'), 'dòng Rác trong hộc bàn đúng mẫu');
+d.trashDesk = 1; d.violNames = { trashDesk: 'Lan' };
+ok(neNepLines(d).some(x => x === 'Rác trong hộc bàn: Lan (-2)'), 'dòng Rác trong hộc bàn gắn tên HS');
+d.trashDesk = 101;
+ok(validateDetails(d).some(e => e.includes('Rác trong hộc bàn') && e.includes('100')), 'rác trong hộc bàn > 100 lượt -> báo lỗi validation');
+d.trashDesk = 0;
+
+// Không tắt điện ra về (-5đ/lượt).
+d = emptyDetails(); d.hoursTot = 25; d.allGood = true;
+d.lightsLeftOn = 2;
+ok(sectionSums(d).neNepMinus === 10, 'không tắt điện ra về: 2 lượt -> trừ 10đ');
+ok(neNepLines(d).some(x => x === 'Không tắt điện ra về: 2 lượt (-10)'), 'dòng Không tắt điện ra về đúng mẫu');
+d.lightsLeftOn = 1; d.violNames = { lightsLeftOn: 'Hòa' };
+ok(neNepLines(d).some(x => x === 'Không tắt điện ra về: Hòa (-5)'), 'dòng Không tắt điện ra về gắn tên HS');
+d.lightsLeftOn = 101;
+ok(validateDetails(d).some(e => e.includes('Không tắt điện ra về') && e.includes('100')), 'không tắt điện > 100 lượt -> báo lỗi validation');
+d.lightsLeftOn = 0;
+
 // Vi phạm không ghi tên: giữ số lượt.
 d = emptyDetails(); d.hoursTot = 25; d.allGood = true;
 d.lateLate = 2;

@@ -74,10 +74,14 @@ async function newPage(seed, session) {
   let t = await page.locator('body').innerText();
   ok(t.includes('Trực lớp 10B5'), 'codo: chip Trực lớp 10B5');
   ok(t.includes('lớp bạn trực'), 'codo: banner lớp bạn trực');
+  // Phiếu w5 c4 (10B5) trong seed-duty đang Bị trả lại — cờ đỏ phải thấy ngay.
+  ok(t.includes('Phiếu bị trả lại'), 'codo: Nhập điểm hiện banner "Phiếu bị trả lại"');
+  ok(t.includes('Thiếu số liệu giờ Khá'), 'codo: banner hiện đúng lý do trả lại');
   ok(await page.getByRole('button', { name: 'Đổi lớp trực' }).count() === 1, 'codo: có nút Đổi lớp trực');
   await page.getByRole('button', { name: 'Tổng quan' }).click();
   await page.waitForTimeout(400);
   t = await page.locator('main').innerText();
+  ok(t.includes('Bị trả lại') && t.includes('Thiếu số liệu giờ Khá'), 'codo: Tổng quan hiện "Phiếu tuần này: Bị trả lại — lý do"');
   ok(t.includes('Tuần này bạn trực lớp 10B5'), 'codo: thẻ Lớp của bạn hiện trực lớp 10B5');
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   ok(overflow <= 0, 'codo: không tràn ngang 390px');

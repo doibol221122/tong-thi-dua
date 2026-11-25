@@ -1374,6 +1374,8 @@ function ScoreForm(props: {
               {fv('workSleep', 'Ngủ gục', '-2đ/lượt')}
               {fv('lateDuty', 'Trực nhật muộn', '-2đ/lượt')}
               {fv('dirty', 'Lớp bẩn', '-5đ/lượt')}
+              {fv('trashDesk', 'Rác trong hộc bàn', '-2đ/lượt')}
+              {fv('lightsLeftOn', 'Không tắt điện ra về', '-5đ/lượt')}
               {fv('foodEat', 'Ăn/mang đồ ăn vào lớp', '-2đ/lượt')}
               {fv('foodPhone', 'Không bỏ điện thoại vào tủ', '-2đ/lượt')}
               {fv('dressSlipper', 'Mang dép lê', '-1đ/lượt')}
