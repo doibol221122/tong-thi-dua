@@ -23,7 +23,7 @@ await page.waitForTimeout(600);
 const card = page.locator('.general-comment');
 ok(await card.count() === 1, 'comment: Xếp hạng có thẻ Nhận xét chung');
 const pros0 = await card.locator('textarea[aria-label="Nhận xét chung — Ưu điểm"]').inputValue();
-ok(pros0.includes('Các lớp dẫn đầu tuần: 10B1 (128đ)'), 'comment: ưu điểm tự soạn nêu lớp dẫn đầu (thấy: ' + pros0.slice(0, 120) + ')');
+ok(pros0.includes('đạt 100% giờ học tốt'), 'comment: ưu điểm tự soạn theo văn phong bản tuần (thấy: ' + pros0.slice(0, 120) + ')');
 const cons0 = await card.locator('textarea[aria-label="Nhận xét chung — Nhược điểm"]').inputValue();
 ok(cons0.includes('chưa có phiếu đã duyệt'), 'comment: nhược điểm tự soạn nêu lớp chưa có phiếu duyệt (thấy: ' + cons0.slice(0, 160) + ')');
 

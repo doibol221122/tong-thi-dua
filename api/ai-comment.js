@@ -53,7 +53,9 @@ export async function POST(request) {
     `Tuần: ${weekLabel || 'tuần hiện tại'}.`,
     'Dưới đây là số liệu tổng hợp của tuần (chỉ gồm điểm, loại và lỗi vi phạm theo lớp, không có tên học sinh):',
     facts,
-    'Hãy soạn phần Nhận xét chung gồm Ưu điểm và Nhược điểm bằng tiếng Việt trang trọng, ngắn gọn (mỗi phần 2-4 câu), chỉ dựa trên số liệu trên, không bịa thêm số liệu hay tên lớp ngoài dữ liệu.',
+    'Hãy soạn phần Nhận xét chung gồm Ưu điểm và Nhược điểm đúng văn phong bản Tổng hợp thi đua tuần của trường: ngắn gọn, mỗi phần chỉ 1-2 câu, chỉ dựa trên số liệu trên, không bịa thêm số liệu hay tên lớp ngoài dữ liệu.',
+    'Ưu điểm viết theo mẫu: "Các lớp 10B1, 10B2 đạt 100% giờ học tốt." — nêu tên các lớp đạt 100% giờ học tốt; nếu không có lớp nào đạt 100% thì nêu các lớp dẫn đầu tuần.',
+    'Nhược điểm viết theo mẫu: "Vẫn còn một số học sinh vi phạm nội quy đi muộn, mang đồ ăn vào lớp." — nêu các lỗi vi phạm còn tồn tại, không nêu tên học sinh, không nêu điểm số.',
     'Trả về đúng JSON dạng {"pros":"...","cons":"..."} không kèm chữ nào khác.',
   ].join('\n');
 
