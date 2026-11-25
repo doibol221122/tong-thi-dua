@@ -105,15 +105,20 @@ async function fillRegister(page, { name, role, className, email, password }) {
   const { ctx, page } = await newSbPage(browser, stub, { seedSession: adminUser });
   await waitText(page, 'Tuần 05');
   await page.getByRole('button', { name: 'Quản lý', exact: true }).click();
+  // Quản lý chia mục theo vai trò: tài khoản admin ở mục "Tài khoản BTĐ".
+  await page.getByRole('button', { name: 'Tài khoản BTĐ', exact: true }).click();
   await waitText(page, 'Người Đầu Tiên');
-  // Mỗi hồ sơ là 1 .card lồng trong .card "Tài khoản" — phải chọn đúng
+  // Mỗi hồ sơ là 1 .card lồng trong .card mục tài khoản — phải chọn đúng
   // .card của từng hồ sơ (chọn .card ngoài sẽ đếm nút của mọi hồ sơ).
   const ownCard = page.locator('main .card .card', { hasText: 'Người Đầu Tiên' });
   ok((await ownCard.getByText('Tài khoản của bạn').count()) === 1, 'register-E: dòng tài khoản của mình có badge "Tài khoản của bạn"');
   ok((await ownCard.getByRole('button', { name: 'Xóa tài khoản' }).count()) === 0, 'register-E: dòng tài khoản của mình KHÔNG có nút Xóa tài khoản (P2-09)');
+  ok((await page.locator('.prof-grid').count()) >= 1, 'register-E: hàng hồ sơ dùng lưới co được (.prof-grid, P2-04)');
+  // Tài khoản cờ đỏ ở mục riêng.
+  await page.getByRole('button', { name: 'Tài khoản cờ đỏ', exact: true }).click();
+  await waitText(page, 'Nguyễn Văn A');
   const otherCard = page.locator('main .card .card', { hasText: 'Nguyễn Văn A' });
   ok((await otherCard.getByRole('button', { name: 'Xóa tài khoản' }).count()) === 1, 'register-E: dòng tài khoản khác vẫn có nút Xóa tài khoản');
-  ok((await page.locator('.prof-grid').count()) >= 1, 'register-E: hàng hồ sơ dùng lưới co được (.prof-grid, P2-04)');
   await ctx.close();
 }
 

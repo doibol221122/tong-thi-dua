@@ -48,14 +48,11 @@ async function newPage(seed, session) {
   await page.waitForTimeout(500);
   t = await page.locator('main').innerText();
   ok(t.includes('Đã duyệt 2 phiếu của Tuần 05'), 'admin: duyệt tất cả -> báo đã duyệt 2 phiếu');
-  // Lịch trực + mời GVCN.
+  // Quản lý chia mục: mặc định mở "Tuần & lớp" (đổi tên lớp ở đây).
   await page.getByRole('button', { name: 'Quản lý' }).click();
   await page.waitForTimeout(400);
   t = await page.locator('main').innerText();
-  ok(t.includes('Lịch trực cờ đỏ'), 'admin: có thẻ Lịch trực cờ đỏ');
-  ok(t.includes('Mời giáo viên chủ nhiệm'), 'admin: có thẻ Mời giáo viên chủ nhiệm');
-  const rows = await page.locator('main table tbody tr').count();
-  ok(rows >= 17, 'admin: bảng lịch trực có 17 hàng tuần (có ' + rows + ')');
+  ok(t.includes('Tuần 05'), 'admin: mục Tuần & lớp liệt kê Tuần 05');
   // Sửa tên lớp.
   await page.getByRole('button', { name: 'Sửa tên' }).first().click();
   await page.waitForTimeout(300);
@@ -67,6 +64,18 @@ async function newPage(seed, session) {
   await page.waitForTimeout(400);
   t = await page.locator('main').innerText();
   ok(t.includes('10B1X'), 'admin: sửa tên lớp 10B1 -> 10B1X');
+  // Lịch trực ở mục Tài khoản cờ đỏ.
+  await page.getByRole('button', { name: 'Tài khoản cờ đỏ', exact: true }).click();
+  await page.waitForTimeout(400);
+  t = await page.locator('main').innerText();
+  ok(t.includes('Lịch trực cờ đỏ'), 'admin: mục cờ đỏ có thẻ Lịch trực cờ đỏ');
+  const rows = await page.locator('main table tbody tr').count();
+  ok(rows >= 17, 'admin: bảng lịch trực có 17 hàng tuần (có ' + rows + ')');
+  // Mời GVCN ở mục Tài khoản GVCN.
+  await page.getByRole('button', { name: 'Tài khoản GVCN', exact: true }).click();
+  await page.waitForTimeout(400);
+  t = await page.locator('main').innerText();
+  ok(t.includes('Mời giáo viên chủ nhiệm'), 'admin: mục GVCN có thẻ Mời giáo viên chủ nhiệm');
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   ok(overflow <= 0, 'admin: không tràn ngang 390px (Quản lý)');
   await ctx.close();
@@ -128,7 +137,8 @@ async function newPage(seed, session) {
   const { ctx, page } = await newPage(seed5, { role: 'admin', name: 'Ban thi đua' });
   let t = await page.locator('body').innerText();
   ok(t.includes('CHƯA CẤU HÌNH SUPABASE — dữ liệu chỉ lưu trên máy này, không đồng bộ'), 'local: banner cố định cảnh báo chế độ máy này');
-  ok(t.includes('Chỉ lưu trên máy này'), 'local: chip đồng bộ hiện "Chỉ lưu trên máy này"');
+  // Chip "Chỉ lưu trên máy này" ẩn ở màn hẹp (header phải hiện đủ tuần + vai trò + tên) — thông tin đã có ở banner trên.
+  ok((await page.locator('.userbox .chip', { hasText: 'Chỉ lưu trên máy này' }).isVisible()) === false, 'local: chip "Chỉ lưu trên máy này" ẩn ở màn hẹp');
   await page.getByRole('button', { name: 'Nhập điểm' }).click();
   await page.waitForTimeout(400);
   // P2-06: ở 390px hàng nút chọn lớp bị ẩn, chọn lớp bằng dropdown.

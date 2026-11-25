@@ -362,6 +362,9 @@ async function newPage(seed, session) {
   await page.waitForTimeout(800);
   await page.getByRole('button', { name: 'Quản lý' }).click();
   await page.waitForTimeout(400);
+  // Nhập JSON sao lưu nằm ở mục "Cài đặt".
+  await page.getByRole('button', { name: 'Cài đặt', exact: true }).click();
+  await page.waitForTimeout(400);
   const bad = Buffer.from(JSON.stringify({ settings: seed5.settings, weeks: [], classes: [], roster: [], logs: [] }));
   await page.locator('input[type=file]').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: bad });
   await page.waitForTimeout(300);

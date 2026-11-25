@@ -19,6 +19,8 @@ stub.seedProfile({ user: admin, role: 'admin', status: 'active' });
   const { ctx, page } = await newSbPage(browser, stub, { seedSession: admin, clipboard: true });
   await waitText(page, 'Tổng quan');
   await page.getByRole('button', { name: 'Quản lý', exact: true }).click();
+  // Thẻ mời GVCN nằm ở mục "Tài khoản GVCN".
+  await page.getByRole('button', { name: 'Tài khoản GVCN', exact: true }).click();
   await page.waitForTimeout(500);
   let t = await page.locator('main').innerText();
   ok(t.includes('Mời giáo viên chủ nhiệm'), 'invite-A: tab Quản lý có thẻ "Mời giáo viên chủ nhiệm"');

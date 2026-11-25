@@ -1839,6 +1839,10 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
   }
   // Mời GVCN: chọn lớp rồi chép link mời (form đăng ký mở sẵn đúng lớp).
   const [inviteClass, setInviteClass] = useState(''); const [inviteNote, setInviteNote] = useState('');
+  // Chia Quản lý thành mục: Tuần & lớp / Tài khoản cờ đỏ / Tài khoản GVCN / Tài khoản BTĐ / Cài đặt.
+  const [section, setSection] = useState<'tuan' | 'codo' | 'gvcn' | 'btd' | 'caidat'>('tuan');
+  // Hồ sơ của mục tài khoản đang mở (codo = cờ đỏ, viewer = GVCN, admin = Ban thi đua).
+  const sectionProfiles = profiles.filter(p => section === 'codo' ? p.role === 'codo' : section === 'gvcn' ? p.role === 'viewer' : p.role === 'admin');
   function copyInvite() {
     if (!inviteClass) return;
     const clsName = state.classes.find(c => c.id === inviteClass)?.name ?? '';
@@ -1851,13 +1855,18 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
   if (!isAdmin) return <div className="card"><h2>Quản lý</h2><p>Chỉ Ban thi đua mới quản lý tuần, lớp, cờ đỏ và cài đặt.</p></div>;
   return (
     <div>
-      <div className="card"><h2>Tài khoản</h2>
+      <div className="row" style={{ marginBottom: 8 }}>
+        {([['tuan', 'Tuần & lớp'], ['codo', 'Tài khoản cờ đỏ'], ['gvcn', 'Tài khoản GVCN'], ['btd', 'Tài khoản BTĐ'], ['caidat', 'Cài đặt']] as const).map(([k, l]) => (
+          <button key={k} type="button" className={section === k ? 'seg on' : 'seg'} onClick={() => setSection(k)}>{l}</button>
+        ))}
+      </div>
+      {['codo', 'gvcn', 'btd'].includes(section) && <div className="card"><h2>{section === 'codo' ? 'Tài khoản cờ đỏ' : section === 'gvcn' ? 'Tài khoản GVCN' : 'Tài khoản Ban thi đua'}</h2>
         {!isSupabaseConfigured && <p>Chưa cấu hình Supabase — quản lý tài khoản chỉ dùng được sau khi cấu hình Supabase (xem README).</p>}
         {isSupabaseConfigured && (
           <>
             <div className="row"><button className="btn ghost" type="button" onClick={onRefreshProfiles}>Làm mới danh sách</button></div>
-            {profiles.length === 0 && <p>Chưa có tài khoản nào.</p>}
-            {profiles.map(p => {
+            {sectionProfiles.length === 0 && <p>Chưa có tài khoản nào trong mục này.</p>}
+            {sectionProfiles.map(p => {
               const clsName = (p.role === 'codo' || p.role === 'viewer') ? state.classes.find(c => c.id === p.assigned_class_id)?.name : undefined;
               // Gợi ý lớp trực theo lịch cho tuần đã gán (hoặc tuần hiện tại).
               const dutyWk = p.role === 'codo' && clsName ? state.weeks[state.weeks.length - 1] : undefined;
@@ -1890,8 +1899,8 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
             })}
           </>
         )}
-      </div>
-      <div className="card"><h2>Mời giáo viên chủ nhiệm</h2>
+      </div>}
+      {section === 'gvcn' && <div className="card"><h2>Mời giáo viên chủ nhiệm</h2>
         <p>Gửi link mời cho GVCN theo từng lớp: họ mở link là form đăng ký đã chọn sẵn vai trò Chỉ xem và đúng lớp đó. Họ đăng ký xong, bạn bấm Duyệt ở mục Tài khoản là xong — GVCN vào app sẽ thấy ngay thẻ “Lớp của tôi” với điểm, hạng và vi phạm của lớp mình.</p>
         <div className="row"><select value={inviteClass} onChange={e => setInviteClass(e.target.value)}><option value="">— Chọn lớp —</option>{state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select><button className="btn" type="button" disabled={!inviteClass} onClick={copyInvite}>Chép link mời GVCN</button></div>
         {inviteNote && <p>{inviteNote}</p>}
@@ -1899,8 +1908,8 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
           const gvcn = profiles.find(p => p.role === 'viewer' && p.assigned_class_id === c.id);
           return <p key={c.id}>{c.name} — {gvcn ? <>GVCN: <b>{gvcn.full_name}</b> ({gvcn.status === 'active' ? 'đang dùng' : gvcn.status === 'pending' ? 'chờ duyệt' : 'đã khóa'})</> : <span style={{ color: '#9ca3af' }}>Chưa có GVCN</span>}</p>;
         })}</div>
-      </div>
-      <div className="card"><h2>Tuần</h2>
+      </div>}
+      {section === 'tuan' && <div className="card"><h2>Tuần</h2>
         <div className="row"><input type="text" placeholder="Vd: Tuần 4" value={weekLabel} onChange={e => setWeekLabel(e.target.value)} style={{ maxWidth: 200 }} /><input type="text" placeholder="Vd: 17/11 – 22/11" value={weekRange} onChange={e => setWeekRange(e.target.value)} style={{ maxWidth: 220 }} /><button className="btn" type="button" onClick={() => { if (!weekLabel.trim()) return; const w: Week = { id: uid(), label: weekLabel.trim(), dateRange: weekRange.trim() }; setState({ ...state, weeks: [...state.weeks, w] }); onLog('Tạo tuần', `${w.label} — ${monthLabel(monthBlockOf(w, state.weeks.length + 1))}`); setWeekLabel(''); setWeekRange(''); }}>Thêm tuần</button></div>
         {state.weeks.map((w, i) => <p key={w.id}>{w.label} {w.dateRange} — {monthLabel(monthBlockOf(w, i + 1))} {w.submittedAt ? `— Đã nộp ${w.submittedAt}` : '— Chưa chốt'} <button className="btn grey" type="button" onClick={() => {
           const n = state.scores.filter(s => s.weekId === w.id).length;
@@ -1917,8 +1926,8 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
             },
           });
         }}>Xóa</button></p>)}
-      </div>
-      <div className="card"><h2>Lớp</h2>
+      </div>}
+      {section === 'tuan' && <div className="card"><h2>Lớp</h2>
         <div className="row"><input type="text" placeholder="Vd: 10B1" value={className} onChange={e => setClassName(e.target.value)} style={{ maxWidth: 200 }} /><button className="btn" type="button" onClick={() => { if (!className.trim()) return; const nm = className.trim().toUpperCase(); if (state.classes.some(c => c.name.toUpperCase() === nm)) { setClassNote(`Đã có lớp ${nm} rồi.`); return; } const c: ClassItem = { id: uid(), name: nm }; setState({ ...state, classes: [...state.classes, c] }); onLog('Thêm lớp', c.name); setClassName(''); setClassNote(`Đã thêm lớp ${nm}.`); }}>Thêm lớp</button></div>
         <div className="row"><input type="text" value={bulkBase} onChange={e => setBulkBase(e.target.value)} style={{ maxWidth: 100 }} /><input type="number" value={bulkFrom} onChange={e => setBulkFrom(Number(e.target.value))} style={{ maxWidth: 80 }} /><span>đến</span><input type="number" value={bulkTo} onChange={e => setBulkTo(Number(e.target.value))} style={{ maxWidth: 80 }} /><button className="btn ghost" type="button" onClick={() => { const news: ClassItem[] = []; for (let i = bulkFrom; i <= bulkTo; i++) { const nm = `${bulkBase}${i}`; if (!state.classes.some(c => c.name === nm)) news.push({ id: uid(), name: nm }); } setState({ ...state, classes: [...state.classes, ...news] }); onLog('Thêm cả khối lớp', news.map(c => c.name).join(', ')); }}>Thêm cả khối (vd 10B1–10B5)</button></div>
         <p>{state.classes.length === 0 ? 'Chưa có lớp nào.' : ''}</p>
@@ -1968,8 +1977,8 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
           );
         })}
         {classNote && <p>{classNote}</p>}
-      </div>
-      <div className="card"><h2>Cờ đỏ trực — phân công</h2>
+      </div>}
+      {section === 'codo' && <div className="card"><h2>Cờ đỏ trực — phân công</h2>
         <div className="row"><input type="text" placeholder="Tên cờ đỏ" value={codoName} onChange={e => setCodoName(e.target.value)} style={{ maxWidth: 200 }} />
           <select value={codoClass} onChange={e => setCodoClass(e.target.value)} style={{ maxWidth: 160 }}><option value="">Chọn lớp</option>{state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
           <select value={codoWeek} onChange={e => setCodoWeek(e.target.value)} style={{ maxWidth: 160 }}><option value="">Chọn tuần</option>{state.weeks.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}</select>
@@ -2014,8 +2023,8 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
           onConfirm: () => setState({ ...state, roster: state.roster.map(x => x.id === r.id ? { ...x, active: !x.active } : x) }),
         })}>{r.active ? 'Tắt' : 'Bật'}</button></p>)}
         {state.roster.length === 0 && <p>Chưa phân công cờ đỏ nào.</p>}
-      </div>
-      <div className="card"><h2>Lịch trực cờ đỏ — Học kì 1, năm học 2026–2027</h2>
+      </div>}
+      {section === 'codo' && <div className="card"><h2>Lịch trực cờ đỏ — Học kì 1, năm học 2026–2027</h2>
         <p>Cột là lớp của cờ đỏ, ô là lớp cờ đỏ đó trực trong tuần. Tuần hiện tại được tô đậm. Hai cột cuối là lớp trực cổng chào cờ buổi sáng / chiều.</p>
         <div className="tablewrap"><table>
           <thead><tr><th>Tuần</th>{DUTY_CLASSES.map(c => <th key={c}>{c}</th>)}<th>Sáng</th><th>Chiều</th></tr></thead>
@@ -2034,18 +2043,18 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
             })}
           </tbody>
         </table></div>
-      </div>
-      <div className="card"><h2>Cài đặt hệ thống</h2>
+      </div>}
+      {section === 'caidat' && <div className="card"><h2>Cài đặt hệ thống</h2>
         <label>Tên trường</label><input type="text" value={state.settings.school} onChange={e => setState({ ...state, settings: { ...state.settings, school: e.target.value } })} />
         <label>Số văn bản (vd 04/TĐ-HV)</label><input type="text" value={state.settings.docNo} onChange={e => setState({ ...state, settings: { ...state.settings, docNo: e.target.value } })} />
         <label>Người ký</label><input type="text" value={state.settings.signer} onChange={e => setState({ ...state, settings: { ...state.settings, signer: e.target.value } })} />
         <label>Nhận xét chung — Ưu điểm (để trống sẽ tự gợi ý)</label><textarea value={state.settings.generalPros} onChange={e => setState({ ...state, settings: { ...state.settings, generalPros: e.target.value } })} />
         <label>Nhận xét chung — Nhược điểm (để trống sẽ tự gợi ý)</label><textarea value={state.settings.generalCons} onChange={e => setState({ ...state, settings: { ...state.settings, generalCons: e.target.value } })} />
-      </div>
-      <div className="card"><h2>Sao lưu dữ liệu</h2><p>Dữ liệu dùng chung qua Supabase (và lưu dự phòng trên trình duyệt). Xuất file JSON để sao lưu, nhập lại khi cần khôi phục.</p>
+      </div>}
+      {section === 'caidat' && <div className="card"><h2>Sao lưu dữ liệu</h2><p>Dữ liệu dùng chung qua Supabase (và lưu dự phòng trên trình duyệt). Xuất file JSON để sao lưu, nhập lại khi cần khôi phục.</p>
         <div className="row"><button className="btn" type="button" onClick={onExportJson}>Xuất JSON sao lưu</button><label className="btn ghost" style={{ padding: '10px 14px' }}>Nhập JSON sao lưu<input type="file" accept="application/json" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) onImportJson(f); }} /></label></div>
-      </div>
-      {isSupabaseConfigured && (
+      </div>}
+      {section === 'caidat' && isSupabaseConfigured && (
         <div className="card"><h2>Sao lưu tự động (Supabase)</h2>
           <p>Mỗi lần dữ liệu chung được lưu, Supabase giữ lại một bản sao (tối đa 30 bản gần nhất). Lỡ nhập sai / xóa nhầm thì khôi phục lại bản trước đó.</p>
           <div className="row"><button className="btn" type="button" onClick={() => void loadHistory()}>Tải danh sách bản sao lưu</button></div>
