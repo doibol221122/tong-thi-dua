@@ -92,7 +92,7 @@ function Stepper({ label, pts, value, onChange, disabled }: { label: string; pts
 
 // Chân trang dùng chung mọi màn hình của app.
 function AppFooter() {
-  return <footer className="app-footer">Bản quyền thuộc về Đoàn Trường THPT Hùng Vương - Quảng Phú</footer>;
+  return <footer className="app-footer">© 2026 Bản quyền thuộc về <strong>Đoàn trường THPT Hùng Vương – Quảng Phú</strong></footer>;
 }
 
 // Hộp thoại xác nhận trong app (P2-05, thay window.confirm): tiêu đề, nội

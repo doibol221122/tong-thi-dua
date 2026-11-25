@@ -54,6 +54,15 @@ const noOverflow = async (page, label) => {
   await page.locator('.menu-backdrop').click({ position: { x: 195, y: 700 } });
   await page.waitForTimeout(300);
   ok((await page.locator('.header-menu').count()) === 0, 'mobile-390: bấm nền ngoài đóng menu');
+  // Footer bản quyền cố định ở đáy màn hình, cuộn trang vẫn thấy.
+  const footer1 = await page.evaluate(() => { const f = document.querySelector('.app-footer'); if (!f) return null; const r = f.getBoundingClientRect(); return { pos: getComputedStyle(f).position, bottom: r.bottom, vh: window.innerHeight, text: f.innerText }; });
+  ok(!!footer1 && footer1.pos === 'fixed' && Math.abs(footer1.bottom - footer1.vh) <= 1, 'mobile-390: footer cố định ở đáy màn hình');
+  ok(!!footer1 && footer1.text.includes('© 2026 Bản quyền thuộc về'), 'mobile-390: footer hiện dòng bản quyền © 2026');
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await page.waitForTimeout(200);
+  const footer2 = await page.evaluate(() => { const f = document.querySelector('.app-footer'); if (!f) return null; const r = f.getBoundingClientRect(); return { bottom: r.bottom, vh: window.innerHeight }; });
+  ok(!!footer2 && Math.abs(footer2.bottom - footer2.vh) <= 1, 'mobile-390: cuộn xuống cuối trang footer vẫn cố định ở đáy');
+  await page.evaluate(() => window.scrollTo(0, 0));
   // P2-04: dấu "còn nữa" ở mép phải tab cuộn ngang.
   const mask = await page.evaluate(() => getComputedStyle(document.querySelector('.tabs')).maskImage);
   ok(mask.includes('linear-gradient'), 'mobile-390: tab cuộn ngang có dấu mờ "còn nữa" ở mép phải (maskImage=' + mask.slice(0, 40) + '…)');
