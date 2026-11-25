@@ -41,7 +41,7 @@ async function newPage(seed, session) {
   ok(t.includes('Bị trả lại (1)'), 'admin: Bị trả lại (1)');
   ok(!t.includes('Lớp cần nhắc'), 'admin: không còn thẻ Lớp cần nhắc riêng (đã gộp vào Cần xử lý ngay)');
   ok(t.includes('Chép tin nhắc Zalo'), 'admin: nút Chép tin nhắc Zalo nằm trong Cần xử lý ngay');
-  ok(t.indexOf('Cảnh báo lớp vi phạm') < t.indexOf('Vi phạm thường gặp'), 'admin: thẻ Cảnh báo lớp vi phạm đứng trước Vi phạm thường gặp');
+  ok(!t.includes('Cảnh báo lớp vi phạm') && !t.includes('Quy trình làm việc'), 'admin: Tổng quan không còn thẻ Cảnh báo lớp vi phạm và Quy trình làm việc');
   await page.getByRole('button', { name: 'Nhập điểm' }).click();
   await page.waitForTimeout(400);
   ok(await page.getByRole('button', { name: 'Duyệt tất cả 2 phiếu đã nộp' }).count() === 1, 'admin: có nút Duyệt tất cả 2 phiếu');

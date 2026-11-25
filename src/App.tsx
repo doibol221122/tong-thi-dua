@@ -1647,10 +1647,6 @@ function Overview({ state, week, role, assignment, homeClassId, onEnterScores, o
             )}
           </div>
         )}
-        <div className="card"><h2>Quy trình làm việc</h2>
-          <div className="steps"><span>1. Nháp</span><i>→</i><span>2. Cờ đỏ nộp</span><i>→</i><span>3. Ban thi đua duyệt</span><i>→</i><span>4. Chốt tuần</span></div>
-          <p>Chỉ phiếu đã duyệt mới vào xếp hạng chính thức. Trả lại phải kèm lý do.</p>
-        </div>
       </div>
     );
   }
@@ -1706,17 +1702,6 @@ function Overview({ state, week, role, assignment, homeClassId, onEnterScores, o
       </div>
       <ClassProgressChart state={state} defaultClassId={myHomeClass?.id} />
       {anomalies.length > 0 && <div className="card"><h2>Cảnh báo bất thường</h2>{anomalies.map(s => <p key={s.id}>Lớp {state.classes.find(c => c.id === s.classId)?.name}: {calcScore(s.details).final}đ — kiểm tra lại số liệu trước khi duyệt.</p>)}</div>}
-      <div className="card"><h2>Cảnh báo lớp vi phạm{week ? ` — ${week.label}` : ''}</h2>
-        {!week ? <p>Chưa có tuần nào nên chưa có cảnh báo.</p> : viol.classWarnings.length === 0 ? <p>Chưa ghi nhận lượt vi phạm nào trong các phiếu đã duyệt của tuần này.</p> : (
-          <div>{viol.classWarnings.map(c => (
-            <div key={c.classId} className="warn-row">
-              <div><b>{c.name}</b> — {c.total} lượt vi phạm</div>
-              <div>Hay vi phạm: {c.top.map(t => `${t.label} ×${t.count}`).join(', ')}</div>
-              <div className="row">{c.total >= 5 && <span className="badge warn">Cần nhắc nhở</span>}{onOpenClass && <button className="btn ghost" type="button" onClick={() => onOpenClass(c.classId)}>Xem phiếu</button>}</div>
-            </div>
-          ))}</div>
-        )}
-      </div>
       <div className="card"><h2>Vi phạm thường gặp{week ? ` — ${week.label}` : ''}</h2>
         {!week ? <p>Chưa có tuần nào nên chưa có thống kê vi phạm. Tạo tuần ở tab Quản lý để bắt đầu.</p> : viol.topViolations.length === 0 ? <p>Chưa ghi nhận lượt vi phạm nào trong các phiếu đã duyệt của tuần này.</p> : (
           <>
@@ -1727,9 +1712,6 @@ function Overview({ state, week, role, assignment, homeClassId, onEnterScores, o
           </>
         )}
       </div>
-      <div className="card"><h2>Quy trình làm việc</h2>
-        <div className="steps"><span>1. Nháp</span><i>→</i><span>2. Cờ đỏ nộp</span><i>→</i><span>3. Ban thi đua duyệt</span><i>→</i><span>4. Chốt tuần</span></div>
-        <p>Chỉ phiếu đã duyệt mới vào xếp hạng chính thức. Trả lại phải kèm lý do.</p></div>
     </div>
   );
 }
