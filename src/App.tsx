@@ -112,12 +112,12 @@ export default function App() {
   const [state, setState] = useState<AppState>(initial.state);
   const [bootErr, setBootErr] = useState(initial.error);
   // --- Đồng bộ Supabase (P0-03/04/05) ---
-  // Trạng thái đồng bộ hiện ở header mọi lúc: Đang lưu… / Đã đồng bộ lúc
-  // HH:MM / Lỗi đồng bộ — Thử lại. "Đã lưu" chỉ hiện sau khi máy chủ xác
-  // nhận; lỗi mạng tự thử lại tối đa 3 lần rồi mới báo lỗi.
+  // Trạng thái đồng bộ chỉ hiện khi có việc cần chú ý: Đang lưu… trong lúc
+  // ghi, Lỗi đồng bộ — Thử lại khi lưu lỗi. Khi đã đồng bộ xong thì không
+  // hiện gì — đồng bộ chạy ngầm. Lỗi mạng tự thử lại tối đa 3 lần rồi mới
+  // báo lỗi.
   type SyncStatus = 'idle' | 'saving' | 'synced' | 'error';
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
-  const [syncTime, setSyncTime] = useState('');
   const [syncErr, setSyncErr] = useState('');
   const [conflict, setConflict] = useState(false);
   const [syncRetry, setSyncRetry] = useState(0);
@@ -302,7 +302,6 @@ export default function App() {
         }
         setRemoteLoaded(true);
         setSyncStatus('synced');
-        setSyncTime(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
       })
       .catch((e) => {
         setLoadFailed(true);
@@ -385,7 +384,6 @@ export default function App() {
       syncedStateJsonRef.current = JSON.stringify(stateRef.current);
       savePendingRef.current = false;
       setSyncStatus('synced');
-      setSyncTime(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
       if (lastSaveNoteRef.current) { setMsg(lastSaveNoteRef.current); lastSaveNoteRef.current = ''; }
     } catch {
       if (seq !== saveSeqRef.current) return;
@@ -416,7 +414,6 @@ export default function App() {
         syncedStateJsonRef.current = JSON.stringify(stateRef.current);
         setConflict(false);
         setSyncStatus('synced');
-        setSyncTime(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
         setMsg('Đã ghi đè dữ liệu trên máy chủ bằng bản của bạn.');
       } else {
         const row = await fetchSharedState();
@@ -428,7 +425,6 @@ export default function App() {
           syncedStateJsonRef.current = JSON.stringify(row.data);
           setConflict(false);
           setSyncStatus('synced');
-          setSyncTime(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
           setMsg('Đã tải bản mới nhất từ máy chủ.');
         }
       }
@@ -943,7 +939,7 @@ export default function App() {
             conflict ? <span className="chip sync-err">Có bản mới hơn — xem banner bên dưới</span>
             : syncStatus === 'error' ? <button type="button" className="chip sync-err" title={syncErr} onClick={() => { setSyncErr(''); setSyncStatus('saving'); setSyncRetry(r => r + 1); }}>Lỗi đồng bộ — Thử lại</button>
             : syncStatus === 'saving' ? <span className="chip sync-saving">Đang lưu…</span>
-            : syncStatus === 'synced' ? <span className="chip sync-ok">Đã đồng bộ lúc {syncTime}</span>
+            : syncStatus === 'synced' ? null
             : <span className="chip">Chưa đồng bộ</span>
           ) : (
             syncStatus === 'error' ? <span className="chip sync-err" title={syncErr}>Lỗi lưu trên máy này</span> : <span className="chip">Chỉ lưu trên máy này</span>
