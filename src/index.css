@@ -276,3 +276,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(153,27,27,.35);ou
 
 .daily-row{display:grid;grid-template-columns:90px 1fr 76px 1fr auto;gap:8px;align-items:center;margin-bottom:8px}
 @media(max-width:760px){.daily-row{grid-template-columns:82px 1fr 68px}.daily-row input[type="text"]{grid-column:1/4}.daily-row .btn{grid-column:4}}
+
+.trend-bars{display:flex;gap:10px;align-items:flex-end;min-height:150px;overflow-x:auto;padding-top:8px}
+.trend-col{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:56px;height:150px;justify-content:flex-end}
+.trend-bar{width:34px;background:var(--brand);border-radius:8px 8px 0 0;min-height:8px}
+.trend-col span{font-size:12px;color:var(--muted)}
+.trend-col small{font-size:11px;color:var(--muted)}
+@media print{
+  .print-area,.print-area *{visibility:visible}
+  .print-area{position:absolute;left:0;top:0;width:100%;box-shadow:none;border:none}
+  .print-area button,.print-area .rank-tools,.print-area .exportgrid,.print-area .general-comment,.print-area .divider{visibility:hidden!important}
+}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, ClassGroup, ClassItem, DailyEntry, Details, ExtraLine, Role, Score, Week } from './lib';
-import { applyDailyToDetails, assignedClassName, autoGeneralComment, DAILY_FIELDS, dailyLines, dailyTotals, calcScore, classAvg, classCoverage, classFacts, classGroup, classIdFromAssigned, cleanLogDetail, clsOf, decliningClasses, knownStudentNames, studentViolationStats, commentFacts, compareAvg, deadlineInfo, detailsDiff, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, logScoreIds, monthBlockOf, monthLabel, neNepLines, notSubmittedClasses, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekDeadline, weekNumberOf } from './lib';
+import { applyDailyToDetails, assignedClassName, autoGeneralComment, DAILY_FIELDS, dailyLines, dailyTotals, calcScore, classAvg, classCoverage, classFacts, classGroup, classIdFromAssigned, cleanLogDetail, clsOf, decliningClasses, knownStudentNames, schoolTrend, studentViolationStats, commentFacts, compareAvg, deadlineInfo, detailsDiff, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, logScoreIds, monthBlockOf, monthLabel, neNepLines, notSubmittedClasses, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekDeadline, weekNumberOf } from './lib';
 const LOGO_SRC = `${import.meta.env.BASE_URL}logo-192.png`;
 import AuthScreen from './AuthScreen';
 import { deleteProfile, ensureProfile, fetchHistory, fetchHistoryData, fetchSharedState, getAccessToken, isSupabaseConfigured, listProfiles, saveSharedState, supabase, updateProfile } from './supabase';
@@ -265,6 +265,7 @@ export default function App() {
   const [returnReason, setReturnReason] = useState('');
   const [showPhieu, setShowPhieu] = useState(false);
   const [logSearch, setLogSearch] = useState('');
+  const [logAction, setLogAction] = useState('');
   const [rankGroup, setRankGroup] = useState<'all' | ClassGroup>('all');
   // Chế độ xếp hạng: theo tuần hay theo tháng (điểm trung bình tháng).
   const [rankMode, setRankMode] = useState<'week' | 'month'>('week');
@@ -1163,6 +1164,43 @@ export default function App() {
     const text = `TỔNG HỢP THI ĐUA ${week.label.toUpperCase()}\n` + rows.map(({ s, c }, i) => `${i + 1}. ${state.classes.find(x => x.id === s.classId)?.name}: ${c.final}đ-${c.cls}`).join('\n');
     navigator.clipboard?.writeText(text).then(() => setMsg('Đã chép bảng xếp hạng để gửi Zalo.')).catch(() => setErrs(['Không chép được, trình duyệt chặn clipboard.']));
   }
+  function downloadRankingImage() {
+    if (!week || !rankedScores.length) { setErrs(['Chưa có lớp nào được duyệt để tạo ảnh xếp hạng.']); return; }
+    const W = 1080;
+    const rowH = 72;
+    const H = 300 + rankedScores.length * rowH + 110;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) { setErrs(['Trình duyệt chưa tạo được ảnh xếp hạng.']); return; }
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#166534'; ctx.fillRect(0, 0, W, 190);
+    ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center';
+    ctx.font = '700 34px Arial, sans-serif'; ctx.fillText('ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ', W / 2, 62);
+    ctx.font = '800 52px Arial, sans-serif'; ctx.fillText(`XẾP HẠNG THI ĐUA — ${week.label.toUpperCase()}`, W / 2, 128);
+    ctx.font = '400 28px Arial, sans-serif'; ctx.fillText('Chỉ tính phiếu đã duyệt', W / 2, 166);
+    const clsColor: Record<string, string> = { A: '#15803d', B: '#2563eb', C: '#d97706', D: '#dc2626' };
+    rankedScores.forEach((sc, i) => {
+      const y = 230 + i * rowH;
+      const c = calcScore(sc.details);
+      const clsName = state.classes.find(x => x.id === sc.classId)?.name ?? sc.classId;
+      ctx.fillStyle = i % 2 ? '#f8fafc' : '#ffffff'; ctx.fillRect(40, y, W - 80, rowH - 8);
+      ctx.fillStyle = i === 0 ? '#f59e0b' : i === 1 ? '#9ca3af' : i === 2 ? '#d97706' : '#e5e7eb';
+      ctx.beginPath(); ctx.arc(95, y + 32, 26, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = i < 3 ? '#ffffff' : '#374151'; ctx.font = '800 28px Arial, sans-serif'; ctx.fillText(String(i + 1), 95, y + 42);
+      ctx.fillStyle = '#111827'; ctx.textAlign = 'left'; ctx.font = '800 36px Arial, sans-serif'; ctx.fillText(clsName, 150, y + 44);
+      ctx.textAlign = 'right'; ctx.fillText(`${c.final}đ`, W - 190, y + 44);
+      ctx.fillStyle = clsColor[c.cls] ?? '#374151'; ctx.font = '800 32px Arial, sans-serif'; ctx.fillText(c.cls, W - 95, y + 44);
+      ctx.textAlign = 'center';
+    });
+    ctx.fillStyle = '#6b7280'; ctx.font = '400 24px Arial, sans-serif';
+    ctx.fillText('Hệ thống thi đua cờ đỏ — THPT Hùng Vương - Quảng Phú', W / 2, H - 42);
+    canvas.toBlob(blob => {
+      if (!blob) { setErrs(['Chưa tạo được ảnh xếp hạng.']); return; }
+      downloadBlob(blob, safeFilename(`XEP_HANG_${week.label}_${stamp()}.png`));
+      setMsg('Đã tải ảnh xếp hạng để gửi Zalo.');
+    }, 'image/png');
+  }
   // Chép tin nhắn nhắc các lớp chưa nộp phiếu (để gửi Zalo).
   function copyReminder() {
     if (!week) return;
@@ -1196,7 +1234,7 @@ export default function App() {
   // Cờ đỏ chỉ xem được hoạt động của chính mình trong nhật ký.
   const myLogs = useMemo(() => [...state.logs].reverse().filter(l => l.actor === session?.name), [state.logs, session?.name]);
   const logQuery = logSearch.trim().toLocaleLowerCase('vi-VN');
-  const logMatches = (l: { action: string; detail: string; actor: string; role: string; time: string }) => !logQuery || `${l.action} ${cleanLogDetail(l.detail)} ${l.actor} ${l.role} ${l.time}`.toLocaleLowerCase('vi-VN').includes(logQuery);
+  const logMatches = (l: { action: string; detail: string; actor: string; role: string; time: string }) => (!logAction || l.action === logAction) && (!logQuery || `${l.action} ${cleanLogDetail(l.detail)} ${l.actor} ${l.role} ${l.time}`.toLocaleLowerCase('vi-VN').includes(logQuery));
   const visibleLogs = [...state.logs].reverse().filter(logMatches);
   const visibleMyLogs = myLogs.filter(logMatches);
   const filteredClasses = state.classes.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
@@ -1382,7 +1420,7 @@ export default function App() {
           </>
         ))}
         {tab === 'xep-hang' && (week ? (
-          <div className="card"><h2>Xếp hạng — {week.label} {week.submittedAt ? <span className="badge approved">Đã nộp {week.submittedAt}</span> : <span className="badge draft">Chưa chốt tuần</span>}</h2>
+          <div className="card print-area"><h2>Xếp hạng — {week.label} {week.submittedAt ? <span className="badge approved">Đã nộp {week.submittedAt}</span> : <span className="badge draft">Chưa chốt tuần</span>}</h2>
             {rankMode === 'week' ? (
               <p>Chỉ phiếu <b>đã duyệt</b> mới vào xếp hạng chính thức. Còn {pendingScores.length} phiếu chờ duyệt, {state.classes.length - approvedScores.length} lớp chưa có phiếu duyệt.</p>
             ) : (
@@ -1405,7 +1443,7 @@ export default function App() {
                 </li>); })}
               {rankedScores.length === 0 && <li>Chưa có lớp nào được duyệt trong tuần này{rankGroup === 'all' ? '' : ` ở ${groupLabel(rankGroup)}`}.</li>}
             </ol>
-            <div className="exportgrid"><button className="btn ghost" type="button" onClick={doExportDocxWeek}>Xuất Word (.docx)</button><button className="btn ghost" type="button" onClick={doExportDocxWeekNoRank}>Xuất .docx (không xếp hạng)</button><button className="btn ghost" type="button" onClick={exportCsv}>Tải CSV</button><button className="btn ghost" type="button" onClick={copyZalo}>Chép gửi Zalo</button></div>
+            <div className="exportgrid"><button className="btn ghost" type="button" onClick={doExportDocxWeek}>Xuất Word (.docx)</button><button className="btn ghost" type="button" onClick={doExportDocxWeekNoRank}>Xuất .docx (không xếp hạng)</button><button className="btn ghost" type="button" onClick={exportCsv}>Tải CSV</button><button className="btn ghost" type="button" onClick={copyZalo}>Chép gửi Zalo</button><button className="btn ghost" type="button" onClick={downloadRankingImage}>Tải ảnh xếp hạng</button><button className="btn ghost" type="button" onClick={() => window.print()}>In bảng xếp hạng</button></div>
             <GeneralCommentCard key={`${week.id}-${state.settings.generalPros}-${state.settings.generalCons}`} state={state} weekId={week.id} weekLabel={week.label} isAdmin={session.role === 'admin'} onSave={(pros, cons) => { update(prev => ({ ...prev, settings: { ...prev.settings, generalPros: pros, generalCons: cons } }), 'Lưu nhận xét chung', week.label); setMsg('Đã lưu nhận xét chung. File .docx sẽ dùng bản này.'); }} />
             {session.role === 'admin' && <div className="divider">{week.submittedAt ? <button className="btn grey" type="button" onClick={reopenWeek}>Mở lại tuần</button> : <button className="btn green" type="button" onClick={closeWeek}>Nộp &amp; chốt tuần này</button>}</div>}
             </>) : (<>
@@ -1428,7 +1466,7 @@ export default function App() {
         {tab === 'quan-ly' && <ManageTab state={state} setState={setState} session={session} onLog={(a: string, d: string) => update(s => s, a, d)} onExportJson={exportJson} onImportJson={importJson} profiles={profiles} onProfilePatch={patchProfile} onProfileDelete={removeProfile} onConfirm={askConfirm} onRefreshProfiles={() => { if (isSupabaseConfigured) listProfiles().then(setProfiles).catch(() => undefined); }} />}
         {tab === 'lich-su' && (
           <div className="card"><h2>Lịch sử hoạt động</h2>
-          {(session.role === 'admin' || session.role === 'codo') && <div className="row"><input type="text" placeholder="Tìm nhanh lớp, tuần, người làm hoặc việc làm…" value={logSearch} onChange={e => setLogSearch(e.target.value)} aria-label="Tìm nhanh trong lịch sử" style={{ flex: 1, minWidth: 180 }} /></div>}
+          {(session.role === 'admin' || session.role === 'codo') && <div className="row"><input type="text" placeholder="Tìm nhanh lớp, tuần, người làm hoặc việc làm…" value={logSearch} onChange={e => setLogSearch(e.target.value)} aria-label="Tìm nhanh trong lịch sử" style={{ flex: 1, minWidth: 180 }} /><select aria-label="Lọc theo việc làm" value={logAction} onChange={e => setLogAction(e.target.value)} style={{ maxWidth: 220 }}><option value="">Tất cả việc làm</option>{[...new Set(state.logs.map(l => l.action))].sort((a, b) => a.localeCompare(b, 'vi')).map(a => <option key={a} value={a}>{a}</option>)}</select></div>}
           {session.role === 'admin' ? (state.logs.length === 0 ? <p>Chưa có hoạt động nào.</p> : visibleLogs.length === 0 ? <p>Không tìm thấy hoạt động phù hợp.</p> : <>
             {isNarrow ? (
               <div className="log-list">{visibleLogs.map(l => <div key={l.id} className="log-item"><b>{l.action}</b>{cleanLogDetail(l.detail) ? ` — ${cleanLogDetail(l.detail)}` : ''}<div className="meta">{l.actor} • {l.role} • {l.time}</div></div>)}</div>
@@ -1712,6 +1750,12 @@ function Overview({ state, week, role, assignment, homeClassId, onEnterScores, o
         </div>)}
       </div>
       <ClassProgressChart state={state} defaultClassId={myHomeClass?.id} />
+      {(() => { const trend = schoolTrend(state); return trend.length ? (
+        <div className="card"><h2>Xu hướng điểm toàn trường</h2>
+          <div className="trend-bars">{trend.map(p => (
+            <div key={p.weekId} className="trend-col"><div className="trend-bar" style={{ height: `${Math.max(8, Math.min(100, (p.avg / 150) * 100))}%` }} /><span>{p.weekLabel.replace('Tuần ', 'T')}</span><b>{p.avg.toFixed(1)}đ</b><small>{p.count} lớp</small></div>
+          ))}</div>
+        </div>) : null; })()}
       {anomalies.length > 0 && <div className="card"><h2>Cảnh báo bất thường</h2>{anomalies.map(({ s, final }) => <p key={s.id}>Lớp {state.classes.find(c => c.id === s.classId)?.name}: {final}đ — kiểm tra lại số liệu trước khi duyệt.</p>)}</div>}
       <div className="card"><h2>Vi phạm thường gặp{week ? ` — ${week.label}` : ''}</h2>
         {!week ? <p>Chưa có tuần nào nên chưa có thống kê vi phạm. Tạo tuần ở tab Quản lý để bắt đầu.</p> : viol.topViolations.length === 0 ? <p>Chưa ghi nhận lượt vi phạm nào trong các phiếu đã duyệt của tuần này.</p> : (
@@ -2107,7 +2151,9 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
   const [deadlineDraft, setDeadlineDraft] = useState(''); const [deadlineNote, setDeadlineNote] = useState('');
   const openWeek = state.weeks.find(w => w.id === openWeekId);
   // Hồ sơ của mục tài khoản đang mở (codo = cờ đỏ, viewer = GVCN, admin = Ban thi đua).
-  const sectionProfiles = profiles.filter(p => section === 'codo' ? p.role === 'codo' : section === 'gvcn' ? p.role === 'viewer' : p.role === 'admin');
+  const [profileSearch, setProfileSearch] = useState('');
+  const profileQuery = profileSearch.trim().toLocaleLowerCase('vi-VN');
+  const sectionProfiles = profiles.filter(p => section === 'codo' ? p.role === 'codo' : section === 'gvcn' ? p.role === 'viewer' : p.role === 'admin').filter(p => !profileQuery || `${p.full_name} ${p.email} ${assignedClassName(p.assigned_class_id, state.classes) ?? ''}`.toLocaleLowerCase('vi-VN').includes(profileQuery));
   function copyInvite() {
     if (!inviteClass) return;
     const clsName = state.classes.find(c => c.id === inviteClass)?.name ?? '';
@@ -2126,11 +2172,13 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
         ))}
       </div>
       {['codo', 'gvcn', 'btd'].includes(section) && <div className="card"><h2>{section === 'codo' ? 'Tài khoản cờ đỏ' : section === 'gvcn' ? 'Tài khoản GVCN' : 'Tài khoản Ban thi đua'}</h2>
+        <div className="row"><input type="text" placeholder="Tìm tài khoản theo tên, email hoặc lớp…" value={profileSearch} onChange={e => setProfileSearch(e.target.value)} aria-label="Tìm tài khoản" style={{ flex: 1, minWidth: 180 }} /></div>
         {!isSupabaseConfigured && <p>Chưa cấu hình Supabase — quản lý tài khoản chỉ dùng được sau khi cấu hình Supabase (xem README).</p>}
+        {profileQuery && sectionProfiles.length === 0 && <p>Không tìm thấy tài khoản phù hợp.</p>}
         {isSupabaseConfigured && (
           <>
             <div className="row"><button className="btn ghost" type="button" onClick={onRefreshProfiles}>Làm mới danh sách</button></div>
-            {sectionProfiles.length === 0 && <p>Chưa có tài khoản nào trong mục này.</p>}
+            {sectionProfiles.length === 0 && !profileQuery && <p>Chưa có tài khoản nào trong mục này.</p>}
             {sectionProfiles.map(p => {
               const clsName = (p.role === 'codo' || p.role === 'viewer') ? assignedClassName(p.assigned_class_id, state.classes) : undefined;
               // Gợi ý lớp trực theo lịch cho tuần đã gán (hoặc tuần hiện tại).

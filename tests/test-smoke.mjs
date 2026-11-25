@@ -109,7 +109,7 @@ async function newPage(seed, session) {
   ok((await page.locator('.podium').count()) === 0, 'xep-hang: không còn 3 thẻ podium to');
   ok((await page.locator('.ranklist li').count()) === 1, 'xep-hang: tuần 5 có 1 lớp đã duyệt');
   ok((await page.getByRole('button', { name: 'Tất cả', exact: true }).count()) === 1, 'xep-hang: lọc khối là viên thuốc Tất cả');
-  ok((await page.locator('.exportgrid .btn').count()) === 4, 'xep-hang: 4 nút xuất file trong lưới 2x2');
+  ok((await page.locator('.exportgrid .btn').count()) === 6, 'xep-hang: 6 nút xuất file/in/ảnh trong lưới');
   ok((await page.locator('.exportgrid button', { hasText: 'Nộp & chốt' }).count()) === 0, 'xep-hang: nút chốt tuần tách khỏi nhóm xuất file');
   // Duyệt hết phiếu chờ rồi kiểm tra thứ tự + lọc khối.
   await page.getByRole('button', { name: 'Nhập điểm' }).click();

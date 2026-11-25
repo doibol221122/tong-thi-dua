@@ -45,7 +45,7 @@ await page.getByRole('button', { name: 'Lịch sử', exact: true }).click();
 await page.waitForTimeout(300);
 await page.getByLabel('Tìm nhanh trong lịch sử').fill('Xuất file');
 await page.waitForTimeout(200);
-const logText = await page.locator('body').innerText();
+const logText = await page.locator('.log-table-wrap, .log-list').first().innerText();
 ok(logText.includes('Xuất file .docx') && !logText.includes('Duyệt phiếu'), 'features: tìm nhanh trong Lịch sử lọc đúng hoạt động');
 
 await page.getByRole('button', { name: 'Nhập điểm', exact: true }).click();

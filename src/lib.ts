@@ -957,6 +957,18 @@ export function knownStudentNames(state: AppState): string[] {
 export interface DecliningClass { classId: string; className: string; points: { weekLabel: string; final: number }[]; drop: number; }
 
 // Lớp tụt điểm liên tiếp: 3 phiếu đã duyệt gần nhất giảm dần, hoặc tuần duyệt mới nhất giảm từ 10đ trở lên.
+export interface SchoolTrendPoint { weekId: string; weekLabel: string; avg: number; count: number; }
+
+// Xu hướng điểm toàn trường: điểm trung bình các phiếu đã duyệt theo từng tuần.
+export function schoolTrend(state: AppState): SchoolTrendPoint[] {
+  return state.weeks.flatMap(w => {
+    const approved = state.scores.filter(s => s.weekId === w.id && s.status === 'approved');
+    if (!approved.length) return [];
+    const avg = approved.reduce((sum, s) => sum + calcScore(s.details).final, 0) / approved.length;
+    return [{ weekId: w.id, weekLabel: w.label, avg: Math.round(avg * 10) / 10, count: approved.length }];
+  });
+}
+
 export function decliningClasses(state: AppState): DecliningClass[] {
   const weekIndex = new Map(state.weeks.map((w, i) => [w.id, i]));
   const out: DecliningClass[] = [];
