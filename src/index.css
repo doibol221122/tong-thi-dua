@@ -273,3 +273,6 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(153,27,27,.35);ou
   .print-phieu{position:absolute;left:0;top:0;width:100%;box-shadow:none;border:none}
   .no-print{display:none!important}
 }
+
+.daily-row{display:grid;grid-template-columns:90px 1fr 76px 1fr auto;gap:8px;align-items:center;margin-bottom:8px}
+@media(max-width:760px){.daily-row{grid-template-columns:82px 1fr 68px}.daily-row input[type="text"]{grid-column:1/4}.daily-row .btn{grid-column:4}}

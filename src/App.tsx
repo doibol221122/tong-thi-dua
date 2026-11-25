@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { AppState, ClassGroup, ClassItem, Details, ExtraLine, Role, Score, Week } from './lib';
-import { assignedClassName, autoGeneralComment, calcScore, classAvg, classCoverage, classFacts, classGroup, classIdFromAssigned, cleanLogDetail, clsOf, decliningClasses, knownStudentNames, studentViolationStats, commentFacts, compareAvg, deadlineInfo, detailsDiff, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, logScoreIds, monthBlockOf, monthLabel, neNepLines, notSubmittedClasses, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekDeadline, weekNumberOf } from './lib';
+import type { AppState, ClassGroup, ClassItem, DailyEntry, Details, ExtraLine, Role, Score, Week } from './lib';
+import { applyDailyToDetails, assignedClassName, autoGeneralComment, DAILY_FIELDS, dailyLines, dailyTotals, calcScore, classAvg, classCoverage, classFacts, classGroup, classIdFromAssigned, cleanLogDetail, clsOf, decliningClasses, knownStudentNames, studentViolationStats, commentFacts, compareAvg, deadlineInfo, detailsDiff, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, logScoreIds, monthBlockOf, monthLabel, neNepLines, notSubmittedClasses, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekDeadline, weekNumberOf } from './lib';
 const LOGO_SRC = `${import.meta.env.BASE_URL}logo-192.png`;
 import AuthScreen from './AuthScreen';
 import { deleteProfile, ensureProfile, fetchHistory, fetchHistoryData, fetchSharedState, getAccessToken, isSupabaseConfigured, listProfiles, saveSharedState, supabase, updateProfile } from './supabase';
@@ -1973,6 +1973,27 @@ function ScoreForm(props: {
             </div>
           </div>
           </Section>
+          <Section title="Theo dõi từng ngày (Thứ 2–6)" sum={(d.daily?.length ?? 0) ? `${d.daily!.length} dòng` : 'Chưa ghi'}>
+            <p className="note">Ghi lỗi từng ngày như sổ giấy, rồi bấm “Cộng vào phiếu tuần” để app tự cộng số lượt và tên HS vào phiếu tuần.</p>
+            {(d.daily ?? []).map((r, i) => (
+              <div key={i} className="daily-row">
+                <select aria-label={`Ngày dòng ${i + 1}`} value={r.day} disabled={!canEdit} onChange={e => { const next = [...(d.daily ?? [])]; next[i] = { ...r, day: Number(e.target.value) }; props.setD('daily', next); }}>
+                  {[2, 3, 4, 5, 6].map(day => <option key={day} value={day}>Thứ {day}</option>)}
+                </select>
+                <select aria-label={`Lỗi dòng ${i + 1}`} value={r.field} disabled={!canEdit} onChange={e => { const next = [...(d.daily ?? [])]; next[i] = { ...r, field: e.target.value }; props.setD('daily', next); }}>
+                  {DAILY_FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                </select>
+                <input type="number" min={0} max={100} aria-label={`Số lượt dòng ${i + 1}`} value={r.count || ''} disabled={!canEdit} onChange={e => { const next = [...(d.daily ?? [])]; next[i] = { ...r, count: Math.max(0, Number(e.target.value) || 0) }; props.setD('daily', next); }} />
+                <input type="text" list="student-name-suggestions" aria-label={`Tên HS dòng ${i + 1}`} placeholder="Tên HS…" value={r.names} disabled={!canEdit} onChange={e => { const next = [...(d.daily ?? [])]; next[i] = { ...r, names: e.target.value }; props.setD('daily', next); }} />
+                <button className="btn ghost" type="button" disabled={!canEdit} onClick={() => props.setD('daily', (d.daily ?? []).filter((_, j) => j !== i))}>Xóa</button>
+              </div>
+            ))}
+            <div className="row">
+              <button className="btn ghost" type="button" disabled={!canEdit} onClick={() => props.setD('daily', [...(d.daily ?? []), { day: 2, field: 'lateLate', count: 0, names: '' } as DailyEntry])}>Thêm dòng ngày</button>
+              <button className="btn" type="button" disabled={!canEdit || !(d.daily?.length)} onClick={() => { const applied = applyDailyToDetails(d); const { counts } = dailyTotals(d.daily); counts.forEach((_v, field) => props.setD(field as keyof Details, (applied as unknown as Record<string, unknown>)[field] as never)); props.setD('violNames', applied.violNames); if (counts.has('absentPermit')) props.setD('names', applied.names); }}>Cộng vào phiếu tuần</button>
+            </div>
+            {(d.daily?.length ?? 0) > 0 && <p className="note">Tổng theo ngày: {[...dailyTotals(d.daily).counts.entries()].map(([field, count]) => `${DAILY_FIELDS.find(f => f.key === field)?.label ?? field} ${count}`).join(' • ')}</p>}
+          </Section>
           <label>Tên HS vi phạm (không bắt buộc)</label>
           <input type="text" list="student-name-suggestions" placeholder="Vd: Lan Anh, Sang, Ngân…" value={d.names} disabled={!canEdit} onChange={e => props.setD('names', e.target.value)} />
           <label>Ý kiến của lớp theo dõi</label>
@@ -2030,6 +2051,7 @@ function ScoreForm(props: {
               <p><b>3. Điểm thi đua của lớp [100 + (1) - (2)] = {calc.final}đ — Xếp loại: {calc.cls}</b></p>
               <p><b>Về học tập:</b></p>{hocTapLines(d).map((x, i) => <p key={i}>- {x}</p>)}
               <p><b>Về nề nếp:</b></p>{neNepLines(d).map((x, i) => <p key={i}>- {x}</p>)}
+              {dailyLines(d).length > 0 && <><p><b>Theo dõi từng ngày:</b></p>{dailyLines(d).map((x, i) => <p key={i}>- {x}</p>)}</>}
               <p>BAN THI ĐUA — {state.settings.signer}</p>
             </div>
           )}

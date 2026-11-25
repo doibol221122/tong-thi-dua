@@ -79,7 +79,11 @@ export interface Details {
   // Tên HS vi phạm theo từng mục lỗi (key = tên trường vi phạm, vd
   // lateLate -> "Lan, Sang"). Ghi dưới từng mục vi phạm trong phiếu.
   violNames?: Partial<Record<string, string>>;
+  // Theo dõi từng ngày Thứ 2–6 như trang 1 sổ giấy; bấm cộng sẽ dồn vào phiếu tuần.
+  daily?: DailyEntry[];
 }
+
+export interface DailyEntry { day: number; field: string; count: number; names: string; note?: string; }
 export interface Score {
   id: string; weekId: string; classId: string; details: Details;
   status: ScoreStatus; returnReason?: string;
@@ -419,6 +423,15 @@ export function validateDetails(d: Details): string[] {
     if (count <= 0) errs.push(`${labelOf(key)}: đã ghi tên HS nhưng số lượt đang là 0.`);
     else if (nNames > count) errs.push(`${labelOf(key)}: ghi ${nNames} tên nhưng chỉ có ${count} lượt.`);
   }
+  // Theo dõi từng ngày: Thứ 2–6, mục lỗi hợp lệ, số lượt và tên khớp nhau.
+  for (const [i, r] of (d.daily ?? []).entries()) {
+    if (!Number.isInteger(r.day) || r.day < 2 || r.day > 6) errs.push(`Theo dõi từng ngày dòng ${i + 1}: chỉ chọn Thứ 2 đến Thứ 6.`);
+    if (!DAILY_FIELDS.some(f => f.key === r.field)) errs.push(`Theo dõi từng ngày dòng ${i + 1}: mục lỗi chưa hợp lệ.`);
+    if (!Number.isInteger(r.count) || r.count < 0 || r.count > 100) errs.push(`Theo dõi từng ngày dòng ${i + 1}: số lượt phải từ 0 đến 100.`);
+    const nNames = splitStudentNames(r.names).length;
+    if (nNames > 0 && r.count <= 0) errs.push(`Theo dõi từng ngày dòng ${i + 1}: đã ghi tên HS nhưng số lượt đang là 0.`);
+    else if (nNames > r.count) errs.push(`Theo dõi từng ngày dòng ${i + 1}: ghi ${nNames} tên nhưng chỉ có ${r.count} lượt.`);
+  }
   return errs;
 }
 // So sánh hai bản chi tiết phiếu để ghi nhật ký thay đổi từng mục.
@@ -437,6 +450,9 @@ export function detailsDiff(before: Details | undefined, after: Details): string
   for (const [k, label] of [['names', 'Tên HS vi phạm'], ['opinionClass', 'Ý kiến của lớp theo dõi'], ['opinionCodo', 'Ý kiến của cờ đỏ']] as const) {
     if ((before?.[k] ?? '') !== (after[k] ?? '')) out.push(`${label}: ${short(before?.[k])} → ${short(after[k])}`);
   }
+  const dailyBefore = before?.daily?.length ?? 0;
+  const dailyAfter = after.daily?.length ?? 0;
+  if (dailyBefore !== dailyAfter) out.push(`Theo dõi từng ngày: ${dailyBefore} dòng → ${dailyAfter} dòng`);
   const violKeys = new Set([...Object.keys(before?.violNames ?? {}), ...Object.keys(after.violNames ?? {})]);
   for (const k of violKeys) {
     const a = before?.violNames?.[k] ?? ''; const b = after.violNames?.[k] ?? '';
@@ -814,6 +830,44 @@ export const VIOLATION_FIELDS: { key: keyof Details; label: string }[] = [
   { key: 'fight', label: 'Đánh nhau, vô lễ với GV (cũ)' },
 ];
 
+export const DAILY_FIELDS: { key: string; label: string }[] = [
+  { key: 'absentPermit', label: 'Vắng có phép' },
+  ...VIOLATION_FIELDS.filter(f => !String(f.key).endsWith('Viol') && !['late', 'privateWork', 'food', 'dress', 'dishonest', 'parking', 'traffic', 'fight'].includes(String(f.key))).map(f => ({ key: String(f.key), label: f.label })),
+];
+
+export function dailyTotals(daily: DailyEntry[] | undefined): { counts: Map<string, number>; names: Map<string, string[]> } {
+  const counts = new Map<string, number>();
+  const names = new Map<string, string[]>();
+  for (const r of daily ?? []) {
+    counts.set(r.field, (counts.get(r.field) ?? 0) + Math.max(0, r.count || 0));
+    const list = names.get(r.field) ?? [];
+    list.push(...splitStudentNames(r.names));
+    names.set(r.field, list);
+  }
+  return { counts, names };
+}
+
+// Cộng theo dõi từng ngày vào phiếu tuần: chỉ ghi đè các mục có dòng theo ngày.
+export function applyDailyToDetails(d: Details): Details {
+  const { counts, names } = dailyTotals(d.daily);
+  if (!counts.size) return d;
+  const next: Details = { ...d, violNames: { ...(d.violNames ?? {}) } };
+  for (const [field, count] of counts.entries()) {
+    (next as unknown as Record<string, unknown>)[field] = count;
+    const merged = [...new Set(names.get(field) ?? [])].join(', ');
+    if (field === 'absentPermit') next.names = merged;
+    else next.violNames![field] = merged;
+  }
+  return next;
+}
+
+export function dailyLines(d: Details): string[] {
+  const labelOf = (key: string) => DAILY_FIELDS.find(f => f.key === key)?.label ?? key;
+  return [...(d.daily ?? [])]
+    .sort((a, b) => a.day - b.day)
+    .map(r => `Thứ ${r.day} — ${labelOf(r.field)}${r.names.trim() ? `: ${r.names.trim()}` : ''} (${r.count})${r.note?.trim() ? ` — ${r.note.trim()}` : ''}`);
+}
+
 export interface ViolationTotal { key: string; label: string; count: number; }
 export interface ClassViolation { classId: string; name: string; total: number; top: ViolationTotal[]; }
 
@@ -1007,7 +1061,7 @@ export function classFacts(state: AppState, score: Score): string {
   const d = score.details;
   const c = calcScore(d);
   // Bỏ tên học sinh trước khi gửi AI: chỉ giữ số lượt vi phạm.
-  const clean: Details = { ...d, names: '', violNames: {} };
+  const clean: Details = { ...d, names: '', violNames: {}, daily: [] };
   const lines = [
     `Lớp ${cls?.name ?? score.classId}, ${week?.label ?? ''}: điểm thi đua ${c.final}đ, loại ${c.cls}.`,
     c.is100Tot ? 'Giờ học: 100% giờ Tốt.' : `Giờ học: ${d.hoursTot} Tốt, ${d.hoursKha} Khá, ${d.hoursTb} Trung bình, ${d.hoursYeu} Yếu.`,
