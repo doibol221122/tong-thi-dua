@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, ClassGroup, ClassItem, Details, ExtraLine, Role, Score, Week } from './lib';
-import { assignedClassName, autoGeneralComment, calcScore, classAvg, classCoverage, classFacts, classGroup, classIdFromAssigned, cleanLogDetail, clsOf, commentFacts, compareAvg, deadlineInfo, detailsDiff, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, logScoreIds, monthBlockOf, monthLabel, neNepLines, notSubmittedClasses, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekDeadline, weekNumberOf } from './lib';
+import { assignedClassName, autoGeneralComment, calcScore, classAvg, classCoverage, classFacts, classGroup, classIdFromAssigned, cleanLogDetail, clsOf, decliningClasses, knownStudentNames, studentViolationStats, commentFacts, compareAvg, deadlineInfo, detailsDiff, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, logScoreIds, monthBlockOf, monthLabel, neNepLines, notSubmittedClasses, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekDeadline, weekNumberOf } from './lib';
 const LOGO_SRC = `${import.meta.env.BASE_URL}logo-192.png`;
 import AuthScreen from './AuthScreen';
 import { deleteProfile, ensureProfile, fetchHistory, fetchHistoryData, fetchSharedState, getAccessToken, isSupabaseConfigured, listProfiles, saveSharedState, supabase, updateProfile } from './supabase';
@@ -264,6 +264,7 @@ export default function App() {
   const [errs, setErrs] = useState<string[]>([]);
   const [returnReason, setReturnReason] = useState('');
   const [showPhieu, setShowPhieu] = useState(false);
+  const [logSearch, setLogSearch] = useState('');
   const [rankGroup, setRankGroup] = useState<'all' | ClassGroup>('all');
   // Chế độ xếp hạng: theo tuần hay theo tháng (điểm trung bình tháng).
   const [rankMode, setRankMode] = useState<'week' | 'month'>('week');
@@ -1194,6 +1195,10 @@ export default function App() {
   }, [state.classes, rankMonthWeeks, rankGroup]);
   // Cờ đỏ chỉ xem được hoạt động của chính mình trong nhật ký.
   const myLogs = useMemo(() => [...state.logs].reverse().filter(l => l.actor === session?.name), [state.logs, session?.name]);
+  const logQuery = logSearch.trim().toLocaleLowerCase('vi-VN');
+  const logMatches = (l: { action: string; detail: string; actor: string; role: string; time: string }) => !logQuery || `${l.action} ${cleanLogDetail(l.detail)} ${l.actor} ${l.role} ${l.time}`.toLocaleLowerCase('vi-VN').includes(logQuery);
+  const visibleLogs = [...state.logs].reverse().filter(logMatches);
+  const visibleMyLogs = myLogs.filter(logMatches);
   const filteredClasses = state.classes.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
   const visibleClasses = session?.role === 'codo' && assignment ? state.classes.filter(c => c.id === assignment.classId) : filteredClasses;
 
@@ -1423,14 +1428,15 @@ export default function App() {
         {tab === 'quan-ly' && <ManageTab state={state} setState={setState} session={session} onLog={(a: string, d: string) => update(s => s, a, d)} onExportJson={exportJson} onImportJson={importJson} profiles={profiles} onProfilePatch={patchProfile} onProfileDelete={removeProfile} onConfirm={askConfirm} onRefreshProfiles={() => { if (isSupabaseConfigured) listProfiles().then(setProfiles).catch(() => undefined); }} />}
         {tab === 'lich-su' && (
           <div className="card"><h2>Lịch sử hoạt động</h2>
-          {session.role === 'admin' ? (state.logs.length === 0 ? <p>Chưa có hoạt động nào.</p> : <>
+          {(session.role === 'admin' || session.role === 'codo') && <div className="row"><input type="text" placeholder="Tìm nhanh lớp, tuần, người làm hoặc việc làm…" value={logSearch} onChange={e => setLogSearch(e.target.value)} aria-label="Tìm nhanh trong lịch sử" style={{ flex: 1, minWidth: 180 }} /></div>}
+          {session.role === 'admin' ? (state.logs.length === 0 ? <p>Chưa có hoạt động nào.</p> : visibleLogs.length === 0 ? <p>Không tìm thấy hoạt động phù hợp.</p> : <>
             {isNarrow ? (
-              <div className="log-list">{[...state.logs].reverse().map(l => <div key={l.id} className="log-item"><b>{l.action}</b>{cleanLogDetail(l.detail) ? ` — ${cleanLogDetail(l.detail)}` : ''}<div className="meta">{l.actor} • {l.role} • {l.time}</div></div>)}</div>
+              <div className="log-list">{visibleLogs.map(l => <div key={l.id} className="log-item"><b>{l.action}</b>{cleanLogDetail(l.detail) ? ` — ${cleanLogDetail(l.detail)}` : ''}<div className="meta">{l.actor} • {l.role} • {l.time}</div></div>)}</div>
             ) : (
-              <div className="tablewrap log-table-wrap"><table className="log-table"><thead><tr><th>Thời gian</th><th>Người làm</th><th>Vai trò</th><th>Việc làm</th><th>Chi tiết</th></tr></thead><tbody>{[...state.logs].reverse().map(l => <tr key={l.id}><td>{l.time}</td><td>{l.actor}</td><td>{l.role}</td><td>{l.action}</td><td>{cleanLogDetail(l.detail)}</td></tr>)}</tbody></table></div>
+              <div className="tablewrap log-table-wrap"><table className="log-table"><thead><tr><th>Thời gian</th><th>Người làm</th><th>Vai trò</th><th>Việc làm</th><th>Chi tiết</th></tr></thead><tbody>{visibleLogs.map(l => <tr key={l.id}><td>{l.time}</td><td>{l.actor}</td><td>{l.role}</td><td>{l.action}</td><td>{cleanLogDetail(l.detail)}</td></tr>)}</tbody></table></div>
             )}
           </>) : session.role === 'codo' ? (
-            myLogs.length === 0 ? <p>Bạn chưa có hoạt động nào được ghi lại.</p> : <div className="log-list always">{myLogs.map(l => <div key={l.id} className="log-item"><b>{l.action}</b>{cleanLogDetail(l.detail) ? ` — ${cleanLogDetail(l.detail)}` : ''}<div className="meta">{l.time}</div></div>)}</div>
+            myLogs.length === 0 ? <p>Bạn chưa có hoạt động nào được ghi lại.</p> : visibleMyLogs.length === 0 ? <p>Không tìm thấy hoạt động phù hợp.</p> : <div className="log-list always">{visibleMyLogs.map(l => <div key={l.id} className="log-item"><b>{l.action}</b>{cleanLogDetail(l.detail) ? ` — ${cleanLogDetail(l.detail)}` : ''}<div className="meta">{l.time}</div></div>)}</div>
           ) : <p>Vai trò Chỉ xem không xem được nhật ký chi tiết.</p>}
           </div>
         )}
@@ -1601,6 +1607,7 @@ function Overview({ state, week, role, assignment, homeClassId, onEnterScores, o
   onCopyReminder?: () => void;
   onOpenClass?: (classId: string) => void;
 }) {
+  const [studentSearch, setStudentSearch] = useState('');
   // Cờ đỏ: chỉ thấy phần việc của mình — lớp, tuần, trạng thái phiếu và
   // vi phạm của chính lớp mình. Không thấy số liệu toàn trường, danh sách
   // lớp cần nhắc hay cảnh báo duyệt (việc của Ban thi đua).
@@ -1671,6 +1678,10 @@ function Overview({ state, week, role, assignment, homeClassId, onEnterScores, o
   const myHomeViol = myHomeScore ? violationStats([myHomeScore], state.classes) : null;
   const viol = violationStats(approvedWeek, state.classes);
   const violMax = viol.topViolations.length ? viol.topViolations[0].count : 0;
+  const declining = decliningClasses(state);
+  const studentStatsAll = studentViolationStats(state);
+  const studentQuery = studentSearch.trim().toLocaleLowerCase('vi-VN');
+  const studentStats = studentStatsAll.filter(x => !studentQuery || `${x.name} ${x.className} ${x.top.map(t => t.label).join(' ')}`.toLocaleLowerCase('vi-VN').includes(studentQuery)).slice(0, 10);
   return (
     <div>
       {myHomeClass && (
@@ -1711,6 +1722,19 @@ function Overview({ state, week, role, assignment, homeClassId, onEnterScores, o
             ))}
           </>
         )}
+      </div>
+      {declining.length > 0 && (
+        <div className="card"><h2>Cảnh báo lớp tụt điểm</h2>
+          {declining.map(x => (
+            <div key={x.classId} className="warn-row"><div><b>{x.className}</b> — {x.points.map(p => `${p.weekLabel}: ${p.final}đ`).join(' → ')}</div><div className="row">{onOpenClass && <button className="btn ghost" type="button" onClick={() => onOpenClass(x.classId)}>Xem phiếu</button>}</div></div>
+          ))}
+        </div>
+      )}
+      <div className="card"><h2>Học sinh vi phạm nhiều lần</h2>
+        <div className="row"><input type="text" placeholder="Tìm nhanh tên học sinh, lớp hoặc lỗi…" value={studentSearch} onChange={e => setStudentSearch(e.target.value)} aria-label="Tìm nhanh học sinh vi phạm" style={{ flex: 1, minWidth: 180 }} /></div>
+        {studentStatsAll.length === 0 ? <p>Chưa có tên học sinh vi phạm nào trong các phiếu đã duyệt.</p> : studentStats.length === 0 ? <p>Không tìm thấy học sinh phù hợp.</p> : studentStats.map(x => (
+          <div key={`${x.classId}-${x.name}`} className="warn-row"><div><b>{x.name}</b> — {x.className}: {x.count} lần ({x.weeks} tuần)</div><div>{x.top.map(t => `${t.label} ×${t.count}`).join(', ')}</div></div>
+        ))}
       </div>
     </div>
   );
@@ -1829,6 +1853,7 @@ function ScoreForm(props: {
       setAiNote('Không gọi được AI lúc này.');
     } finally { setAiBusy(false); }
   }
+  const studentNames = useMemo(() => knownStudentNames(state), [state]);
   const sec = sectionSums(d);
   // Phiếu trộn cả số liệu cũ (gộp) và mới (tách nhỏ) thì đang tính cả hai
   // (trừ trùng) — chỉ cảnh báo, không tự sửa điểm phiếu đã duyệt.
@@ -1842,7 +1867,7 @@ function ScoreForm(props: {
     return (
       <div key={key}>
         <Stepper label={label} pts={pts} value={v} onChange={n => props.setD(key, n as never)} disabled={!canEdit} />
-        <input type="text" placeholder={`HS vi phạm: ${label.toLowerCase()}…`} value={d.violNames?.[key as string] ?? ''} disabled={!canEdit} onChange={e => props.setD('violNames', { ...(d.violNames ?? {}), [key as string]: e.target.value })} aria-label={`HS vi phạm ${label}`} style={{ marginTop: -2, marginBottom: 8 }} />
+        <input type="text" list="student-name-suggestions" placeholder={`HS vi phạm: ${label.toLowerCase()}…`} value={d.violNames?.[key as string] ?? ''} disabled={!canEdit} onChange={e => props.setD('violNames', { ...(d.violNames ?? {}), [key as string]: e.target.value })} aria-label={`HS vi phạm ${label}`} style={{ marginTop: -2, marginBottom: 8 }} />
       </div>
     );
   };
@@ -1862,7 +1887,8 @@ function ScoreForm(props: {
           <h2>Phiếu tổng kết — Lớp {state.classes.find(c => c.id === props.classId)?.name} — {week.label} {props.currentScore && <span className={`badge ${props.currentScore.status}`}>{STATUS_LABEL[props.currentScore.status]}</span>} {props.dirty && <span className="badge">Chưa lưu</span>}</h2>
           {props.lockHolder && <div className="warn">Lớp này đang có cờ đỏ {props.lockHolder} trực {week.label} — phiếu đang do bạn ấy giữ, bạn không sửa được. Liên hệ Ban thi đua nếu trực thay nhé.</div>}
           {mixedLegacy.length > 0 && <div className="warn">Phiếu này có cả số liệu cũ (gộp) và mới (tách nhỏ) ở: {mixedLegacy.join('; ')} — đang tính cả hai, kiểm tra lại trước khi nộp nhé.</div>}
-          <div className="row"><button className="btn ghost" type="button" disabled={!canEdit} onClick={props.onCopyPrev}>Chép số liệu tuần trước</button><button className="btn ghost" type="button" onClick={props.onShowPhieu}>Xem phiếu tổng kết</button>{props.currentScore && <button className="btn ghost" type="button" onClick={props.onExportClass}>Xuất .docx phiếu này</button>}</div>
+          <datalist id="student-name-suggestions">{studentNames.map(n => <option key={n} value={n} />)}</datalist>
+          <div className="row"><button className="btn ghost" type="button" disabled={!canEdit} onClick={props.onCopyPrev}>Chép số liệu tuần trước</button><button className="btn ghost" type="button" onClick={props.onShowPhieu}>Xem phiếu tổng kết</button><button className="btn ghost" type="button" onClick={() => { props.onShowPhieu(); window.setTimeout(() => window.print(), 80); }}>In phiếu</button>{props.currentScore && <button className="btn ghost" type="button" onClick={props.onExportClass}>Xuất .docx phiếu này</button>}</div>
           <div className="grid2">
             <div>
               <div className="top100">
@@ -1948,7 +1974,7 @@ function ScoreForm(props: {
           </div>
           </Section>
           <label>Tên HS vi phạm (không bắt buộc)</label>
-          <input type="text" placeholder="Vd: Lan Anh, Sang, Ngân…" value={d.names} disabled={!canEdit} onChange={e => props.setD('names', e.target.value)} />
+          <input type="text" list="student-name-suggestions" placeholder="Vd: Lan Anh, Sang, Ngân…" value={d.names} disabled={!canEdit} onChange={e => props.setD('names', e.target.value)} />
           <label>Ý kiến của lớp theo dõi</label>
           <textarea value={d.opinionClass} disabled={!canEdit} onChange={e => props.setD('opinionClass', e.target.value)} />
           <label>Ý kiến của cờ đỏ</label>
@@ -1997,7 +2023,8 @@ function ScoreForm(props: {
             );
           })()}
           {props.showPhieu && (
-            <div className="card"><h3>Phiếu tổng kết — in / chụp lưu hồ sơ</h3>
+            <div className="card print-phieu"><h3>Phiếu tổng kết — in / chụp lưu hồ sơ</h3>
+              <div className="row no-print"><button className="btn ghost" type="button" onClick={() => window.print()}>In phiếu này</button></div>
               <p><b>Tổng kết {week.label} — Lớp {state.classes.find(c => c.id === props.classId)?.name}</b></p>
               <p>(1) Tổng điểm cộng: {calc.plus}đ &nbsp; (2) Tổng điểm trừ: {calc.minus}đ</p>
               <p><b>3. Điểm thi đua của lớp [100 + (1) - (2)] = {calc.final}đ — Xếp loại: {calc.cls}</b></p>

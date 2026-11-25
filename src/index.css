@@ -265,3 +265,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(153,27,27,.35);ou
 .ranklist .rscore{display:flex;gap:8px;align-items:center}
 .exportgrid{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .exportgrid .btn{flex:1 1 160px}
+
+/* In phiếu: chỉ in phần phiếu tổng kết. */
+@media print{
+  body *{visibility:hidden}
+  .print-phieu,.print-phieu *{visibility:visible}
+  .print-phieu{position:absolute;left:0;top:0;width:100%;box-shadow:none;border:none}
+  .no-print{display:none!important}
+}

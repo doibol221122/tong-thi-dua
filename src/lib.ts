@@ -855,6 +855,72 @@ export function violationStats(scores: Score[], classes: ClassItem[]): { topViol
   return { topViolations, classWarnings, totalCount };
 }
 
+export function splitStudentNames(raw: string | undefined): string[] {
+  return (raw ?? '').split(/[,;\n]/).map(x => x.trim()).filter(Boolean);
+}
+
+export interface StudentViolationStat { name: string; classId: string; className: string; count: number; weeks: number; top: ViolationTotal[]; }
+
+// Học sinh vi phạm nhiều lần: đếm theo tên đã ghi trong các phiếu đã duyệt.
+export function studentViolationStats(state: AppState): StudentViolationStat[] {
+  const labelOf = (key: string) => VIOLATION_FIELDS.find(f => f.key === key)?.label ?? key;
+  const map = new Map<string, { name: string; classId: string; count: number; weeks: Set<string>; fields: Map<string, number> }>();
+  for (const s of state.scores) {
+    if (s.status !== 'approved') continue;
+    for (const [key, raw] of Object.entries(s.details.violNames ?? {})) {
+      for (const name of splitStudentNames(raw)) {
+        const id = `${s.classId}:${name.toLocaleLowerCase('vi-VN')}`;
+        const cur = map.get(id) ?? { name, classId: s.classId, count: 0, weeks: new Set<string>(), fields: new Map<string, number>() };
+        cur.count += 1;
+        cur.weeks.add(s.weekId);
+        cur.fields.set(key, (cur.fields.get(key) ?? 0) + 1);
+        map.set(id, cur);
+      }
+    }
+  }
+  return [...map.values()]
+    .map(x => ({ name: x.name, classId: x.classId, className: state.classes.find(c => c.id === x.classId)?.name ?? x.classId, count: x.count, weeks: x.weeks.size, top: [...x.fields.entries()].map(([key, count]) => ({ key, label: labelOf(key), count })).sort((a, b) => b.count - a.count).slice(0, 2) }))
+    .sort((a, b) => b.count - a.count || b.weeks - a.weeks || a.name.localeCompare(b.name, 'vi'));
+}
+
+export function knownStudentNames(state: AppState): string[] {
+  const seen = new Map<string, string>();
+  for (const s of state.scores) {
+    for (const raw of Object.values(s.details.violNames ?? {})) {
+      for (const name of splitStudentNames(raw)) {
+        const k = name.toLocaleLowerCase('vi-VN');
+        if (!seen.has(k)) seen.set(k, name);
+      }
+    }
+    for (const name of splitStudentNames(s.details.names)) {
+      const k = name.toLocaleLowerCase('vi-VN');
+      if (!seen.has(k)) seen.set(k, name);
+    }
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b, 'vi'));
+}
+
+export interface DecliningClass { classId: string; className: string; points: { weekLabel: string; final: number }[]; drop: number; }
+
+// Lớp tụt điểm liên tiếp: 3 phiếu đã duyệt gần nhất giảm dần, hoặc tuần duyệt mới nhất giảm từ 10đ trở lên.
+export function decliningClasses(state: AppState): DecliningClass[] {
+  const weekIndex = new Map(state.weeks.map((w, i) => [w.id, i]));
+  const out: DecliningClass[] = [];
+  for (const c of state.classes) {
+    const pts = state.scores
+      .filter(s => s.classId === c.id && s.status === 'approved')
+      .sort((a, b) => (weekIndex.get(a.weekId) ?? 0) - (weekIndex.get(b.weekId) ?? 0))
+      .map(s => ({ weekLabel: state.weeks.find(w => w.id === s.weekId)?.label ?? s.weekId, final: calcScore(s.details).final }));
+    if (pts.length < 2) continue;
+    const last = pts[pts.length - 1];
+    const prev = pts[pts.length - 2];
+    const threeDown = pts.length >= 3 && pts[pts.length - 3].final > prev.final && prev.final > last.final;
+    const bigDrop = prev.final - last.final >= 10;
+    if (threeDown || bigDrop) out.push({ classId: c.id, className: c.name, points: pts.slice(-3), drop: prev.final - last.final });
+  }
+  return out.sort((a, b) => b.drop - a.drop);
+}
+
 // Nhận xét chung tự động của một tuần, soạn từ số liệu phiếu đã duyệt
 // theo đúng văn phong bản Tổng hợp thi đua tuần của trường: Ưu điểm nêu
 // các lớp đạt 100% giờ học tốt; Nhược điểm nêu lỗi vi phạm còn tồn tại.
