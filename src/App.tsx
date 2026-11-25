@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, ClassGroup, ClassItem, Details, ExtraLine, Role, Score, Week } from './lib';
 import { assignedClassName, autoGeneralComment, calcScore, classAvg, classCoverage, classFacts, classGroup, classIdFromAssigned, cleanLogDetail, clsOf, commentFacts, compareAvg, deadlineInfo, detailsDiff, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, logScoreIds, monthBlockOf, monthLabel, neNepLines, notSubmittedClasses, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekDeadline, weekNumberOf } from './lib';
-import { exportClassDocx, exportMonthDocx, exportWeekDocx, exportWeekDocxNoRank } from './docxExport';
-import { LOGO_DATA_URI } from './logoData';
+const LOGO_SRC = `${import.meta.env.BASE_URL}logo-192.png`;
 import AuthScreen from './AuthScreen';
 import { deleteProfile, ensureProfile, fetchHistory, fetchHistoryData, fetchSharedState, getAccessToken, isSupabaseConfigured, listProfiles, saveSharedState, supabase, updateProfile } from './supabase';
 import type { HistoryVersion, Profile } from './supabase';
@@ -1101,21 +1100,21 @@ export default function App() {
   async function doExportDocxWeek() {
     if (!week) return;
     // File xếp hạng chỉ gồm phiếu đã duyệt (D2).
-    try { const blob = await exportWeekDocx(state, week, true); downloadBlob(blob, safeFilename(`TONG_HOP_THI_DUA_${week.label}_${stamp()}.docx`)); update(s => s, 'Xuất file .docx', week.label); setMsg('Đã tải file .docx tổng hợp tuần.'); }
+    try { const { exportWeekDocx } = await import('./docxExport'); const blob = await exportWeekDocx(state, week, true); downloadBlob(blob, safeFilename(`TONG_HOP_THI_DUA_${week.label}_${stamp()}.docx`)); update(s => s, 'Xuất file .docx', week.label); setMsg('Đã tải file .docx tổng hợp tuần.'); }
     catch { setErrs(['Không xuất được file .docx. Thử lại sau.']); }
   }
   async function doExportDocxWeekNoRank() {
     if (!week) return;
-    try { const blob = await exportWeekDocxNoRank(state, week); downloadBlob(blob, safeFilename(`TONG_HOP_THI_DUA_${week.label}_KHONG_XEP_HANG_${stamp()}.docx`)); update(s => s, 'Xuất file .docx (không xếp hạng)', week.label); setMsg('Đã tải file .docx tổng hợp tuần (không xếp hạng).'); }
+    try { const { exportWeekDocxNoRank } = await import('./docxExport'); const blob = await exportWeekDocxNoRank(state, week); downloadBlob(blob, safeFilename(`TONG_HOP_THI_DUA_${week.label}_KHONG_XEP_HANG_${stamp()}.docx`)); update(s => s, 'Xuất file .docx (không xếp hạng)', week.label); setMsg('Đã tải file .docx tổng hợp tuần (không xếp hạng).'); }
     catch { setErrs(['Không xuất được file .docx. Thử lại sau.']); }
   }
   async function doExportDocxMonth(weeks: Week[], monthName: string) {
-    try { const blob = await exportMonthDocx(state, weeks, monthName); downloadBlob(blob, safeFilename(`TONG_HOP_THI_DUA_${monthName}_${stamp()}.docx`)); update(s => s, 'Xuất file .docx tổng hợp tháng', monthName); setMsg(`Đã tải file .docx tổng hợp ${monthName}.`); }
+    try { const { exportMonthDocx } = await import('./docxExport'); const blob = await exportMonthDocx(state, weeks, monthName); downloadBlob(blob, safeFilename(`TONG_HOP_THI_DUA_${monthName}_${stamp()}.docx`)); update(s => s, 'Xuất file .docx tổng hợp tháng', monthName); setMsg(`Đã tải file .docx tổng hợp ${monthName}.`); }
     catch { setErrs(['Không xuất được file .docx tổng hợp tháng. Thử lại sau.']); }
   }
   async function doExportDocxClass() {
     if (!currentScore) return;
-    try { const blob = await exportClassDocx(state, currentScore); downloadBlob(blob, safeFilename(`PHIEU_${state.classes.find(c => c.id === currentScore.classId)?.name ?? ''}_${week?.label ?? ''}_${stamp()}.docx`)); setMsg('Đã tải file .docx phiếu lớp.'); }
+    try { const { exportClassDocx } = await import('./docxExport'); const blob = await exportClassDocx(state, currentScore); downloadBlob(blob, safeFilename(`PHIEU_${state.classes.find(c => c.id === currentScore.classId)?.name ?? ''}_${week?.label ?? ''}_${stamp()}.docx`)); setMsg('Đã tải file .docx phiếu lớp.'); }
     catch { setErrs(['Không xuất được file .docx phiếu lớp.']); }
   }
   function exportCsv() {
@@ -1159,8 +1158,8 @@ export default function App() {
   }
   function copyZalo() {
     if (!week) return;
-    const rows = state.scores.filter(s => s.weekId === week.id && s.status === 'approved').sort((a, b) => calcScore(b.details).final - calcScore(a.details).final);
-    const text = `TỔNG HỢP THI ĐUA ${week.label.toUpperCase()}\n` + rows.map((s, i) => `${i + 1}. ${state.classes.find(c => c.id === s.classId)?.name}: ${calcScore(s.details).final}đ-${calcScore(s.details).cls}`).join('\n');
+    const rows = state.scores.filter(s => s.weekId === week.id && s.status === 'approved').map(s => ({ s, c: calcScore(s.details) })).sort((a, b) => b.c.final - a.c.final);
+    const text = `TỔNG HỢP THI ĐUA ${week.label.toUpperCase()}\n` + rows.map(({ s, c }, i) => `${i + 1}. ${state.classes.find(x => x.id === s.classId)?.name}: ${c.final}đ-${c.cls}`).join('\n');
     navigator.clipboard?.writeText(text).then(() => setMsg('Đã chép bảng xếp hạng để gửi Zalo.')).catch(() => setErrs(['Không chép được, trình duyệt chặn clipboard.']));
   }
   // Chép tin nhắn nhắc các lớp chưa nộp phiếu (để gửi Zalo).
@@ -1202,11 +1201,11 @@ export default function App() {
     // --- Chế độ Supabase: đăng nhập bằng email + mật khẩu ---
     if (isSupabaseConfigured) {
       if (!authReady) {
-        return (<div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header><main className="wrap"><div className="card"><p>Đang kiểm tra phiên đăng nhập…</p>{authErr && <><div className="err">{authErr}</div><div className="row"><button className="btn" type="button" onClick={() => { setAuthErr(''); setAuthRetry(r => r + 1); }}>Thử lại</button></div></>}</div></main><AppFooter /></div>);
+        return (<div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_SRC} width={56} height={56} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header><main className="wrap"><div className="card"><p>Đang kiểm tra phiên đăng nhập…</p>{authErr && <><div className="err">{authErr}</div><div className="row"><button className="btn" type="button" onClick={() => { setAuthErr(''); setAuthRetry(r => r + 1); }}>Thử lại</button></div></>}</div></main><AppFooter /></div>);
       }
       if (authUser && profile && profile.status === 'rejected') {
         return (
-          <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header>
+          <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_SRC} width={56} height={56} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header>
           <main className="wrap"><div className="card"><h2>Tài khoản của bạn đã bị từ chối</h2>
           <p>Xin chào <b>{profile.full_name}</b> ({profile.email}). Ban thi đua đã từ chối tài khoản này{profile.reject_reason ? ` — lý do: ${profile.reject_reason}` : ''}. Bạn liên hệ Ban thi đua để biết thêm nhé.</p>
           <div className="row"><button className="btn grey" type="button" onClick={handleSignOut}>Đăng xuất</button></div></div></main><AppFooter /></div>
@@ -1216,7 +1215,7 @@ export default function App() {
         const pendingClasses = state.classes.length > 0 ? state.classes.map(c => ({ id: c.id, name: c.name })) : DUTY_CLASSES.map(c => ({ id: `name:${c}`, name: c }));
         const assignedName = assignedClassName(profile.assigned_class_id, state.classes);
         return (
-          <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header>
+          <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_SRC} width={56} height={56} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header>
           <main className="wrap"><div className="card"><h2>{profile.status === 'pending' ? 'Tài khoản đang chờ Ban thi đua duyệt' : 'Tài khoản đã bị khóa'}</h2>
           <p>Xin chào <b>{profile.full_name}</b> ({profile.email}). {profile.status === 'pending' ? 'Tài khoản của bạn đang chờ Ban thi đua duyệt. Sau khi được duyệt, bạn đăng nhập lại là vào được hệ thống.' : 'Tài khoản của bạn đã bị Ban thi đua khóa. Bạn liên hệ Ban thi đua để được mở lại.'}</p>
           <div className="row"><button className="btn grey" type="button" onClick={handleSignOut}>Đăng xuất</button></div></div>
@@ -1244,16 +1243,16 @@ export default function App() {
         );
       }
       if (authUser && !profile) {
-        return (<div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header><main className="wrap"><div className="card"><p>Đang tải hồ sơ tài khoản…</p>{profileErr && <><div className="err">{profileErr}</div><div className="row"><button className="btn" type="button" onClick={() => { setProfileErr(''); setProfileRetry(r => r + 1); }}>Thử lại</button></div></>}<div className="row"><button className="btn grey" type="button" onClick={handleSignOut}>Đăng xuất</button></div></div></main><AppFooter /></div>);
+        return (<div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_SRC} width={56} height={56} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header><main className="wrap"><div className="card"><p>Đang tải hồ sơ tài khoản…</p>{profileErr && <><div className="err">{profileErr}</div><div className="row"><button className="btn" type="button" onClick={() => { setProfileErr(''); setProfileRetry(r => r + 1); }}>Thử lại</button></div></>}<div className="row"><button className="btn grey" type="button" onClick={handleSignOut}>Đăng xuất</button></div></div></main><AppFooter /></div>);
       }
       return (
-        <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header>
+        <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_SRC} width={56} height={56} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header>
         <main className="wrap"><AuthScreen initialMode={recoveryMode ? 'reset' : undefined} onRecoveryDone={() => setRecoveryMode(false)} onNotice={setMsg} />{profileErr && <div className="err">{profileErr}</div>}{authErr && <div className="err">{authErr}</div>}{msg && <div className="ok">{msg}</div>}</main><AppFooter /></div>
       );
     }
     // --- Chế độ cũ (chưa cấu hình Supabase): chọn vai trò, dữ liệu trên máy này ---
     return (
-      <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header>
+      <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_SRC} width={56} height={56} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header>
       <main className="wrap"><div className="card"><h2>Chọn vai trò để vào hệ thống</h2><p>Ban thi đua quản lý toàn bộ. Cờ đỏ chỉ nhập lớp được phân công. Chỉ xem không được nhập hay sửa.</p>
       <p><b>CHƯA CẤU HÌNH SUPABASE — dữ liệu chỉ lưu trên máy này, không đồng bộ.</b> Dữ liệu và vai trò chỉ lưu trên trình duyệt này; muốn đăng nhập dùng chung cho mọi máy, cấu hình Supabase theo hướng dẫn trong README.</p>
       <div className="rolecard">
@@ -1273,7 +1272,7 @@ export default function App() {
   // khẩu mới thay vì app chính, kể cả khi hồ sơ đã duyệt.
   if (recoveryMode && isSupabaseConfigured) {
     return (
-      <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header>
+      <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_SRC} width={56} height={56} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header>
       <main className="wrap"><AuthScreen initialMode="reset" onRecoveryDone={() => setRecoveryMode(false)} onNotice={setMsg} />{msg && <div className="ok">{msg}</div>}</main><AppFooter /></div>
     );
   }
@@ -1303,7 +1302,7 @@ export default function App() {
         </div>
       )}
       <header className="top"><div className="top-inner">
-        <div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div>
+        <div className="brand"><img src={LOGO_SRC} width={56} height={56} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div>
         <div className="userbox">
           <span className="chip hide-m">{week ? week.label : 'Chưa có tuần'}</span>
           {isSupabaseConfigured ? (
@@ -1658,7 +1657,7 @@ function Overview({ state, week, role, assignment, homeClassId, onEnterScores, o
   const missing = state.classes.filter(c => !week || !state.scores.some(s => s.weekId === week.id && s.classId === c.id));
   const pending = week ? state.scores.filter(s => s.weekId === week.id && s.status === 'submitted') : [];
   const returned = week ? state.scores.filter(s => s.weekId === week.id && s.status === 'returned') : [];
-  const anomalies = week ? state.scores.filter(s => s.weekId === week.id && (calcScore(s.details).final > 150 || calcScore(s.details).final < 50)) : [];
+  const anomalies = week ? state.scores.filter(s => s.weekId === week.id).map(s => ({ s, final: calcScore(s.details).final })).filter(x => x.final > 150 || x.final < 50) : [];
   const deadline = week && !week.submittedAt ? deadlineInfo(weekDeadline(state.settings, week.id)) : null;
   const notSubmitted = week ? notSubmittedClasses(state, week.id) : [];
   // Vi phạm: chỉ tính phiếu đã duyệt của tuần hiện tại.
@@ -1702,7 +1701,7 @@ function Overview({ state, week, role, assignment, homeClassId, onEnterScores, o
         </div>)}
       </div>
       <ClassProgressChart state={state} defaultClassId={myHomeClass?.id} />
-      {anomalies.length > 0 && <div className="card"><h2>Cảnh báo bất thường</h2>{anomalies.map(s => <p key={s.id}>Lớp {state.classes.find(c => c.id === s.classId)?.name}: {calcScore(s.details).final}đ — kiểm tra lại số liệu trước khi duyệt.</p>)}</div>}
+      {anomalies.length > 0 && <div className="card"><h2>Cảnh báo bất thường</h2>{anomalies.map(({ s, final }) => <p key={s.id}>Lớp {state.classes.find(c => c.id === s.classId)?.name}: {final}đ — kiểm tra lại số liệu trước khi duyệt.</p>)}</div>}
       <div className="card"><h2>Vi phạm thường gặp{week ? ` — ${week.label}` : ''}</h2>
         {!week ? <p>Chưa có tuần nào nên chưa có thống kê vi phạm. Tạo tuần ở tab Quản lý để bắt đầu.</p> : viol.topViolations.length === 0 ? <p>Chưa ghi nhận lượt vi phạm nào trong các phiếu đã duyệt của tuần này.</p> : (
           <>
@@ -1733,6 +1732,7 @@ function SummaryTab({ state, onExportMonth }: { state: AppState; onExportMonth?:
   const ranked = [...state.classes].map(c => ({ c, a: avg(c.id), cov: cov(c.id) })).sort((x, y) => compareAvg(x.a, y.a));
   const monthRows = [...state.classes].map(c => ({ c, a: avg(c.id, monthWeeks.map(w => w.id)), cov: cov(c.id, monthWeeks.map(w => w.id)) })).sort((x, y) => compareAvg(x.a, y.a));
   const groupRows = (g: ClassGroup | null) => [...state.classes].filter(c => classGroup(c.name) === g).map(c => ({ c, a: avg(c.id), cov: cov(c.id) })).sort((x, y) => compareAvg(x.a, y.a));
+  const approvedByClassWeek = useMemo(() => new Map(state.scores.filter(s => s.status === 'approved').map(s => [`${s.weekId}:${s.classId}`, s])), [state.scores]);
   // Hạng chỉ đếm lớp có điểm trung bình (lớp chưa có phiếu duyệt: "—"),
   // kèm độ phủ nộp "nộp n/m tuần" để thấy lớp nào chưa nộp đủ.
   const groupTable = (title: string, rows: { c: ClassItem; a: number | null; cov: { approved: number; total: number } }[]) => {
@@ -1756,7 +1756,7 @@ function SummaryTab({ state, onExportMonth }: { state: AppState; onExportMonth?:
       {mode === 'week' && (
         <div className="card"><h2>Tổng hợp theo điểm trung bình qua các tuần</h2><p>Chỉ tính phiếu đã duyệt.</p>
           <div className="tablewrap"><table><thead><tr><th>Lớp</th><th>Điểm TB</th><th>Nộp</th>{state.weeks.map(w => <th key={w.id}>{w.label}</th>)}</tr></thead><tbody>
-            {ranked.map(({ c, a, cov: cv }) => <tr key={c.id}><td><b>{c.name}</b></td><td>{a === null ? '—' : `${a.toFixed(1)}đ`}</td><td>nộp {cv.approved}/{cv.total} tuần</td>{state.weeks.map(w => { const s = state.scores.find(x => x.weekId === w.id && x.classId === c.id && x.status === 'approved'); return <td key={w.id}>{s ? `${calcScore(s.details).final}đ-${calcScore(s.details).cls}` : '—'}</td>; })}</tr>)}
+            {ranked.map(({ c, a, cov: cv }) => <tr key={c.id}><td><b>{c.name}</b></td><td>{a === null ? '—' : `${a.toFixed(1)}đ`}</td><td>nộp {cv.approved}/{cv.total} tuần</td>{state.weeks.map(w => { const s = approvedByClassWeek.get(`${w.id}:${c.id}`); const cc = s ? calcScore(s.details) : null; return <td key={w.id}>{cc ? `${cc.final}đ-${cc.cls}` : '—'}</td>; })}</tr>)}
           </tbody></table></div></div>
       )}
       {mode === 'month' && (
@@ -1764,7 +1764,7 @@ function SummaryTab({ state, onExportMonth }: { state: AppState; onExportMonth?:
           {months.length === 0 ? <p>Chưa có tuần nào. Tạo tuần ở tab Quản lý để xem tổng hợp theo tháng.</p> : <>
             <div className="row"><label style={{ margin: 0 }}>Tháng</label><select value={selMonth} onChange={e => setMonthSel(Number(e.target.value))} style={{ maxWidth: 200 }}>{months.map(([m]) => <option key={m} value={m}>{monthLabel(m)}</option>)}</select><span>{monthWeeks.map(w => w.label).join(', ')}</span><button className="btn" type="button" onClick={() => onExportMonth?.(monthWeeks, monthLabel(selMonth))}>Xuất Word (.docx)</button></div>
             <div className="tablewrap"><table><thead><tr><th>Hạng</th><th>Lớp</th><th>Điểm TB</th><th>Loại</th><th>Nộp</th>{monthWeeks.map(w => <th key={w.id}>{w.label}</th>)}</tr></thead><tbody>
-              {monthRows.map(({ c, a, cov: cv }) => <tr key={c.id}><td>{a === null ? '—' : ++monthRank}</td><td><b>{c.name}</b></td><td>{a === null ? '—' : `${a.toFixed(1)}đ`}</td><td>{a === null ? '—' : <span className={`badge ${clsOf(a)}`}>{clsOf(a)}</span>}</td><td>nộp {cv.approved}/{cv.total} tuần</td>{monthWeeks.map(w => { const s = state.scores.find(x => x.weekId === w.id && x.classId === c.id && x.status === 'approved'); return <td key={w.id}>{s ? `${calcScore(s.details).final}đ-${calcScore(s.details).cls}` : '—'}</td>; })}</tr>)}
+              {monthRows.map(({ c, a, cov: cv }) => <tr key={c.id}><td>{a === null ? '—' : ++monthRank}</td><td><b>{c.name}</b></td><td>{a === null ? '—' : `${a.toFixed(1)}đ`}</td><td>{a === null ? '—' : <span className={`badge ${clsOf(a)}`}>{clsOf(a)}</span>}</td><td>nộp {cv.approved}/{cv.total} tuần</td>{monthWeeks.map(w => { const s = approvedByClassWeek.get(`${w.id}:${c.id}`); const cc = s ? calcScore(s.details) : null; return <td key={w.id}>{cc ? `${cc.final}đ-${cc.cls}` : '—'}</td>; })}</tr>)}
             </tbody></table></div>
           </>}
         </div>
