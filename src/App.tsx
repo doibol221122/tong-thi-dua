@@ -1235,16 +1235,16 @@ export default function App() {
             : syncStatus === 'error' ? <button type="button" className="chip sync-err" title={syncErr} onClick={() => { setSyncErr(''); setSyncStatus('saving'); setSyncRetry(r => r + 1); }}>Lỗi đồng bộ — Thử lại</button>
             : syncStatus === 'saving' ? <span className="chip sync-saving">Đang lưu…</span>
             : syncStatus === 'synced' ? null
-            : <span className="chip">Chưa đồng bộ</span>
+            : <span className="chip hide-m">Chưa đồng bộ</span>
           ) : (
-            syncStatus === 'error' ? <span className="chip sync-err" title={syncErr}>Lỗi lưu trên máy này</span> : <span className="chip">Chỉ lưu trên máy này</span>
+            syncStatus === 'error' ? <span className="chip sync-err" title={syncErr}>Lỗi lưu trên máy này</span> : <span className="chip hide-m">Chỉ lưu trên máy này</span>
           )}
           {session.role === 'codo' && assignment?.classId && <span className="chip hide-m">Trực lớp {state.classes.find(c => c.id === assignment.classId)?.name}</span>}
           <span className="chip rolebadge hide-m">{roleLabel}</span>
           <span className="chip hide-m"><span className="who">{session.name}</span></span>
           {showInstall && <button type="button" className="btn logout hide-m" onClick={installApp}>Cài app</button>}
           <button type="button" className="btn logout hide-m" onClick={handleSignOut}>{isSupabaseConfigured ? 'Đăng xuất' : 'Đổi vai trò'}</button>
-          <span className="chip header-summary"><span>{week ? week.label : 'Chưa có tuần'}{session.role === 'codo' && assignment?.classId ? ` • Trực lớp ${state.classes.find(c => c.id === assignment.classId)?.name}` : ''} • {roleLabel}</span><span>{session.name}</span></span>
+          <span className="header-chips"><span className="chip">{week ? week.label : 'Chưa có tuần'}</span>{session.role === 'codo' && assignment?.classId && <span className="chip">Trực lớp {state.classes.find(c => c.id === assignment.classId)?.name}</span>}<span className="chip rolebadge">{roleLabel}</span><span className="chip"><span className="who">{session.name}</span></span></span>
           <button type="button" className="btn logout menu-btn" aria-label="Mở menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(o => !o)}>⋮</button>
         </div>
         {menuOpen && (<>

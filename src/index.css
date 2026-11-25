@@ -30,7 +30,7 @@ input,select,textarea{font:inherit}
 .btn.logout{background:#fff;color:var(--brand-deep);border:none;padding:8px 14px;border-radius:999px;font-weight:700;white-space:nowrap;box-shadow:var(--shadow-sm)}
 /* P2-06: dropdown chọn lớp + tóm tắt header + nút menu — chỉ hiện ở màn hẹp (≤480px). */
 .class-select-wrap{display:none}
-.header-summary{display:none}
+.header-chips{display:none}
 .menu-btn{display:none}
 @media(max-width:760px){.top-inner{flex-direction:column;align-items:flex-start;gap:10px}.top h1{font-size:18px}.brand .logo{width:46px;height:46px}}
 .wrap{max-width:1152px;margin:0 auto;padding:12px 12px 90px}
@@ -177,16 +177,21 @@ button.chip{cursor:pointer;font:inherit}
 .stepper button{width:40px;height:40px}
 .stepper input{width:64px}
 .exportgrid{grid-template-columns:1fr}
-/* P2-06: header gọn — logo nhỏ, chip gộp thành một dòng tóm tắt, nút đăng xuất/cài app vào menu. */
+/* P2-06: header gọn — logo nhỏ, chip lẻ hiện lại như ban đầu (không còn
+   dòng tóm tắt nối bằng dấu •), nút đăng xuất/cài app vào menu ⋮. */
 .top-inner{gap:6px}
 .brand .logo{width:36px;height:36px}
 .top h1{font-size:15px}
 /* Ngoại lệ P2-04 ở ≤480px: tên trường 12px (không giãn chữ) để vừa một dòng,
    nếu không header vượt 120px vì tên trường ngắt thành 2 dòng. */
 .top .school{font-size:12px;letter-spacing:0}
-.userbox{flex-wrap:nowrap}
+.userbox{flex-wrap:nowrap;-webkit-mask-image:none;mask-image:none;align-self:stretch}
 .hide-m{display:none}
-.header-summary{display:flex;flex-direction:column;align-items:flex-start;flex:1 1 auto;min-width:0;max-width:calc(100% - 44px);line-height:1.35}
+/* Hàng chip header (mobile): tuần + trực lớp + vai trò + tên, mỗi cái một
+   chip riêng như bản đầu — không dấu •. Chip cuộn ngang trong khung của
+   nó nên nút ⋮ luôn nằm trong màn hình. */
+.header-chips{display:flex;gap:6px;align-items:center;flex:1 1 auto;min-width:0;overflow-x:auto;scrollbar-width:none;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
+.header-chips::-webkit-scrollbar{display:none}
 .menu-btn{display:inline-flex;flex-shrink:0;padding:4px 12px;font-size:18px;line-height:1}
 .header-menu{position:absolute;right:12px;top:calc(100% - 6px);background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-lg);padding:6px;z-index:2;display:flex;flex-direction:column;gap:4px;min-width:170px}
 .header-menu button{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px 12px;text-align:left;font-weight:700;color:var(--ink);min-height:44px}

@@ -1,5 +1,5 @@
 // Mobile 390px: P2-04 (chữ phụ 13px, dấu "còn nữa", một bản log) + P2-06
-// (dropdown chọn lớp, header gọn ≤150px, dòng tóm tắt hiện đủ tuần + vai trò + tên, menu đăng xuất/cài app).
+// (dropdown chọn lớp, header gọn ≤150px, chip lẻ tuần + vai trò + tên, menu đăng xuất/cài app).
 import { chromium } from 'playwright-core';
 import { readFileSync } from 'fs';
 
@@ -29,13 +29,17 @@ const noOverflow = async (page, label) => {
 // ---- 390px: admin ----
 {
   const { ctx, page } = await newPage(seed5, { role: 'admin', name: 'Y Đôi Bol' }, { width: 390, height: 844 });
-  // P2-06: header gọn.
+  // Header mobile: chip lẻ như ban đầu, không còn dòng tóm tắt có dấu •.
   const hb = await page.locator('header.top').boundingBox();
-  ok(!!hb && hb.height <= 150, 'mobile-390: header gọn ≤150px (dòng tóm tắt 2 dòng khi có tên; thấy: ' + (hb ? Math.round(hb.height) : '?') + 'px)');
-  ok(await page.locator('.header-summary').isVisible(), 'mobile-390: có dòng tóm tắt header');
-  const sum = await page.locator('.header-summary').innerText();
-  ok(sum.includes('Tuần 05') && sum.includes('Ban thi đua') && sum.includes('Y Đôi Bol') && !sum.includes('…') && sum.includes('\n'), 'mobile-390: tóm tắt header 2 dòng cố định — dòng 1 tuần + vai trò, dòng 2 tên, không bị cắt (thấy: ' + sum.trim().replace(/\n/g, ' / ') + ')');
-  ok((await page.locator('.userbox .chip.hide-m').first().isVisible()) === false, 'mobile-390: chip lẻ trong header bị ẩn, chỉ còn dòng tóm tắt');
+  ok(!!hb && hb.height <= 150, 'mobile-390: header gọn ≤150px (thấy: ' + (hb ? Math.round(hb.height) : '?') + 'px)');
+  ok(await page.locator('.header-chips').isVisible(), 'mobile-390: có hàng chip header');
+  const chipCount = await page.locator('.header-chips .chip').count();
+  ok(chipCount >= 3, 'mobile-390: chip header tách riêng tuần + vai trò + tên (thấy ' + chipCount + ' chip)');
+  const chipsText = await page.locator('.header-chips').innerText();
+  ok(chipsText.includes('Tuần 05') && chipsText.includes('Ban thi đua') && chipsText.includes('Y Đôi Bol') && !chipsText.includes('•'), 'mobile-390: chip header đủ tuần + vai trò + tên, không có dấu • (thấy: ' + chipsText.trim().replace(/\n/g, ' / ') + ')');
+  const mb0 = await page.locator('.menu-btn').boundingBox();
+  ok(!!mb0 && mb0.x + mb0.width <= 390, 'mobile-390: nút ⋮ nằm trong màn hình (x=' + (mb0 ? Math.round(mb0.x) : '?') + ')');
+  ok((await page.locator('.userbox .chip.hide-m').first().isVisible()) === false, 'mobile-390: chip bản desktop bị ẩn ở màn hẹp');
   // P2-06: menu đăng xuất.
   ok(await page.locator('.menu-btn').isVisible(), 'mobile-390: có nút menu ⋮');
   ok((await page.locator('.header-menu').count()) === 0, 'mobile-390: menu chưa mở thì không hiện');
@@ -84,7 +88,7 @@ const noOverflow = async (page, label) => {
 // ---- 1280px: màn rộng giữ nguyên (nút lớp + cả hai chip) + log dạng bảng ----
 {
   const { ctx, page } = await newPage(seed5, { role: 'admin', name: 'Ban thi đua' }, { width: 1280, height: 900 });
-  ok((await page.locator('.header-summary').isVisible()) === false, 'desktop: dòng tóm tắt header bị ẩn ở màn rộng');
+  ok((await page.locator('.header-chips').isVisible()) === false, 'desktop: hàng chip header mobile bị ẩn ở màn rộng');
   ok((await page.locator('.menu-btn').isVisible()) === false, 'desktop: nút menu ⋮ bị ẩn ở màn rộng');
   ok(await page.locator('.userbox .chip.hide-m').first().isVisible(), 'desktop: chip lẻ trong header vẫn hiện ở màn rộng');
   await page.getByRole('button', { name: 'Nhập điểm', exact: true }).click();
