@@ -58,6 +58,7 @@ const noOverflow = async (page, label) => {
   const footer1 = await page.evaluate(() => { const f = document.querySelector('.app-footer'); if (!f) return null; const r = f.getBoundingClientRect(); return { pos: getComputedStyle(f).position, bottom: r.bottom, vh: window.innerHeight, text: f.innerText }; });
   ok(!!footer1 && footer1.pos === 'fixed' && Math.abs(footer1.bottom - footer1.vh) <= 1, 'mobile-390: footer cố định ở đáy màn hình');
   ok(!!footer1 && footer1.text.includes('© 2026 Bản quyền thuộc về'), 'mobile-390: footer hiện dòng bản quyền © 2026');
+  ok(!!footer1 && footer1.text.includes('\nĐoàn Trường THPT Hùng Vương - Quảng Phú'), 'mobile-390: tên Đoàn Trường xuống dòng riêng trong footer');
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await page.waitForTimeout(200);
   const footer2 = await page.evaluate(() => { const f = document.querySelector('.app-footer'); if (!f) return null; const r = f.getBoundingClientRect(); return { bottom: r.bottom, vh: window.innerHeight }; });
