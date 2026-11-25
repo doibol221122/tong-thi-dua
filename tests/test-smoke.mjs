@@ -25,6 +25,16 @@ async function newPage(seed, session) {
 // ---- Admin: 5 mục + lịch trực + mời GVCN ----
 {
   const { ctx, page } = await newPage(seed5, { role: 'admin', name: 'Ban thi đua' });
+  // Đồng hồ ngày/giờ hiện tại ở header, tự chạy từng giây.
+  ok((await page.locator('.top .clock').count()) === 1, 'header: có đồng hồ ngày/giờ');
+  const clockRe = /^Thứ (Hai|Ba|Tư|Năm|Sáu|Bảy|Chủ nhật), \d{2}\/\d{2}\/\d{4} • \d{2}:\d{2}:\d{2}$/;
+  const clock1 = (await page.locator('.top .clock').innerText()).trim();
+  ok(clockRe.test(clock1), 'header: đồng hồ đúng dạng "Thứ Tư, 25/11/2026 • 08:25:33" (thấy: ' + clock1 + ')');
+  const today = await page.evaluate(() => new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }));
+  ok(clock1.includes(today), 'header: đồng hồ hiện đúng ngày hôm nay (' + today + ')');
+  await page.waitForTimeout(2500);
+  const clock2 = (await page.locator('.top .clock').innerText()).trim();
+  ok(clock2 !== clock1, 'header: đồng hồ tự chạy (giây thay đổi sau 2,5s)');
   let t = await page.locator('main').innerText();
   ok(t.includes('Cần xử lý ngay'), 'admin: có thẻ Cần xử lý ngay');
   ok(t.includes('Chờ duyệt (2)'), 'admin: Chờ duyệt (2)');
