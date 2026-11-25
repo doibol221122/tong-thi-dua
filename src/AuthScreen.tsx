@@ -1,8 +1,8 @@
 // Màn hình Đăng nhập / Đăng ký / Quên mật khẩu (dùng chung qua Supabase).
 // - Đăng ký: họ tên, lớp, email, mật khẩu tối thiểu 6 ký tự, chọn vai trò
 //   Cờ đỏ trực hoặc Chỉ xem. Không cho tự đăng ký làm Ban thi đua.
-//   Lớp bắt buộc với Cờ đỏ; với Chỉ xem thì GVCN chọn lớp chủ nhiệm,
-//   BGH để trống. Lớp đăng ký được lưu vào requested_class để hồ sơ tự
+//   Lớp bắt buộc với cả Cờ đỏ lẫn Chỉ xem (GVCN chọn lớp chủ nhiệm).
+//   Lớp đăng ký được lưu vào requested_class để hồ sơ tự
 //   gán sẵn lớp, Ban thi đua duyệt là tài khoản hiện "Họ tên — Lớp ...".
 // - Link mời GVCN (?lop=10B1&vai-tro=chi-xem&dang-ky=1) mở thẳng form
 //   đăng ký với vai trò + lớp đã chọn sẵn.
@@ -77,7 +77,7 @@ export default function AuthScreen({ initialMode, onRecoveryDone, onNotice }: { 
   async function onRegister() {
     if (!supabase) return;
     if (!fullName.trim()) { setErr('Bạn nhập họ tên nhé.'); return; }
-    if (requestedRole === 'codo' && !requestedClass) { setErr('Bạn chọn lớp của mình nhé.'); return; }
+    if (!requestedClass) { setErr(requestedRole === 'codo' ? 'Bạn chọn lớp của mình nhé.' : 'Bạn chọn lớp chủ nhiệm nhé.'); return; }
     if (!email.trim()) { setErr('Bạn nhập email nhé.'); return; }
     if (password.length < 6) { setErr('Mật khẩu phải từ 6 ký tự trở lên.'); return; }
     setBusy(true); setErr(''); setMsg('');
@@ -167,7 +167,7 @@ export default function AuthScreen({ initialMode, onRecoveryDone, onNotice }: { 
               <option value="">— Chọn lớp —</option>
               {DUTY_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            {requestedRole === 'viewer' && <p style={{ margin: 0 }}>GVCN chọn lớp mình chủ nhiệm để theo dõi lớp mình; BGH để trống.</p>}
+            {requestedRole === 'viewer' && <p style={{ margin: 0 }}>Bắt buộc chọn lớp bạn chủ nhiệm để Ban thi đua duyệt đúng lớp nhé.</p>}
             {requestedRole === 'codo' && <p style={{ margin: 0 }}>Lớp bạn đang học — bạn là cờ đỏ của lớp này (cố định). Lớp trực sẽ theo lịch trực, hoặc bạn tự chọn khi nhập điểm.</p>}
           </>
           <p>Không tự đăng ký được vai trò Ban thi đua.</p>

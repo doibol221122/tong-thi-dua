@@ -711,6 +711,15 @@ export default function App() {
       setErrs(['Không thể làm vậy vì đây là tài khoản Ban thi đua đang dùng duy nhất. Cần có ít nhất một tài khoản Ban thi đua khác đang dùng trước.']);
       return;
     }
+    // Lớp là bắt buộc: không duyệt/mở lại/đổi sang Cờ đỏ hoặc Chỉ xem
+    // khi tài khoản chưa có lớp (kể cả tài khoản cũ đăng ký thiếu lớp).
+    const effectiveRole = patch.role ?? p?.role;
+    const effectiveStatus = patch.status ?? p?.status;
+    const effectiveClassId = patch.assigned_class_id !== undefined ? patch.assigned_class_id : p?.assigned_class_id;
+    if (p && (patch.status === 'active' || patch.role !== undefined) && (effectiveRole === 'codo' || effectiveRole === 'viewer') && effectiveStatus === 'active' && !effectiveClassId) {
+      setErrs([`Chưa duyệt được: tài khoản ${p.full_name} chưa có lớp. Gán lớp trước rồi duyệt nhé.`]);
+      return;
+    }
     const runPatch = async () => {
       try {
         await updateProfile(id, patch);
@@ -1157,7 +1166,9 @@ export default function App() {
           <div className="row"><button className="btn grey" type="button" onClick={handleSignOut}>Đăng xuất</button></div></div>
           {profile.status === 'pending' && (profile.role === 'codo' || profile.role === 'viewer') && (
             <div className="card"><h2>Hoàn thiện thông tin của bạn</h2>
-            <p>{profile.role === 'codo' ? 'Trong lúc chờ duyệt, bạn chọn sẵn lớp mình đang học để Ban thi đua khỏi phải hỏi lại nhé. Lớp trực thì theo lịch trực, hoặc bạn tự chọn khi vào nhập điểm.' : 'Trong lúc chờ duyệt, bạn chọn sẵn lớp mình chủ nhiệm để Ban thi đua khỏi phải hỏi lại nhé.'}</p>
+            <p>{!profile.assigned_class_id
+              ? (profile.role === 'codo' ? 'Tài khoản của bạn chưa có lớp. Bạn chọn lớp mình đang học và bấm “Lưu lớp của tôi” để Ban thi đua duyệt nhé. Lớp trực thì theo lịch trực, hoặc bạn tự chọn khi vào nhập điểm.' : 'Tài khoản của bạn chưa có lớp chủ nhiệm. Bạn chọn lớp mình chủ nhiệm và bấm “Lưu lớp của tôi” để Ban thi đua duyệt nhé.')
+              : (profile.role === 'codo' ? 'Trong lúc chờ duyệt, bạn chọn sẵn lớp mình đang học để Ban thi đua khỏi phải hỏi lại nhé. Lớp trực thì theo lịch trực, hoặc bạn tự chọn khi vào nhập điểm.' : 'Trong lúc chờ duyệt, bạn chọn sẵn lớp mình chủ nhiệm để Ban thi đua khỏi phải hỏi lại nhé.')}</p>
             <label>{profile.role === 'codo' ? 'Lớp của bạn' : 'Lớp chủ nhiệm'}</label>
             {state.classes.length === 0 && <p>Danh sách lớp chưa tải được — chọn theo danh sách cố định bên dưới, hệ thống sẽ khớp lớp khi có dữ liệu.</p>}
             {profile.assigned_class_id && !assignedName && <p>Đã gán lớp cho bạn rồi (đang chờ tải danh sách lớp để hiện tên).</p>}
@@ -1884,7 +1895,7 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
               const dutyMon = dutyWk && clsName ? dutyMonitored(clsName, weekNumberOf(dutyWk, state.weeks.indexOf(dutyWk) + 1)) : null;
               return (
               <div key={p.id} className="card" style={{ marginTop: 10 }}>
-                <p><b>{p.full_name}</b>{clsName ? (p.role === 'codo' ? ` — Cờ đỏ lớp ${clsName}` : ` — Lớp ${clsName}`) : p.role === 'codo' ? <span style={{ color: '#9ca3af' }}> — Chưa gán lớp</span> : ''} — {p.email} {session.id === p.id && <span className="badge">Tài khoản của bạn</span>}</p>
+                <p><b>{p.full_name}</b>{clsName ? (p.role === 'codo' ? ` — Cờ đỏ lớp ${clsName}` : ` — Lớp ${clsName}`) : (p.role === 'codo' || p.role === 'viewer') ? <span style={{ color: '#9ca3af' }}> — Chưa gán lớp</span> : ''} — {p.email} {session.id === p.id && <span className="badge">Tài khoản của bạn</span>}</p>
                 {dutyMon && dutyWk && <p>Theo lịch trực: {dutyWk.label}, cờ đỏ lớp {clsName} trực lớp <b>{dutyMon}</b>.</p>}
                 <div className="prof-grid">
                   <div><label>Vai trò</label><select value={p.role} disabled={session.id === p.id} onChange={e => onProfilePatch(p.id, { role: e.target.value as Role })}><option value="admin">Ban thi đua</option><option value="codo">Cờ đỏ trực</option><option value="viewer">Chỉ xem</option></select></div>
@@ -1893,9 +1904,10 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
                 {p.status === 'rejected' && p.reject_reason && <p>Lý do từ chối: {p.reject_reason}</p>}
                 {(p.role === 'codo' || p.role === 'viewer') && (
                   <div className="prof-grid">
-                    <div><label>{p.role === 'viewer' ? 'Lớp chủ nhiệm' : 'Lớp của cờ đỏ'}</label><select value={p.assigned_class_id ?? ''} onChange={e => onProfilePatch(p.id, { assigned_class_id: e.target.value || null })}><option value="">Chưa gán</option>{state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                    <div><label>{p.role === 'viewer' ? 'Lớp chủ nhiệm' : 'Lớp của cờ đỏ'}</label><select value={p.assigned_class_id ?? ''} onChange={e => onProfilePatch(p.id, { assigned_class_id: e.target.value || null })}><option value="" disabled>Chưa gán — chọn lớp</option>{state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                   </div>
                 )}
+                {(p.role === 'codo' || p.role === 'viewer') && !p.assigned_class_id && <p>Chưa có lớp — gán lớp trước khi duyệt tài khoản này nhé.</p>}
                 {p.role === 'codo' && <p>Lớp mà tài khoản cờ đỏ này thuộc về, cố định (vd Đỗ Thuỳ Dương — Cờ đỏ lớp 10B1). Lớp trực tuần này gán theo lịch trực hoặc cờ đỏ tự chọn khi nhập điểm.</p>}
                 <div className="row" style={{ marginTop: 8 }}>
                   {p.status === 'pending' && <button className="btn green" type="button" onClick={() => onProfilePatch(p.id, { status: 'active' })}>Duyệt</button>}

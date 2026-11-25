@@ -3,6 +3,8 @@
 // - Tài khoản sau -> chờ duyệt (pending) với đúng vai trò đã chọn.
 // - Không leo thang: UI không có lựa chọn Ban thi đua; ensureProfile cũng
 //   ép requested_role lạ (vd 'admin') về 'viewer' + pending.
+// - Lớp bắt buộc khi đăng ký cho cả Cờ đỏ lẫn Chỉ xem; tài khoản cũ chưa
+//   có lớp thì Ban thi đua chưa duyệt được cho đến khi gán lớp.
 import { chromium } from 'playwright-core';
 import { readFileSync } from 'fs';
 import { EXE, BASE, SbStub, sessionFor, newSbPage, waitText } from './sb-stub.mjs';
@@ -89,7 +91,7 @@ async function fillRegister(page, { name, role, className, email, password }) {
 {
   const { ctx, page } = await newSbPage(browser, stub);
   await openRegister(page);
-  await fillRegister(page, { name: 'Người Trùng', role: 'viewer', className: '', email: 'dau@example.com', password: 'matkhau1' });
+  await fillRegister(page, { name: 'Người Trùng', role: 'viewer', className: '10B1', email: 'dau@example.com', password: 'matkhau1' });
   await page.waitForTimeout(800);
   const t = await page.locator('main').innerText();
   ok(t.includes('Email này đã có tài khoản rồi'), 'register-D: đăng ký trùng email báo "Email này đã có tài khoản rồi"');
@@ -119,6 +121,50 @@ async function fillRegister(page, { name, role, className, email, password }) {
   await waitText(page, 'Nguyễn Văn A');
   const otherCard = page.locator('main .card .card', { hasText: 'Nguyễn Văn A' });
   ok((await otherCard.getByRole('button', { name: 'Xóa tài khoản' }).count()) === 1, 'register-E: dòng tài khoản khác vẫn có nút Xóa tài khoản');
+  await ctx.close();
+}
+
+// ---- F. Không chọn lớp thì không đăng ký được (cả Chỉ xem lẫn Cờ đỏ) ----
+{
+  const { ctx, page } = await newSbPage(browser, stub);
+  await openRegister(page);
+  await fillRegister(page, { name: 'GVCN Thiếu Lớp', role: 'viewer', className: '', email: 'thieulop@example.com', password: 'matkhau1' });
+  await page.waitForTimeout(600);
+  let t = await page.locator('main').innerText();
+  ok(t.includes('Bạn chọn lớp chủ nhiệm nhé.'), 'register-F: Chỉ xem chưa chọn lớp thì báo chọn lớp chủ nhiệm');
+  ok(!stub.requests.some(r => r.url.includes('/auth/v1/signup') && r.body.includes('thieulop@example.com')), 'register-F: Chỉ xem thiếu lớp không gửi request signup');
+  ok(!stub.profileByEmail('thieulop@example.com'), 'register-F: Chỉ xem thiếu lớp không tạo hồ sơ');
+  await fillRegister(page, { name: 'Cờ Đỏ Thiếu Lớp', role: 'codo', className: '', email: 'thieulop2@example.com', password: 'matkhau1' });
+  await page.waitForTimeout(600);
+  t = await page.locator('main').innerText();
+  ok(t.includes('Bạn chọn lớp của mình nhé.'), 'register-F: Cờ đỏ chưa chọn lớp thì báo chọn lớp của mình');
+  ok(!stub.profileByEmail('thieulop2@example.com'), 'register-F: Cờ đỏ thiếu lớp không tạo hồ sơ');
+  await ctx.close();
+}
+
+// ---- G. Tài khoản cũ chưa có lớp: chưa duyệt được cho đến khi gán lớp ----
+{
+  const gvcn = stub.seedUser({ email: 'gvcn-thieulop@example.com', password: 'matkhau1', full_name: 'GVCN Chưa Lớp', requested_role: 'viewer', requested_class: '' });
+  stub.seedProfile({ user: gvcn, role: 'viewer', status: 'pending', assigned_class_id: null });
+  const adminUser = stub.users.get('dau@example.com');
+  const { ctx, page } = await newSbPage(browser, stub, { seedSession: adminUser });
+  await waitText(page, 'Tuần 05');
+  await page.getByRole('button', { name: 'Quản lý', exact: true }).click();
+  await page.getByRole('button', { name: 'Tài khoản GVCN', exact: true }).click();
+  await waitText(page, 'GVCN Chưa Lớp');
+  const card = page.locator('main .card .card', { hasText: 'GVCN Chưa Lớp' });
+  ok((await card.getByText('Chưa gán lớp').count()) >= 1, 'register-G: tài khoản GVCN chưa lớp hiện “Chưa gán lớp”');
+  await card.getByRole('button', { name: 'Duyệt', exact: true }).click();
+  await page.waitForTimeout(800);
+  const t = await page.locator('body').innerText();
+  ok(t.includes('chưa có lớp'), 'register-G: bấm Duyệt khi chưa có lớp thì báo chưa có lớp');
+  ok(stub.profileByEmail('gvcn-thieulop@example.com')?.status === 'pending', 'register-G: chưa có lớp thì hồ sơ vẫn pending, không bị duyệt');
+  await card.locator('select').nth(1).selectOption('c0');
+  await page.waitForTimeout(800);
+  ok(stub.profileByEmail('gvcn-thieulop@example.com')?.assigned_class_id === 'c0', 'register-G: gán lớp 10B1 (c0) cho tài khoản cũ');
+  await card.getByRole('button', { name: 'Duyệt', exact: true }).click();
+  await page.waitForTimeout(1000);
+  ok(stub.profileByEmail('gvcn-thieulop@example.com')?.status === 'active', 'register-G: gán lớp xong thì duyệt được (active)');
   await ctx.close();
 }
 
