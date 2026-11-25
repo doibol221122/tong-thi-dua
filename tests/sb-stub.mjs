@@ -68,6 +68,12 @@ const ROUTES = [
   ['**/rest/v1/profiles*', 'profiles'],
   ['**/rest/v1/app_state_history*', 'history'],
   ['**/rest/v1/app_state*', 'app_state'],
+  ['**/rest/v1/weeks*', 'tables'],
+  ['**/rest/v1/classes*', 'tables'],
+  ['**/rest/v1/roster*', 'tables'],
+  ['**/rest/v1/scores*', 'tables'],
+  ['**/rest/v1/logs*', 'tables'],
+  ['**/rest/v1/settings*', 'tables'],
 ].map(([glob, name]) => ({ re: globToRegExp(glob), name }));
 
 export class SbStub {
@@ -89,6 +95,22 @@ export class SbStub {
     this.passwordUpdated = []; // email đã đổi mật khẩu qua PUT /auth/v1/user
     this.recoveryEmail = null; // user cho flow ?code= (pkce)
     this.unhandled = [];
+    // Bảng riêng (migration-split.sql): opts.tables=true thì dựng bảng
+    // từ seedState; không có thì endpoint bảng trả 404 PGRST205 để app
+    // tự quay về app_state như trước khi chạy migration-split.
+    this.tables = null;
+    if (opts.tables) {
+      const st = JSON.parse(JSON.stringify(seedState));
+      const stamp = () => new Date(this._clock).toISOString();
+      this.tables = {
+        settings: [{ id: 'main', data: st.settings, updated_at: stamp(), version: 1 }],
+        weeks: st.weeks.map((w, i) => ({ id: w.id, label: w.label, date_range: w.dateRange, month: w.month ?? null, submitted_at: w.submittedAt ?? null, submitted_by: w.submittedBy ?? null, sort_order: i, updated_at: stamp(), version: 1 })),
+        classes: st.classes.map((c, i) => ({ id: c.id, name: c.name, sort_order: i, updated_at: stamp(), version: 1 })),
+        roster: st.roster.map((r, i) => ({ id: r.id, name: r.name, class_id: r.classId, week_id: r.weekId, active: r.active, sort_order: i, updated_at: stamp(), version: 1 })),
+        scores: st.scores.map(s => ({ id: s.id, week_id: s.weekId, class_id: s.classId, status: s.status, details: s.details, return_reason: s.returnReason ?? null, submitted_by: s.submittedBy ?? null, submitted_at: s.submittedAt ?? null, approved_by: s.approvedBy ?? null, approved_at: s.approvedAt ?? null, updated_by: s.updatedBy ?? null, updated_at_text: s.updatedAt ?? null, updated_at: stamp(), version: 1 })),
+        logs: st.logs.map((l, i) => ({ id: l.id, time: l.time, actor: l.actor, role: l.role, action: l.action, detail: l.detail, sort_order: i, created_at: stamp() })),
+      };
+    }
   }
   _stamp() { this._clock += 1000; return new Date(this._clock).toISOString(); }
   seedUser({ email, password, full_name, requested_role, requested_class }) {
@@ -112,6 +134,16 @@ export class SbStub {
   }
   saw(method, substr) { return this.requests.some(r => r.method === method && r.url.includes(substr)); }
   sawPatchAppStateVersion(v) { return this.requests.some(r => r.method === 'PATCH' && r.url.includes('/rest/v1/app_state') && r.url.includes(`version=eq.${v}`)); }
+  sawTable(method, table) { return this.requests.some(r => r.method === method && r.url.includes(`/rest/v1/${table}`)); }
+  // Giả lập máy khác sửa 1 dòng bảng riêng: đổi dữ liệu + tăng version.
+  bumpTable(table, id, mutator) {
+    const row = this.tables?.[table]?.find(r => r.id === id);
+    if (!row) throw new Error(`bumpTable: không có dòng ${table}/${id}`);
+    mutator(row);
+    row.version = (row.version ?? 1) + 1;
+    row.updated_at = this._stamp();
+    return row;
+  }
 
   async install(page) {
     const stub = this;
@@ -231,6 +263,78 @@ export class SbStub {
           const next = { ...cur, ...body, updated_at: stub._stamp() };
           stub.appState = next;
           return json(200, [{ ...next }]); // maybeSingle unwrap mảng
+        }
+        return json(200, []);
+      }
+      if (kind === 'tables') {
+        const table = u.pathname.split('/').pop();
+        if (!stub.tables || !stub.tables[table]) {
+          return json(404, { code: 'PGRST205', message: `Could not find the table 'public.${table}' in the schema cache`, details: null, hint: null });
+        }
+        const rows = stub.tables[table];
+        const match = (row) => {
+          for (const [k, v] of u.searchParams.entries()) {
+            if (['select', 'order', 'limit', 'offset'].includes(k)) continue;
+            if (v.startsWith('eq.')) { if (String(row[k]) !== decodeURIComponent(v.slice(3))) return false; }
+            else if (v.startsWith('in.(')) {
+              const vals = v.slice(4, -1).split(',').map(x => decodeURIComponent(x.replace(/^"|"$/g, '')));
+              if (!vals.includes(String(row[k]))) return false;
+            }
+          }
+          return true;
+        };
+        if (method === 'GET' || method === 'HEAD') {
+          let out = rows.filter(match);
+          const order = u.searchParams.get('order');
+          if (order) {
+            for (const part of order.split(',').reverse()) {
+              const [field, dir] = part.split('.');
+              out = out.slice().sort((a, b) => {
+                const x = a[field]; const y = b[field];
+                const cmp = typeof x === 'number' && typeof y === 'number' ? x - y : String(x ?? '').localeCompare(String(y ?? ''));
+                return dir === 'desc' ? -cmp : cmp;
+              });
+            }
+          }
+          const limit = Number(u.searchParams.get('limit') || 0);
+          if (limit > 0) out = out.slice(0, limit);
+          if (method === 'HEAD') return route.fulfill({ status: 200, headers, body: '' });
+          return json(200, out.map(r => ({ ...r })));
+        }
+        if (method === 'POST') {
+          const prefer = req.headers()['prefer'] || '';
+          const items = Array.isArray(body) ? body : [body];
+          const out = [];
+          for (const item of items) {
+            const existing = prefer.includes('merge-duplicates') ? rows.find(r => r.id === item.id) : null;
+            if (existing) {
+              Object.assign(existing, item);
+              if (table !== 'logs') { existing.version = (existing.version ?? 1) + 1; existing.updated_at = stub._stamp(); }
+              out.push({ ...existing });
+            } else {
+              const row = { ...item };
+              if (table === 'logs') row.created_at = stub._stamp();
+              else { row.version = row.version ?? 1; row.updated_at = stub._stamp(); }
+              rows.push(row);
+              out.push({ ...row });
+            }
+          }
+          return json(201, out);
+        }
+        if (method === 'PATCH') {
+          const out = [];
+          for (const row of rows) {
+            if (!match(row)) continue;
+            Object.assign(row, body);
+            if (table !== 'logs') { row.version = (row.version ?? 1) + 1; row.updated_at = stub._stamp(); }
+            out.push({ ...row });
+          }
+          return json(200, out);
+        }
+        if (method === 'DELETE') {
+          const removed = rows.filter(match);
+          stub.tables[table] = rows.filter(r => !match(r));
+          return json(200, removed.map(r => ({ id: r.id })));
         }
         return json(200, []);
       }

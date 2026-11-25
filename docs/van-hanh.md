@@ -13,7 +13,10 @@
 > 25/11. Cùng ngày 25/11, tab **Quản lý chia thành 5 mục** (Tuần & lớp /
 > Tài khoản cờ đỏ / Tài khoản GVCN / Tài khoản BTĐ / Cài đặt) và
 > **admin dự phòng đã chốt** (tài khoản dự phòng của thầy đã nâng lên
-> Ban thi đua trong app — xem mục 6). Mục không đánh dấu là đã có sẵn trong app.
+> Ban thi đua trong app — xem mục 6). Code tách dữ liệu phiếu sang bảng
+> riêng (`migration-split.sql` "split-1") đã lên live ngày 25/11/2026;
+> app vẫn chạy bằng `app_state` cho đến khi thầy chạy SQL này trong
+> Supabase (xem mục 2). Mục không đánh dấu là đã có sẵn trong app.
 
 ## 1. Checklist Supabase Dashboard (kiểm tra sau mỗi lần deploy)
 
@@ -25,6 +28,7 @@ Làm trong [Supabase Dashboard](https://supabase.com/dashboard) → đúng proje
       (cần cho email "Quên mật khẩu" quay lại đúng app) — đã xác nhận 25/11/2026
 - [x] **Confirm email: BẬT** (Authentication → Providers → Email) — đã xác nhận 25/11/2026
 - [x] **Schema đã chạy:** `migration-pro.sql` "pro-1" đã chạy ngày 25/11/2026 — xem bảng phiên bản ở mục 2
+- [ ] **Schema bảng riêng:** chạy `migration-split.sql` "split-1" trong SQL Editor lúc không ai đang nhập điểm, xong tải lại app — xem mục 2
 - [ ] **Khóa `service_role`: KHÔNG BAO GIỜ chia sẻ, không nhập vào app,
       không gửi qua chat/Zalo.** App chỉ dùng `VITE_SUPABASE_ANON_KEY`
       (khóa này nằm trong code là đúng thiết kế; an toàn nhờ RLS).
@@ -53,6 +57,7 @@ Làm trong [Supabase Dashboard](https://supabase.com/dashboard) → đúng proje
 |---|---|---|---|---|
 | `schema.sql` (gốc) | Bảng `profiles`, `app_state`, RLS cơ bản | SQL Editor | _(ghi ngày đã chạy)_ | |
 | `migration-pro.sql` "pro-1" ✅ | Siết RLS (chống tự lên admin), bảng `app_state_history`, trạng thái tài khoản `rejected`, cột `version` cho `app_state` | SQL Editor | 25/11/2026 | Thầy (tài khoản admin) |
+| `migration-split.sql` "split-1" ⏳ | Tách tuần/lớp/phân công/phiếu/nhật ký/cài đặt thành bảng riêng, RLS theo vai trò (cờ đỏ chỉ ghi phiếu lớp mình trực); `app_state` giữ làm bản sao lưu | SQL Editor | _(chưa chạy)_ | |
 
 Quy tắc: **mỗi lần đổi schema thì tăng số phiên bản và ghi ngày vào bảng
 trên.** Không chạy SQL nào ngoài file đã chốt trong repo.
@@ -205,7 +210,7 @@ Quảng Phú".
 |---|---|
 | D2 | File .docx xếp hạng chính thức chỉ gồm phiếu đã duyệt. |
 | D6 | Từ chối tài khoản bằng trạng thái `rejected` trong app (khuyến nghị); tạm thời xoá tay trong Dashboard (mục 5). |
-| D11 | Trước mắt giữ dữ liệu trong một blob `app_state` + lịch sử/sao lưu; tách thành bảng riêng khi có thời gian. |
+| D11 | Đã làm ngày 25/11/2026: tách dữ liệu thành bảng riêng (`migration-split.sql` "split-1"); app tự dùng bảng riêng sau khi SQL được chạy, trước đó vẫn dùng `app_state`. |
 | D1 | Tài khoản của thầy là admin chính (đã chốt); admin dự phòng là tài khoản dự phòng của thầy, đã nâng lên Ban thi đua trong app ngày 25/11/2026 (mục 6). |
 | D3 | ⏳ Chưa chốt cách tính điểm trung bình tháng khi lớp nộp thiếu tuần. |
 | D5 | ⏳ Chưa chốt trần điểm cộng/trừ đột xuất mỗi dòng (đề xuất: tối đa 20đ/dòng, bắt buộc ghi chú). |

@@ -11,7 +11,7 @@
 // trong App.tsx. KHÔNG dùng service_role key ở phía trình duyệt.
 import { createClient } from '@supabase/supabase-js';
 import type { User } from '@supabase/supabase-js';
-import type { AppState, Role } from './lib';
+import type { AppState, Role, Week, ClassItem, Roster, Score, LogEntry } from './lib';
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -150,7 +150,7 @@ export interface SharedRow {
 // dùng được không để khỏi hỏi lại mỗi lần (lỗi 42703 = cột chưa có).
 let versionSupported: boolean | null = null;
 
-export async function fetchSharedState(): Promise<SharedRow> {
+async function fetchBlobState(): Promise<SharedRow> {
   if (!supabase) return { data: null, updatedAt: null, version: null };
   const fields = versionSupported === false ? 'data, updated_at' : 'data, updated_at, version';
   const { data, error } = await supabase
@@ -162,7 +162,7 @@ export async function fetchSharedState(): Promise<SharedRow> {
     // Chưa chạy migration-pro.sql thì cột version chưa có -> đọc lại không có version.
     if (versionSupported !== false && /version/i.test(error.message)) {
       versionSupported = false;
-      return fetchSharedState();
+      return fetchBlobState();
     }
     throw new Error(error.message);
   }
@@ -184,7 +184,7 @@ export interface SaveResult { updatedAt: string | null; version: number | null; 
 // version) trên máy chủ vẫn đúng như lúc mình tải — nếu máy khác đã lưu
 // mới hơn thì trả về conflict: true, KHÔNG ghi đè. Lần ghi đầu (chưa có
 // dòng) hoặc ghi đè có xác nhận (force) thì lấy lại bản mới nhất rồi ghi.
-export async function saveSharedState(
+async function saveBlobState(
   state: AppState,
   updatedBy: string,
   opts: { expectedUpdatedAt?: string | null; expectedVersion?: number | null; force?: boolean } = {},
@@ -192,9 +192,9 @@ export async function saveSharedState(
   if (!supabase) return { updatedAt: null, version: null, conflict: false };
   const { expectedUpdatedAt = null, expectedVersion = null, force = false } = opts;
   if (force) {
-    const cur = await fetchSharedState();
+    const cur = await fetchBlobState();
     if (!cur.data) return upsertShared(state, updatedBy, 1);
-    return saveSharedState(state, updatedBy, { expectedUpdatedAt: cur.updatedAt, expectedVersion: cur.version });
+    return saveBlobState(state, updatedBy, { expectedUpdatedAt: cur.updatedAt, expectedVersion: cur.version });
   }
   if (!expectedUpdatedAt && expectedVersion === null) return upsertShared(state, updatedBy, 1);
   const patch: Record<string, unknown> = { data: state, updated_by: updatedBy };
@@ -206,7 +206,7 @@ export async function saveSharedState(
   if (error) {
     if (versionSupported !== false && /version/i.test(error.message)) {
       versionSupported = false;
-      return saveSharedState(state, updatedBy, opts);
+      return saveBlobState(state, updatedBy, opts);
     }
     throw new Error(error.message);
   }
@@ -227,6 +227,345 @@ async function upsertShared(state: AppState, updatedBy: string, version: number)
     throw new Error(error.message);
   }
   return { updatedAt: (data as unknown as Record<string, unknown> | null)?.updated_at as string ?? null, version: (data as unknown as Record<string, unknown> | null)?.version as number ?? null, conflict: false };
+}
+
+// --- Bảng riêng (migration-split.sql, split-1) ---
+// Khi bảng settings đã có dữ liệu, app đọc/ghi theo từng bảng
+// (weeks/classes/roster/scores/logs/settings) với kiểm tra version
+// từng dòng để hai máy sửa hai phiếu khác nhau không xung đột nhau.
+// app_state vẫn được ghi kèm làm bản sao lưu (lịch sử khôi phục).
+// Chưa chạy migration-split.sql thì tự dùng app_state như cũ.
+let tablesMode: boolean | null = null;
+let baseState: AppState | null = null;
+let baseVersions = new Map<string, number>();
+let baseSorts = new Map<string, number>();
+let baseUpdatedAt: string | null = null;
+
+type Row = Record<string, unknown>;
+function canon(v: unknown): string {
+  if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+  if (v && typeof v === 'object') return '{' + Object.keys(v as object).sort().map(k => JSON.stringify(k) + ':' + canon((v as Row)[k])).join(',') + '}';
+  return JSON.stringify(v) ?? 'null';
+}
+function deepCopy<T>(v: T): T { return JSON.parse(JSON.stringify(v)) as T; }
+function isMissingTable(error: { code?: string; message: string }): boolean {
+  return error.code === 'PGRST205' || error.code === '42P01' || /could not find the table|does not exist|schema cache/i.test(error.message);
+}
+function sStr(v: unknown): string { return typeof v === 'string' ? v : ''; }
+function sOpt(v: unknown): string | undefined { return typeof v === 'string' ? v : undefined; }
+
+function toWeek(r: Row): Week {
+  const w: Week = { id: sStr(r.id), label: sStr(r.label), dateRange: sStr(r.date_range), submittedAt: sOpt(r.submitted_at) ?? null, submittedBy: sOpt(r.submitted_by) ?? null };
+  const m = sOpt(r.month); if (m) w.month = m;
+  return w;
+}
+function toClass(r: Row): ClassItem { return { id: sStr(r.id), name: sStr(r.name) }; }
+function toRoster(r: Row): Roster { return { id: sStr(r.id), name: sStr(r.name), classId: sStr(r.class_id), weekId: sStr(r.week_id), active: r.active !== false }; }
+function toScore(r: Row): Score {
+  const s: Score = { id: sStr(r.id), weekId: sStr(r.week_id), classId: sStr(r.class_id), details: (r.details ?? {}) as Score['details'], status: (sStr(r.status) || 'draft') as Score['status'] };
+  const rr = sOpt(r.return_reason); if (rr !== undefined) s.returnReason = rr;
+  const sb = sOpt(r.submitted_by); if (sb !== undefined) s.submittedBy = sb;
+  const sa = sOpt(r.submitted_at); if (sa !== undefined) s.submittedAt = sa;
+  const ab = sOpt(r.approved_by); if (ab !== undefined) s.approvedBy = ab;
+  const aa = sOpt(r.approved_at); if (aa !== undefined) s.approvedAt = aa;
+  const ub = sOpt(r.updated_by); if (ub !== undefined) s.updatedBy = ub;
+  const ua = sOpt(r.updated_at_text); if (ua !== undefined) s.updatedAt = ua;
+  return s;
+}
+function toLog(r: Row): LogEntry { return { id: sStr(r.id), time: sStr(r.time), actor: sStr(r.actor), role: sStr(r.role), action: sStr(r.action), detail: sStr(r.detail) }; }
+
+function weekRow(w: Week, sort: number): Row { return { id: w.id, label: w.label, date_range: w.dateRange, month: w.month ?? null, submitted_at: w.submittedAt ?? null, submitted_by: w.submittedBy ?? null, sort_order: sort }; }
+function classRow(c: ClassItem, sort: number): Row { return { id: c.id, name: c.name, sort_order: sort }; }
+function rosterRow(r: Roster, sort: number): Row { return { id: r.id, name: r.name, class_id: r.classId, week_id: r.weekId, active: r.active, sort_order: sort }; }
+function scoreRow(s: Score): Row {
+  return { id: s.id, week_id: s.weekId, class_id: s.classId, status: s.status, details: s.details, return_reason: s.returnReason ?? null, submitted_by: s.submittedBy ?? null, submitted_at: s.submittedAt ?? null, approved_by: s.approvedBy ?? null, approved_at: s.approvedAt ?? null, updated_by: s.updatedBy ?? null, updated_at_text: s.updatedAt ?? null };
+}
+function logRow(l: LogEntry, sort: number): Row { return { id: l.id, time: l.time, actor: l.actor, role: l.role, action: l.action, detail: l.detail, sort_order: sort }; }
+
+interface TablesLoad { state: AppState; updatedAt: string | null; versions: Map<string, number>; sorts: Map<string, number>; }
+
+async function loadTables(): Promise<TablesLoad | null> {
+  if (!supabase) return null;
+  const s = await supabase.from('settings').select('data, updated_at, version').eq('id', 'main').maybeSingle();
+  if (s.error) throw s.error;
+  if (!s.data) return null;
+  const settingsData = (s.data as Row).data;
+  if (!settingsData || typeof settingsData !== 'object') {
+    throw new Error('Dữ liệu chung bị lỗi định dạng, chưa ghi đè — liên hệ Ban thi đua kiểm tra lại Supabase.');
+  }
+  const [w, c, r, sc, l] = await Promise.all([
+    supabase.from('weeks').select('*').order('sort_order', { ascending: true }).order('updated_at', { ascending: true }),
+    supabase.from('classes').select('*').order('sort_order', { ascending: true }).order('updated_at', { ascending: true }),
+    supabase.from('roster').select('*').order('sort_order', { ascending: true }).order('updated_at', { ascending: true }),
+    supabase.from('scores').select('*'),
+    supabase.from('logs').select('*').order('sort_order', { ascending: false }).limit(300),
+  ]);
+  for (const q of [w, c, r, sc, l]) if (q.error) throw q.error;
+  const versions = new Map<string, number>();
+  const sorts = new Map<string, number>();
+  let maxUpdated = sStr((s.data as Row).updated_at);
+  versions.set('settings:main', Number((s.data as Row).version ?? 1));
+  const track = (table: string, rows: Row[]) => {
+    for (const row of rows) {
+      versions.set(`${table}:${sStr(row.id)}`, Number(row.version ?? 1));
+      if (typeof row.sort_order === 'number') sorts.set(`${table}:${sStr(row.id)}`, row.sort_order);
+      const ua = sStr(row.updated_at); if (ua > maxUpdated) maxUpdated = ua;
+    }
+  };
+  const wRows = (w.data ?? []) as Row[]; const cRows = (c.data ?? []) as Row[];
+  const rRows = (r.data ?? []) as Row[]; const sRows = (sc.data ?? []) as Row[];
+  const lRows = ((l.data ?? []) as Row[]).slice().reverse();
+  track('weeks', wRows); track('classes', cRows); track('roster', rRows); track('scores', sRows);
+  sorts.set('logs:max', lRows.reduce((m, row) => Math.max(m, Number(row.sort_order ?? 0)), 0));
+  const state: AppState = {
+    settings: settingsData as AppState['settings'],
+    weeks: wRows.map(toWeek),
+    classes: cRows.map(toClass),
+    roster: rRows.map(toRoster),
+    scores: sRows.map(toScore),
+    logs: lRows.map(toLog),
+  };
+  if (!state.settings || !Array.isArray(state.weeks)) {
+    throw new Error('Dữ liệu chung bị lỗi định dạng, chưa ghi đè — liên hệ Ban thi đua kiểm tra lại Supabase.');
+  }
+  return { state, updatedAt: maxUpdated || null, versions, sorts };
+}
+
+export async function fetchSharedState(): Promise<SharedRow> {
+  if (!supabase) return { data: null, updatedAt: null, version: null };
+  if (tablesMode === false) return fetchBlobState();
+  try {
+    const t = await loadTables();
+    if (t) {
+      tablesMode = true;
+      baseState = deepCopy(t.state); baseVersions = t.versions; baseSorts = t.sorts; baseUpdatedAt = t.updatedAt;
+      return { data: t.state, updatedAt: t.updatedAt, version: null };
+    }
+  } catch (e) {
+    const err = e as { code?: string; message?: string };
+    if (err && typeof err.message === 'string' && isMissingTable({ code: err.code, message: err.message })) {
+      tablesMode = false;
+      return fetchBlobState();
+    }
+    throw e instanceof Error ? e : new Error(err?.message ?? 'Chưa tải được dữ liệu dùng chung từ Supabase.');
+  }
+  // Bảng riêng đã có nhưng chưa có dữ liệu: nếu app_state còn dữ liệu
+  // thì chưa chuyển đổi xong — đọc app_state như cũ.
+  const blob = await fetchBlobState();
+  if (blob.data) return blob;
+  tablesMode = true; baseState = null; baseVersions = new Map(); baseSorts = new Map(); baseUpdatedAt = null;
+  return { data: null, updatedAt: null, version: null };
+}
+
+function diffById<T extends { id: string }>(base: T[], next: T[]): { inserts: T[]; updates: T[]; deletes: T[] } {
+  const baseMap = new Map(base.map(x => [x.id, x]));
+  const nextMap = new Map(next.map(x => [x.id, x]));
+  const inserts: T[] = []; const updates: T[] = []; const deletes: T[] = [];
+  for (const x of next) {
+    const b = baseMap.get(x.id);
+    if (!b) inserts.push(x);
+    else if (canon(b) !== canon(x)) updates.push(x);
+  }
+  for (const x of base) if (!nextMap.has(x.id)) deletes.push(x);
+  return { inserts, updates, deletes };
+}
+
+async function dualWriteBlob(state: AppState, updatedBy: string): Promise<void> {
+  if (!supabase) return;
+  try { await supabase.from('app_state').upsert({ id: 'main', data: state, updated_by: updatedBy }); } catch { /* bản sao lưu: lỗi thì bỏ qua */ }
+}
+
+async function insertAllTables(state: AppState, updatedBy: string): Promise<SaveResult> {
+  if (!supabase) return { updatedAt: null, version: null, conflict: false };
+  const versions = new Map<string, number>();
+  const sorts = new Map<string, number>();
+  let maxUpdated = '';
+  const note = (table: string, rows: Row[] | null) => {
+    for (const row of rows ?? []) {
+      versions.set(`${table}:${sStr(row.id)}`, Number(row.version ?? 1));
+      if (typeof row.sort_order === 'number') sorts.set(`${table}:${sStr(row.id)}`, row.sort_order);
+      const ua = sStr(row.updated_at); if (ua > maxUpdated) maxUpdated = ua;
+    }
+  };
+  const sRes = await supabase.from('settings').insert({ id: 'main', data: state.settings }).select('id, updated_at, version');
+  if (sRes.error) throw new Error(sRes.error.message);
+  note('settings', (sRes.data ?? []) as Row[]);
+  const wRes = await supabase.from('weeks').insert(state.weeks.map((w, i) => weekRow(w, i))).select('id, updated_at, version, sort_order');
+  if (wRes.error) throw new Error(wRes.error.message);
+  note('weeks', (wRes.data ?? []) as Row[]);
+  const cRes = await supabase.from('classes').insert(state.classes.map((c, i) => classRow(c, i))).select('id, updated_at, version, sort_order');
+  if (cRes.error) throw new Error(cRes.error.message);
+  note('classes', (cRes.data ?? []) as Row[]);
+  if (state.roster.length) {
+    const rRes = await supabase.from('roster').insert(state.roster.map((r, i) => rosterRow(r, i))).select('id, updated_at, version, sort_order');
+    if (rRes.error) throw new Error(rRes.error.message);
+    note('roster', (rRes.data ?? []) as Row[]);
+  }
+  if (state.scores.length) {
+    const scRes = await supabase.from('scores').insert(state.scores.map(scoreRow)).select('id, updated_at, version');
+    if (scRes.error) throw new Error(scRes.error.message);
+    note('scores', (scRes.data ?? []) as Row[]);
+  }
+  if (state.logs.length) {
+    const lRes = await supabase.from('logs').insert(state.logs.map((l, i) => logRow(l, i))).select('id');
+    if (lRes.error) throw new Error(lRes.error.message);
+  }
+  sorts.set('logs:max', Math.max(state.logs.length - 1, 0));
+  baseState = deepCopy(state); baseVersions = versions; baseSorts = sorts; baseUpdatedAt = maxUpdated || null;
+  await dualWriteBlob(state, updatedBy);
+  return { updatedAt: baseUpdatedAt, version: null, conflict: false };
+}
+
+async function saveTables(state: AppState, updatedBy: string, force: boolean): Promise<SaveResult> {
+  if (!supabase) return { updatedAt: null, version: null, conflict: false };
+  if (!baseState || force) {
+    const cur = await loadTables();
+    if (!cur) return insertAllTables(state, updatedBy);
+    baseState = cur.state; baseVersions = cur.versions; baseSorts = cur.sorts; baseUpdatedAt = cur.updatedAt;
+  }
+  const base = baseState;
+  const dWeeks = diffById(base.weeks, state.weeks);
+  const dClasses = diffById(base.classes, state.classes);
+  const dRoster = diffById(base.roster, state.roster);
+  const dScores = diffById(base.scores, state.scores);
+  const settingsChanged = canon(base.settings) !== canon(state.settings);
+  const baseLogIds = new Set(base.logs.map(l => l.id));
+  const newLogs = state.logs.filter(l => !baseLogIds.has(l.id));
+
+  if (!force) {
+    // Kiểm tra version trước khi ghi: dòng nào máy khác đã sửa thì báo
+    // xung đột ngay, chưa ghi gì cả.
+    const checks: { table: string; ids: string[] }[] = [
+      { table: 'weeks', ids: [...dWeeks.updates, ...dWeeks.deletes].map(x => x.id) },
+      { table: 'classes', ids: [...dClasses.updates, ...dClasses.deletes].map(x => x.id) },
+      { table: 'roster', ids: [...dRoster.updates, ...dRoster.deletes].map(x => x.id) },
+      { table: 'scores', ids: [...dScores.updates, ...dScores.deletes].map(x => x.id) },
+    ];
+    if (settingsChanged) checks.push({ table: 'settings', ids: ['main'] });
+    for (const chk of checks) {
+      if (!chk.ids.length) continue;
+      const { data, error } = await supabase.from(chk.table).select('id, version').in('id', chk.ids);
+      if (error) throw new Error(error.message);
+      const remote = new Map(((data ?? []) as Row[]).map(r => [sStr(r.id), Number(r.version ?? 1)]));
+      for (const id of chk.ids) {
+        if (remote.get(id) !== baseVersions.get(`${chk.table}:${id}`)) return { updatedAt: null, version: null, conflict: true };
+      }
+    }
+    const insertChecks: { table: string; ids: string[] }[] = [
+      { table: 'weeks', ids: dWeeks.inserts.map(x => x.id) },
+      { table: 'classes', ids: dClasses.inserts.map(x => x.id) },
+      { table: 'roster', ids: dRoster.inserts.map(x => x.id) },
+      { table: 'scores', ids: dScores.inserts.map(x => x.id) },
+    ];
+    for (const chk of insertChecks) {
+      if (!chk.ids.length) continue;
+      const { data, error } = await supabase.from(chk.table).select('id').in('id', chk.ids);
+      if (error) throw new Error(error.message);
+      if ((data ?? []).length) return { updatedAt: null, version: null, conflict: true };
+    }
+  }
+
+  let maxUpdated = baseUpdatedAt ?? '';
+  const noteRow = (table: string, row: Row) => {
+    baseVersions.set(`${table}:${sStr(row.id)}`, Number(row.version ?? 1));
+    if (typeof row.sort_order === 'number') baseSorts.set(`${table}:${sStr(row.id)}`, row.sort_order);
+    const ua = sStr(row.updated_at); if (ua > maxUpdated) maxUpdated = ua;
+  };
+  const nextSort = (table: string): number => {
+    let m = -1;
+    for (const [k, v] of baseSorts) if (k.startsWith(table + ':')) m = Math.max(m, v);
+    return m + 1;
+  };
+
+  async function applyTable<T extends { id: string }>(
+    table: string,
+    d: { inserts: T[]; updates: T[] },
+    rowOf: (x: T, sort: number) => Row,
+    withSort: boolean,
+  ): Promise<boolean> {
+    if (!supabase) return true;
+    const sel = withSort ? 'id, updated_at, version, sort_order' : 'id, updated_at, version';
+    if (d.inserts.length) {
+      let sort = nextSort(table);
+      const rows = d.inserts.map(x => rowOf(x, withSort ? sort++ : 0));
+      const { data, error } = await supabase.from(table).insert(rows).select(sel);
+      if (error) throw new Error(error.message);
+      for (const row of (data ?? []) as unknown as Row[]) noteRow(table, row);
+    }
+    for (const x of d.updates) {
+      const sort = baseSorts.get(`${table}:${x.id}`) ?? 0;
+      const row = rowOf(x, sort);
+      if (force) {
+        const { data, error } = await supabase.from(table).upsert(row).select(sel);
+        if (error) throw new Error(error.message);
+        for (const r of (data ?? []) as unknown as Row[]) noteRow(table, r);
+      } else {
+        const { data, error } = await supabase.from(table).update(row).eq('id', x.id).eq('version', baseVersions.get(`${table}:${x.id}`) ?? 1).select(sel).maybeSingle();
+        if (error) throw new Error(error.message);
+        if (!data) return false; // máy khác vừa sửa dòng này
+        noteRow(table, data as unknown as Row);
+      }
+    }
+    return true;
+  }
+
+  if (settingsChanged) {
+    if (force) {
+      const { data, error } = await supabase.from('settings').upsert({ id: 'main', data: state.settings }).select('id, updated_at, version');
+      if (error) throw new Error(error.message);
+      for (const r of (data ?? []) as Row[]) noteRow('settings', r);
+    } else {
+      const { data, error } = await supabase.from('settings').update({ data: state.settings }).eq('id', 'main').eq('version', baseVersions.get('settings:main') ?? 1).select('id, updated_at, version').maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!data) return { updatedAt: null, version: null, conflict: true };
+      noteRow('settings', data as Row);
+    }
+  }
+  if (!(await applyTable('weeks', dWeeks, weekRow, true))) return { updatedAt: null, version: null, conflict: true };
+  if (!(await applyTable('classes', dClasses, classRow, true))) return { updatedAt: null, version: null, conflict: true };
+  if (!(await applyTable('roster', dRoster, rosterRow, true))) return { updatedAt: null, version: null, conflict: true };
+  if (!(await applyTable('scores', dScores, (s) => scoreRow(s), false))) return { updatedAt: null, version: null, conflict: true };
+
+  if (newLogs.length) {
+    let sort = (baseSorts.get('logs:max') ?? 0) + 1;
+    const rows = newLogs.map(l => logRow(l, sort++));
+    const { error } = await supabase.from('logs').insert(rows).select('id');
+    if (error) throw new Error(error.message);
+    baseSorts.set('logs:max', sort - 1);
+  }
+
+  const deleteOrder: { table: string; ids: string[] }[] = [
+    { table: 'scores', ids: dScores.deletes.map(x => x.id) },
+    { table: 'roster', ids: dRoster.deletes.map(x => x.id) },
+    { table: 'weeks', ids: dWeeks.deletes.map(x => x.id) },
+    { table: 'classes', ids: dClasses.deletes.map(x => x.id) },
+  ];
+  for (const del of deleteOrder) {
+    for (const id of del.ids) {
+      let q = supabase.from(del.table).delete().eq('id', id);
+      if (!force) q = q.eq('version', baseVersions.get(`${del.table}:${id}`) ?? 1);
+      const { data, error } = await q.select('id');
+      if (error) throw new Error(error.message);
+      if (!force && !(data ?? []).length) return { updatedAt: null, version: null, conflict: true };
+      baseVersions.delete(`${del.table}:${id}`);
+      baseSorts.delete(`${del.table}:${id}`);
+    }
+  }
+
+  baseState = deepCopy(state);
+  baseUpdatedAt = maxUpdated || baseUpdatedAt;
+  await dualWriteBlob(state, updatedBy);
+  return { updatedAt: baseUpdatedAt, version: null, conflict: false };
+}
+
+export async function saveSharedState(
+  state: AppState,
+  updatedBy: string,
+  opts: { expectedUpdatedAt?: string | null; expectedVersion?: number | null; force?: boolean } = {},
+): Promise<SaveResult> {
+  if (!supabase) return { updatedAt: null, version: null, conflict: false };
+  if (tablesMode !== true) return saveBlobState(state, updatedBy, opts);
+  return saveTables(state, updatedBy, !!opts.force);
 }
 
 // --- Lịch sử sao lưu (app_state_history, từ migration-pro.sql) ---
