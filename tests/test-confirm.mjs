@@ -33,14 +33,19 @@ const browser = await chromium.launch({ executablePath: EXE });
   ok(dt.includes('4 phiếu sẽ bị xóa.'), 'confirm: hộp thoại nêu đúng 4 phiếu sẽ mất (tuần 5 có 4 phiếu)');
   ok(dt.includes('không khôi phục được'), 'confirm: hộp thoại cảnh báo không khôi phục được');
   ok((await page.getByTestId('confirm-ok').getAttribute('class') ?? '').includes('danger'), 'confirm: nút Xác nhận màu đỏ cho thao tác phá hủy');
+  // Chống bấm nhầm 2 lần: nút xóa chưa bấm được ngay khi hộp vừa mở.
+  ok(await page.getByTestId('confirm-ok').isDisabled(), 'confirm: nút Xóa tuần chưa bấm được ngay khi hộp vừa mở (chống bấm nhầm)');
+  ok(dt.includes('tránh bấm nhầm 2 lần'), 'confirm: hộp thoại ghi rõ nút xóa chờ 1 giây');
+  await page.waitForTimeout(1000);
+  ok(!(await page.getByTestId('confirm-ok').isDisabled()), 'confirm: nút Xóa tuần bấm được sau 1 giây');
   // Bấm Hủy -> không đổi.
   await page.getByTestId('confirm-cancel').click();
   await page.waitForTimeout(400);
   ok((await page.getByRole('dialog').count()) === 0, 'confirm: bấm Hủy đóng hộp thoại');
   ok((await page.locator('main .card p', { hasText: /^Tuần 05 / }).count()) === 1, 'confirm: bấm Hủy thì Tuần 05 vẫn còn');
-  // Bấm Xóa lại -> Xác nhận -> tuần mất thật.
+  // Bấm Xóa lại -> chờ nút xóa "mở khóa" -> Xác nhận -> tuần mất thật.
   await page.locator('main .card p', { hasText: /^Tuần 05 / }).getByRole('button', { name: 'Xóa', exact: true }).click();
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(1300);
   await page.getByTestId('confirm-ok').click();
   await page.waitForTimeout(500);
   ok((await page.locator('main .card p', { hasText: /^Tuần 05 / }).count()) === 0, 'confirm: Xác nhận xong Tuần 05 biến mất khỏi Quản lý');

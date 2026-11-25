@@ -105,6 +105,14 @@ export interface ConfirmOpts {
 }
 function ConfirmDialog({ dlg, onClose }: { dlg: ConfirmOpts; onClose: () => void }) {
   const cancel = () => { dlg.onCancel?.(); onClose(); };
+  // Chống bấm nhầm 2 lần: nút xóa (danger) chỉ bấm được sau khi hộp đã mở 1 giây,
+  // để cái chạm thứ hai (lỡ tay chạm 2 lần liên tiếp trên điện thoại) không xác nhận luôn.
+  const [armed, setArmed] = useState(!dlg.danger);
+  useEffect(() => {
+    if (!dlg.danger) return;
+    const t = setTimeout(() => setArmed(true), 1000);
+    return () => clearTimeout(t);
+  }, [dlg.danger]);
   return (
     <div className="confirm-overlay" role="dialog" aria-modal="true" aria-label={dlg.title} onClick={e => { if (e.target === e.currentTarget) cancel(); }}>
       <div className="card confirm-box">
@@ -115,8 +123,9 @@ function ConfirmDialog({ dlg, onClose }: { dlg: ConfirmOpts; onClose: () => void
         )}
         <div className="row" style={{ marginTop: 12 }}>
           <button className="btn grey" type="button" data-testid="confirm-cancel" onClick={cancel}>Hủy</button>
-          <button className={dlg.danger ? 'btn danger' : 'btn'} type="button" data-testid="confirm-ok" onClick={() => { onClose(); dlg.onConfirm(); }}>{dlg.confirmLabel ?? 'Xác nhận'}</button>
+          <button className={dlg.danger ? 'btn danger' : 'btn'} type="button" data-testid="confirm-ok" disabled={dlg.danger && !armed} onClick={() => { onClose(); dlg.onConfirm(); }}>{dlg.confirmLabel ?? 'Xác nhận'}</button>
         </div>
+        {dlg.danger && !armed && <p style={{ color: '#6b7280', fontSize: 13, marginTop: 8 }}>Nút xóa bấm được sau 1 giây — tránh bấm nhầm 2 lần.</p>}
       </div>
     </div>
   );
