@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, ClassGroup, ClassItem, Details, ExtraLine, Role, Score, Week } from './lib';
-import { assignedClassName, calcScore, classAvg, classCoverage, classGroup, classIdFromAssigned, clsOf, compareAvg, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, monthBlockOf, monthLabel, neNepLines, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekNumberOf } from './lib';
+import { assignedClassName, calcScore, classAvg, classCoverage, classGroup, classIdFromAssigned, clsOf, compareAvg, deadlineInfo, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, monthBlockOf, monthLabel, neNepLines, notSubmittedClasses, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekDeadline, weekNumberOf } from './lib';
 import { exportClassDocx, exportMonthDocx, exportWeekDocx, exportWeekDocxNoRank } from './docxExport';
 import { LOGO_DATA_URI } from './logoData';
 import AuthScreen from './AuthScreen';
@@ -1161,9 +1161,10 @@ export default function App() {
   // Chép tin nhắn nhắc các lớp chưa nộp phiếu (để gửi Zalo).
   function copyReminder() {
     if (!week) return;
-    const missingNames = state.classes.filter(c => !state.scores.some(s => s.weekId === week.id && s.classId === c.id)).map(c => c.name);
-    if (!missingNames.length) { setMsg('Tất cả các lớp đã có phiếu.'); return; }
-    const text = `Nhắc nộp phiếu thi đua ${week.label.toUpperCase()}${week.dateRange ? ` (${week.dateRange})` : ''}:\nCác lớp chưa nộp phiếu: ${missingNames.join(', ')}.\nNhờ các lớp nộp phiếu đúng hạn nhé. Cảm ơn các lớp!`;
+    const missingNames = notSubmittedClasses(state, week.id).map(c => c.name);
+    if (!missingNames.length) { setMsg('Tất cả các lớp đã nộp phiếu.'); return; }
+    const dl = deadlineInfo(weekDeadline(state.settings, week.id));
+    const text = `Nhắc nộp phiếu thi đua ${week.label.toUpperCase()}${week.dateRange ? ` (${week.dateRange})` : ''}${dl ? `\nHạn nộp: ${dl.label}${dl.overdue ? ' — đã quá hạn' : ''}.` : ''}\nCác lớp chưa nộp phiếu: ${missingNames.join(', ')}.\nNhờ các lớp nộp phiếu đúng hạn nhé. Cảm ơn các lớp!`;
     navigator.clipboard?.writeText(text).then(() => setMsg('Đã chép tin nhắc để gửi Zalo.')).catch(() => setErrs(['Không chép được, trình duyệt chặn clipboard.']));
   }
 
@@ -1610,6 +1611,8 @@ function Overview({ state, week, role, assignment, homeClassId, onEnterScores, o
   const pending = week ? state.scores.filter(s => s.weekId === week.id && s.status === 'submitted') : [];
   const returned = week ? state.scores.filter(s => s.weekId === week.id && s.status === 'returned') : [];
   const anomalies = week ? state.scores.filter(s => s.weekId === week.id && (calcScore(s.details).final > 150 || calcScore(s.details).final < 50)) : [];
+  const deadline = week && !week.submittedAt ? deadlineInfo(weekDeadline(state.settings, week.id)) : null;
+  const notSubmitted = week ? notSubmittedClasses(state, week.id) : [];
   // Vi phạm: chỉ tính phiếu đã duyệt của tuần hiện tại.
   const approvedWeek = week ? state.scores.filter(s => s.weekId === week.id && s.status === 'approved') : [];
   // Lớp của tôi (GVCN): tài khoản Chỉ xem được gán lớp chủ nhiệm thì thấy
@@ -1637,9 +1640,10 @@ function Overview({ state, week, role, assignment, homeClassId, onEnterScores, o
         <button type="button" className="kpi-btn" onClick={() => onGoTab?.('xep-hang')}><b>{approved}/{total}</b>Đã duyệt</button>
         <button type="button" className="kpi-btn" onClick={() => onGoTab?.('nhap-diem')}><b>{submitted}</b>Chờ duyệt</button>
       </div>
-      {week && <p>Tuần hiện tại: <b>{week.label}</b> {week.dateRange} {week.submittedAt ? `— Đã nộp ${week.submittedAt}` : '— Chưa chốt'}</p>}
+      {week && <p>Tuần hiện tại: <b>{week.label}</b> {week.dateRange} {week.submittedAt ? `— Đã nộp ${week.submittedAt}` : '— Chưa chốt'}{deadline ? ` — Hạn nộp: ${deadline.label} (${deadline.overdue ? 'Đã quá hạn' : 'Còn hạn'})` : ''}</p>}
       <div className="card"><h2>Cần xử lý ngay{week ? ` — ${week.label}` : ''}</h2>
-        {!week ? <p>Chưa có tuần nào.</p> : pending.length === 0 && returned.length === 0 && missing.length === 0 ? <p>Không có việc nào cần xử lý — tất cả các lớp đã được duyệt.</p> : (<div>
+        {!week ? <p>Chưa có tuần nào.</p> : pending.length === 0 && returned.length === 0 && missing.length === 0 && !(deadline?.overdue && notSubmitted.length > 0) ? <p>Không có việc nào cần xử lý — tất cả các lớp đã được duyệt.</p> : (<div>
+          {deadline?.overdue && notSubmitted.length > 0 && <><p><b>Quá hạn nộp ({notSubmitted.length}):</b> {notSubmitted.map(c => <span key={c.id} className="chip-mini">{c.name}</span>)}</p><div className="row"><button className="btn ghost" type="button" onClick={() => onCopyReminder?.()}>Chép tin nhắc Zalo</button></div></>}
           {pending.length > 0 && <><p><b>Chờ duyệt ({pending.length}):</b></p>{pending.map(s => (
             <div key={s.id} className="warn-row"><div><b>{state.classes.find(c => c.id === s.classId)?.name}</b> — {calcScore(s.details).final}đ, loại {calcScore(s.details).cls}</div><div className="row">{onOpenClass && <button className="btn ghost" type="button" onClick={() => onOpenClass(s.classId)}>Xem phiếu</button>}</div></div>
           ))}</>}
@@ -1894,6 +1898,7 @@ function ScoreForm(props: {
           <textarea value={d.opinionClass} disabled={!canEdit} onChange={e => props.setD('opinionClass', e.target.value)} />
           <label>Ý kiến của cờ đỏ</label>
           <textarea value={d.opinionCodo} disabled={!canEdit} onChange={e => props.setD('opinionCodo', e.target.value)} />
+          {week && !week.submittedAt && (() => { const dl = deadlineInfo(weekDeadline(state.settings, week.id)); return dl ? <div className={dl.overdue ? 'err' : 'warn'}>{dl.overdue ? `Đã quá hạn nộp (${dl.label}) — nộp phiếu ngay nhé.` : `Hạn nộp: ${dl.label}.`}</div> : null; })()}
           {week?.submittedAt ? <div className="err">Tuần này đã chốt sổ — cờ đỏ không nhập lại được. Ban thi đua mở lại sổ thì mới nhập tiếp được.</div> : !canEdit && <div className="warn">Phiếu này bạn không được sửa (xem phân quyền / phiếu đã nộp hoặc đã duyệt / tuần đã chốt).</div>}
           <div className="scorebar">
             <div className="scorebar-scores"><span>(1) Cộng: <b>+{calc.plus}đ</b></span><span>(2) Trừ: <b>-{calc.minus}đ</b></span><span>Điểm thi đua: <b>{calc.final}đ</b></span><span className={`badge ${calc.cls}`}>Loại {calc.cls}</span></div>
@@ -1982,6 +1987,7 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
   const [section, setSection] = useState<'tuan' | 'codo' | 'gvcn' | 'btd' | 'caidat'>('tuan');
   // Sổ tuần đang mở: phải mở xem hết sổ tuần mới xóa được tuần đó.
   const [openWeekId, setOpenWeekId] = useState<string | null>(null);
+  const [deadlineDraft, setDeadlineDraft] = useState(''); const [deadlineNote, setDeadlineNote] = useState('');
   const openWeek = state.weeks.find(w => w.id === openWeekId);
   // Hồ sơ của mục tài khoản đang mở (codo = cờ đỏ, viewer = GVCN, admin = Ban thi đua).
   const sectionProfiles = profiles.filter(p => section === 'codo' ? p.role === 'codo' : section === 'gvcn' ? p.role === 'viewer' : p.role === 'admin');
@@ -2054,10 +2060,12 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
       </div>}
       {section === 'tuan' && <div className="card"><h2>Tuần</h2>
         <div className="row"><input type="text" placeholder="Vd: Tuần 4" value={weekLabel} onChange={e => setWeekLabel(e.target.value)} style={{ maxWidth: 200 }} /><input type="text" placeholder="Vd: 17/11 – 22/11" value={weekRange} onChange={e => setWeekRange(e.target.value)} style={{ maxWidth: 220 }} /><button className="btn" type="button" onClick={() => { if (!weekLabel.trim()) return; const w: Week = { id: uid(), label: weekLabel.trim(), dateRange: weekRange.trim() }; setState({ ...state, weeks: [...state.weeks, w] }); onLog('Tạo tuần', `${w.label} — ${monthLabel(monthBlockOf(w, state.weeks.length + 1))}`); setWeekLabel(''); setWeekRange(''); }}>Thêm tuần</button></div>
-        {state.weeks.map((w, i) => <p key={w.id}>{w.label} {w.dateRange} — {monthLabel(monthBlockOf(w, i + 1))} {w.submittedAt ? `— Đã nộp ${w.submittedAt}` : '— Chưa chốt'} <button className="btn grey" type="button" onClick={() => setOpenWeekId(w.id)}>Mở sổ</button></p>)}
+        {state.weeks.map((w, i) => { const dl = deadlineInfo(weekDeadline(state.settings, w.id)); return <p key={w.id}>{w.label} {w.dateRange} — {monthLabel(monthBlockOf(w, i + 1))} {w.submittedAt ? `— Đã nộp ${w.submittedAt}` : '— Chưa chốt'}{dl ? ` — Hạn nộp: ${dl.label}${dl.overdue && !w.submittedAt ? ' (Đã quá hạn)' : ''}` : ''} <button className="btn grey" type="button" onClick={() => { setOpenWeekId(w.id); setDeadlineDraft(weekDeadline(state.settings, w.id) ?? ''); setDeadlineNote(''); }}>Mở sổ</button></p>; })}
       </div>}
       {section === 'tuan' && openWeek && <div className="card"><h2>Sổ tuần — {openWeek.label}{openWeek.dateRange ? ` (${openWeek.dateRange})` : ''}</h2>
         <p>Toàn bộ {state.classes.length} lớp của tuần này: {state.scores.filter(s => s.weekId === openWeek.id).length} phiếu đã nhập, {state.scores.filter(s => s.weekId === openWeek.id && s.status === 'approved').length} đã duyệt{openWeek.submittedAt ? ` — tuần đã chốt ${openWeek.submittedAt}` : ' — tuần chưa chốt'}.</p>
+        <div className="row"><label>Hạn nộp <input type="datetime-local" aria-label="Hạn nộp của tuần" value={deadlineDraft} onChange={e => setDeadlineDraft(e.target.value)} /></label><button className="btn" type="button" onClick={() => { if (!deadlineDraft) { setDeadlineNote('Chọn ngày giờ hạn nộp trước nhé.'); return; } setState({ ...state, settings: { ...state.settings, deadlines: { ...(state.settings.deadlines ?? {}), [openWeek.id]: deadlineDraft } } }); onLog('Đặt hạn nộp', `${openWeek.label}: ${deadlineInfo(deadlineDraft)?.label ?? deadlineDraft}`); setDeadlineNote('Đã lưu hạn nộp.'); }}>Lưu hạn nộp</button>{weekDeadline(state.settings, openWeek.id) && <button className="btn grey" type="button" onClick={() => { const next = { ...(state.settings.deadlines ?? {}) }; delete next[openWeek.id]; setState({ ...state, settings: { ...state.settings, deadlines: next } }); onLog('Xóa hạn nộp', openWeek.label); setDeadlineDraft(''); setDeadlineNote('Đã xóa hạn nộp.'); }}>Xóa hạn</button>}</div>
+        {deadlineNote && <p>{deadlineNote}</p>}
         <div className="tablewrap slim"><table>
           <thead><tr><th>Lớp</th><th>Trạng thái</th><th>Điểm</th><th>Loại</th></tr></thead>
           <tbody>{state.classes.map(c => { const s = state.scores.find(x => x.weekId === openWeek.id && x.classId === c.id); const cc = s ? calcScore(s.details) : null; return <tr key={c.id}><td>{c.name}</td><td>{s ? STATUS_LABEL[s.status] : 'Chưa nộp'}</td><td>{cc ? `${cc.final}đ` : '—'}</td><td>{cc ? cc.cls : '—'}</td></tr>; })}</tbody>
@@ -2075,7 +2083,8 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
               danger: true,
               onConfirm: () => {
                 profiles.filter(p => p.assigned_week_id === openWeek.id).forEach(p => onProfilePatch(p.id, { assigned_week_id: null }));
-                setState({ ...state, weeks: state.weeks.filter(x => x.id !== openWeek.id), scores: state.scores.filter(x => x.weekId !== openWeek.id), roster: state.roster.filter(r => r.weekId !== openWeek.id) });
+                const nextDeadlines = { ...(state.settings.deadlines ?? {}) }; delete nextDeadlines[openWeek.id];
+                setState({ ...state, settings: { ...state.settings, deadlines: nextDeadlines }, weeks: state.weeks.filter(x => x.id !== openWeek.id), scores: state.scores.filter(x => x.weekId !== openWeek.id), roster: state.roster.filter(r => r.weekId !== openWeek.id) });
                 onLog('Xóa tuần', openWeek.label);
                 setOpenWeekId(null);
               },

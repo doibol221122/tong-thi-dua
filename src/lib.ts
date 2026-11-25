@@ -7,6 +7,7 @@ export interface Settings {
   school: string; dept: string; docNo: string;
   signer: string; signerTitle: string;
   generalPros: string; generalCons: string;
+  deadlines?: Record<string, string>; // Hạn nộp theo tuần: weekId -> datetime-local
 }
 export interface Week { id: string; label: string; dateRange: string; month?: string; submittedAt?: string | null; submittedBy?: string | null; }
 // (month cũ dạng MM/YYYY nhập tay — giờ tháng tính theo tuần nên không dùng nữa.)
@@ -231,11 +232,30 @@ export function defaultSettings(): Settings {
   return {
     school: 'TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ', dept: 'BAN THI ĐUA',
     docNo: '04/TĐ-HV', signer: 'Trần Thị Hương', signerTitle: 'PHỤ TRÁCH THI ĐUA',
-    generalPros: '', generalCons: '',
+    generalPros: '', generalCons: '', deadlines: {},
   };
 }
 export function emptyState(): AppState {
   return { settings: defaultSettings(), weeks: [], classes: [], roster: [], scores: [], logs: [] };
+}
+// Hạn nộp của một tuần (Ban thi đua đặt trong Sổ tuần). Lưu trong settings
+// nên không cần thêm cột dữ liệu; giá trị là chuỗi datetime-local.
+export function weekDeadline(settings: Settings, weekId: string): string | undefined {
+  const v = settings.deadlines?.[weekId];
+  return v && !Number.isNaN(new Date(v).getTime()) ? v : undefined;
+}
+export function deadlineInfo(deadline?: string, now = new Date()): { overdue: boolean; label: string } | null {
+  if (!deadline) return null;
+  const d = new Date(deadline);
+  if (Number.isNaN(d.getTime())) return null;
+  return { overdue: now.getTime() > d.getTime(), label: d.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) };
+}
+// Lớp chưa nộp phiếu của một tuần: chưa có phiếu, còn nháp hoặc bị trả lại.
+export function notSubmittedClasses(state: AppState, weekId: string): ClassItem[] {
+  return state.classes.filter(c => {
+    const s = state.scores.find(x => x.weekId === weekId && x.classId === c.id);
+    return !s || (s.status !== 'submitted' && s.status !== 'approved');
+  });
 }
 export interface Calc { plus: number; minus: number; final: number; cls: string; totalHours: number; is100Tot: boolean; noAbsentLate: boolean; }
 // Tổng vắng tự tính: có phép + không phép (không nhập tay nữa).
@@ -520,6 +540,12 @@ export function validateImportedState(p: unknown): { ok: true; state: AppState }
   }
   for (const k of ['generalPros', 'generalCons'] as const) {
     if (s[k] !== undefined && !isStr(s[k])) return fail(`settings: trường ${k} phải là chuỗi.`);
+  }
+  if (s.deadlines !== undefined) {
+    if (!isObj(s.deadlines)) return fail('settings: trường deadlines phải là một đối tượng.');
+    for (const [wid, v] of Object.entries(s.deadlines)) {
+      if (!isStr(v) || Number.isNaN(new Date(v).getTime())) return fail(`settings: hạn nộp của tuần ${wid} không hợp lệ.`);
+    }
   }
   for (const k of ['weeks', 'classes', 'roster', 'scores', 'logs'] as const) {
     if (!Array.isArray(p[k])) return fail(`Thiếu mục ${k} (phải là một mảng).`);
