@@ -1,5 +1,5 @@
 // Mobile 390px: P2-04 (chữ phụ 13px, dấu "còn nữa", một bản log) + P2-06
-// (dropdown chọn lớp, header gọn ≤ ~120px, menu đăng xuất/cài app).
+// (dropdown chọn lớp, header gọn ≤150px, dòng tóm tắt hiện đủ tuần + vai trò + tên, menu đăng xuất/cài app).
 import { chromium } from 'playwright-core';
 import { readFileSync } from 'fs';
 
@@ -31,10 +31,10 @@ const noOverflow = async (page, label) => {
   const { ctx, page } = await newPage(seed5, { role: 'admin', name: 'Y Đôi Bol' }, { width: 390, height: 844 });
   // P2-06: header gọn.
   const hb = await page.locator('header.top').boundingBox();
-  ok(!!hb && hb.height <= 120, 'mobile-390: header gọn ≤120px (thấy: ' + (hb ? Math.round(hb.height) : '?') + 'px)');
+  ok(!!hb && hb.height <= 150, 'mobile-390: header gọn ≤150px (dòng tóm tắt 2 dòng khi có tên; thấy: ' + (hb ? Math.round(hb.height) : '?') + 'px)');
   ok(await page.locator('.header-summary').isVisible(), 'mobile-390: có dòng tóm tắt header');
   const sum = await page.locator('.header-summary').innerText();
-  ok(sum.includes('Tuần 05') && sum.includes('Ban thi đua') && !sum.includes('Y Đôi Bol'), 'mobile-390: tóm tắt header chỉ có tuần + vai trò, KHÔNG nhét tên (thấy: ' + sum.trim() + ')');
+  ok(sum.includes('Tuần 05') && sum.includes('Ban thi đua') && sum.includes('Y Đôi Bol') && !sum.includes('…'), 'mobile-390: tóm tắt header hiện đủ tuần + vai trò + tên, không bị cắt (thấy: ' + sum.trim().replace(/\n/g, ' / ') + ')');
   ok((await page.locator('.userbox .chip.hide-m').first().isVisible()) === false, 'mobile-390: chip lẻ trong header bị ẩn, chỉ còn dòng tóm tắt');
   // P2-06: menu đăng xuất.
   ok(await page.locator('.menu-btn').isVisible(), 'mobile-390: có nút menu ⋮');
