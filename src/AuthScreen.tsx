@@ -154,7 +154,7 @@ export default function AuthScreen({ initialMode, onRecoveryDone, onNotice }: { 
       {mode === 'login' && <p>Đăng nhập bằng email và mật khẩu đã đăng ký. Tài khoản chưa được Ban thi đua duyệt thì chưa vào được.</p>}
       {mode === 'register' && (
         <>
-          <label>Họ tên</label>
+          <label>Họ và tên</label>
           <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Vd: Trần Thị Hương" />
           <label>Vai trò muốn đăng ký</label>
           <select value={requestedRole} onChange={e => setRequestedRole(e.target.value as 'codo' | 'viewer')}>
@@ -162,7 +162,7 @@ export default function AuthScreen({ initialMode, onRecoveryDone, onNotice }: { 
             <option value="viewer">Chỉ xem (GVCN / BGH) — chỉ xem, không nhập</option>
           </select>
           <>
-            <label>{requestedRole === 'codo' ? 'Lớp của bạn' : 'Lớp chủ nhiệm'}</label>
+            <label>{requestedRole === 'codo' ? 'Lớp' : 'Lớp chủ nhiệm'}</label>
             <select value={requestedClass} onChange={e => setRequestedClass(e.target.value)}>
               <option value="">— Chọn lớp —</option>
               {DUTY_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -175,8 +175,8 @@ export default function AuthScreen({ initialMode, onRecoveryDone, onNotice }: { 
       )}
       {mode !== 'reset' && (
         <>
-          <label>Email</label>
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Vd: ten@email.com" autoComplete="email" />
+          <label>{mode === 'register' ? 'Gmail' : 'Email'}</label>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder={mode === 'register' ? 'Vd: ten@gmail.com' : 'Vd: ten@email.com'} autoComplete="email" />
         </>
       )}
       {mode === 'reset' && (

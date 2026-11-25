@@ -38,6 +38,7 @@ async function fillRegister(page, { name, role, className, email, password }) {
   t = await page.locator('main').innerText();
   ok(t.includes('Tài khoản đầu tiên đăng ký sẽ là Ban thi đua'), 'register-A: form đăng ký nhắc tài khoản đầu thành Ban thi đua');
   ok(t.includes('Không tự đăng ký được vai trò Ban thi đua.'), 'register-A: form ghi rõ không tự đăng ký được Ban thi đua');
+  ok(t.includes('Họ và tên') && t.includes('Gmail') && t.includes('Mật khẩu'), 'register-A: form đăng ký có Họ và tên, Gmail, Mật khẩu');
   const roleOpts = await page.locator('select').first().locator('option').allInnerTexts();
   ok(roleOpts.length === 2 && !roleOpts.join(' ').includes('Ban thi đua'), 'register-A: ô vai trò chỉ có 2 lựa chọn, không có Ban thi đua (có: ' + roleOpts.join(' / ') + ')');
   await fillRegister(page, { name: 'Người Đầu Tiên', role: 'codo', className: '10B1', email: 'dau@example.com', password: 'matkhau1' });
@@ -165,6 +166,29 @@ async function fillRegister(page, { name, role, className, email, password }) {
   await card.getByRole('button', { name: 'Duyệt', exact: true }).click();
   await page.waitForTimeout(1000);
   ok(stub.profileByEmail('gvcn-thieulop@example.com')?.status === 'active', 'register-G: gán lớp xong thì duyệt được (active)');
+  await ctx.close();
+}
+
+// ---- H. Lớp đăng ký dạng tên tự đổi thành id thật, không gán tay ----
+// Tài khoản mới chưa đọc được danh sách lớp thật nên hồ sơ tạm lưu
+// assigned_class_id="name:10B2"; Ban thi đua mở app là app tự đổi thành
+// c1 và duyệt được ngay, không phải chọn lớp thủ công.
+{
+  const codo = stub.seedUser({ email: 'codo-tenlop@example.com', password: 'matkhau1', full_name: 'Cờ Đỏ Tên Lớp', requested_role: 'codo', requested_class: '10B2' });
+  stub.seedProfile({ user: codo, role: 'codo', status: 'pending', assigned_class_id: 'name:10B2' });
+  const adminUser = stub.users.get('dau@example.com');
+  const { ctx, page } = await newSbPage(browser, stub, { seedSession: adminUser });
+  await waitText(page, 'Tuần 05');
+  await page.getByRole('button', { name: 'Quản lý', exact: true }).click();
+  await page.getByRole('button', { name: 'Tài khoản cờ đỏ', exact: true }).click();
+  await waitText(page, 'Cờ Đỏ Tên Lớp');
+  await page.waitForTimeout(1000);
+  ok(stub.profileByEmail('codo-tenlop@example.com')?.assigned_class_id === 'c1', 'register-H: lớp dạng tên name:10B2 tự đổi thành id thật c1');
+  const card = page.locator('main .card .card', { hasText: 'Cờ Đỏ Tên Lớp' });
+  ok((await card.getByText('Cờ đỏ lớp 10B2').count()) >= 1, 'register-H: thẻ tài khoản hiện “Cờ đỏ lớp 10B2”');
+  await card.getByRole('button', { name: 'Duyệt', exact: true }).click();
+  await page.waitForTimeout(1000);
+  ok(stub.profileByEmail('codo-tenlop@example.com')?.status === 'active', 'register-H: duyệt được ngay, không phải gán lớp tay');
   await ctx.close();
 }
 

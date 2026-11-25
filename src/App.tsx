@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, ClassGroup, ClassItem, Details, ExtraLine, Role, Score, Week } from './lib';
-import { calcScore, classAvg, classCoverage, classGroup, clsOf, compareAvg, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, monthBlockOf, monthLabel, neNepLines, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekNumberOf } from './lib';
+import { assignedClassName, calcScore, classAvg, classCoverage, classGroup, classIdFromAssigned, clsOf, compareAvg, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, monthBlockOf, monthLabel, neNepLines, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekNumberOf } from './lib';
 import { exportClassDocx, exportMonthDocx, exportWeekDocx, exportWeekDocxNoRank } from './docxExport';
 import { LOGO_DATA_URI } from './logoData';
 import AuthScreen from './AuthScreen';
@@ -623,6 +623,39 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, authUser, state.classes, pendingRetry]);
 
+  // Lớp đăng ký tạm lưu dạng "name:10B1" (tài khoản mới chưa đọc được
+  // danh sách lớp thật) thì tự đổi thành id lớp thật ngay khi danh sách
+  // lớp tải được — cả hồ sơ của chính mình lẫn mọi hồ sơ Ban thi đua
+  // đang xem. Nhờ vậy Ban thi đua không phải gán lớp tay nữa.
+  const normalizedClassRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!profile || !state.classes.length) return;
+    const resolved = classIdFromAssigned(profile.assigned_class_id, state.classes);
+    if (!resolved || resolved === profile.assigned_class_id) return;
+    const key = `self:${profile.id}:${profile.assigned_class_id}`;
+    if (normalizedClassRef.current.has(key)) return;
+    normalizedClassRef.current.add(key);
+    updateProfile(profile.id, { assigned_class_id: resolved })
+      .then(() => setProfile(prev => (prev && prev.id === profile.id ? { ...prev, assigned_class_id: resolved } : prev)))
+      .catch(() => { /* chưa đổi được: lần tải sau thử lại */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, state.classes]);
+  useEffect(() => {
+    if (session?.role !== 'admin' || !state.classes.length) return;
+    for (const p of profiles) {
+      if (p.role !== 'codo' && p.role !== 'viewer') continue;
+      const resolved = classIdFromAssigned(p.assigned_class_id, state.classes);
+      if (!resolved || resolved === p.assigned_class_id) continue;
+      const key = `admin:${p.id}:${p.assigned_class_id}`;
+      if (normalizedClassRef.current.has(key)) continue;
+      normalizedClassRef.current.add(key);
+      updateProfile(p.id, { assigned_class_id: resolved })
+        .then(() => setProfiles(prev => prev.map(pp => (pp.id === p.id ? { ...pp, assigned_class_id: resolved } : pp))))
+        .catch(() => { /* chưa đổi được: lần tải sau thử lại */ });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, profiles, state.classes]);
+
   // Cờ đỏ vào là tự mở đúng lớp được phân công — chỉ mở một lần cho mỗi
   // phân công. Trước đây effect chạy lại mỗi khi object session đổi (kể
   // cả khi Supabase làm mới token), kéo người dùng về đúng lớp/tuần đang
@@ -716,7 +749,9 @@ export default function App() {
     const effectiveRole = patch.role ?? p?.role;
     const effectiveStatus = patch.status ?? p?.status;
     const effectiveClassId = patch.assigned_class_id !== undefined ? patch.assigned_class_id : p?.assigned_class_id;
-    if (p && (patch.status === 'active' || patch.role !== undefined) && (effectiveRole === 'codo' || effectiveRole === 'viewer') && effectiveStatus === 'active' && !effectiveClassId) {
+    const resolvedClassId = classIdFromAssigned(effectiveClassId, state.classes);
+    if (resolvedClassId && resolvedClassId !== effectiveClassId) patch.assigned_class_id = resolvedClassId;
+    if (p && (patch.status === 'active' || patch.role !== undefined) && (effectiveRole === 'codo' || effectiveRole === 'viewer') && effectiveStatus === 'active' && !resolvedClassId) {
       setErrs([`Chưa duyệt được: tài khoản ${p.full_name} chưa có lớp. Gán lớp trước rồi duyệt nhé.`]);
       return;
     }
@@ -762,7 +797,22 @@ export default function App() {
     if (cid.startsWith('name:')) {
       const nm = cid.slice(5);
       const found = state.classes.find(c => c.name.toUpperCase() === nm.toUpperCase());
-      if (!found) { setPendingErr(`Lớp ${nm} chưa có trong hệ thống — Ban thi đua sẽ gán lớp cho bạn sau khi duyệt.`); return; }
+      if (!found) {
+        // Chưa tải được danh sách lớp thật: lưu tạm dạng tên, app tự đổi
+        // thành id lớp thật khi Ban thi đua mở app (không phải gán tay).
+        if (profile.assigned_class_id === cid) { setPendingMsg(`Đã lưu lớp của bạn: ${nm}. Ban thi đua duyệt tài khoản là bạn vào nhập điểm được ngay.`); return; }
+        setPendingBusy(true); setPendingErr(''); setPendingMsg('');
+        try {
+          await updateProfile(profile.id, { assigned_class_id: cid });
+          setProfile({ ...profile, assigned_class_id: cid });
+          setPendingClassId(cid);
+          setPendingMsg(`Đã lưu lớp của bạn: ${nm}. Ban thi đua duyệt tài khoản là bạn vào nhập điểm được ngay.`);
+        } catch (e) {
+          setPendingErr(`Chưa lưu được: ${e instanceof Error ? e.message : 'lỗi không rõ'}. Bạn thử lại nhé.`);
+        }
+        setPendingBusy(false);
+        return;
+      }
       cid = found.id;
     }
     if (!cid) { setPendingErr('Bạn chọn lớp của mình trước nhé.'); return; }
@@ -1158,7 +1208,7 @@ export default function App() {
       }
       if (authUser && profile && (profile.status === 'pending' || profile.status === 'disabled')) {
         const pendingClasses = state.classes.length > 0 ? state.classes.map(c => ({ id: c.id, name: c.name })) : DUTY_CLASSES.map(c => ({ id: `name:${c}`, name: c }));
-        const assignedName = profile.assigned_class_id ? state.classes.find(c => c.id === profile.assigned_class_id)?.name : undefined;
+        const assignedName = assignedClassName(profile.assigned_class_id, state.classes);
         return (
           <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header>
           <main className="wrap"><div className="card"><h2>{profile.status === 'pending' ? 'Tài khoản đang chờ Ban thi đua duyệt' : 'Tài khoản đã bị khóa'}</h2>
@@ -1172,7 +1222,7 @@ export default function App() {
             <label>{profile.role === 'codo' ? 'Lớp của bạn' : 'Lớp chủ nhiệm'}</label>
             {state.classes.length === 0 && <p>Danh sách lớp chưa tải được — chọn theo danh sách cố định bên dưới, hệ thống sẽ khớp lớp khi có dữ liệu.</p>}
             {profile.assigned_class_id && !assignedName && <p>Đã gán lớp cho bạn rồi (đang chờ tải danh sách lớp để hiện tên).</p>}
-            <select value={pendingClassId || (assignedName ? profile.assigned_class_id ?? '' : '')} onChange={e => setPendingClassId(e.target.value)}>
+            <select value={pendingClassId || (assignedName ? (classIdFromAssigned(profile.assigned_class_id, state.classes) ?? profile.assigned_class_id ?? '') : '')} onChange={e => setPendingClassId(e.target.value)}>
               <option value="">— Chọn lớp —</option>
               {pendingClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
@@ -1305,11 +1355,11 @@ export default function App() {
           </div>
         ) : (<>
 
-        {tab === 'tong-quan' && <Overview state={state} week={week} role={session.role} assignment={assignment?.classId && assignment?.weekId ? { classId: assignment.classId, weekId: assignment.weekId, homeClassId: assignment.homeClassId ?? undefined, source: assignment.source } : undefined} homeClassId={profile?.assigned_class_id ?? undefined} onEnterScores={() => { if (assignment) { confirmDirtyAsync(() => { setWeekId(assignment.weekId); setClassId(assignment.classId); setTab('nhap-diem'); setDirty(false); }); } }} onGoTab={switchTab} onCopyReminder={copyReminder} onOpenClass={(cid: string) => { confirmDirtyAsync(() => { setWeekId(effectiveWeekId); setClassId(cid); setTab('nhap-diem'); setDirty(false); }); }} />}
+        {tab === 'tong-quan' && <Overview state={state} week={week} role={session.role} assignment={assignment?.classId && assignment?.weekId ? { classId: assignment.classId, weekId: assignment.weekId, homeClassId: assignment.homeClassId ?? undefined, source: assignment.source } : undefined} homeClassId={classIdFromAssigned(profile?.assigned_class_id, state.classes) ?? undefined} onEnterScores={() => { if (assignment) { confirmDirtyAsync(() => { setWeekId(assignment.weekId); setClassId(assignment.classId); setTab('nhap-diem'); setDirty(false); }); } }} onGoTab={switchTab} onCopyReminder={copyReminder} onOpenClass={(cid: string) => { confirmDirtyAsync(() => { setWeekId(effectiveWeekId); setClassId(cid); setTab('nhap-diem'); setDirty(false); }); }} />}
         {tab === 'nhap-diem' && (!week ? (
           <div className="card"><h2>Nhập điểm</h2><p>Chưa có tuần nào nên chưa nhập điểm được.</p>{session.role === 'admin' ? <><p>Tạo tuần đầu tiên để bắt đầu chấm thi đua nhé.</p><div className="row"><button className="btn" type="button" onClick={() => setTab('quan-ly')}>Sang tab Quản lý tạo tuần</button></div></> : <p>Nhờ Ban thi đua tạo tuần nhé.</p>}</div>
         ) : session.role === 'codo' && (!assignment || showDutyPicker) ? (
-          <DutyPicker state={state} week={week} homeName={profile?.assigned_class_id ? state.classes.find(c => c.id === profile.assigned_class_id)?.name : undefined} myName={session.name} initialClassId={assignment?.classId} onConfirm={confirmDutyPick} onCancel={assignment ? () => setShowDutyPicker(false) : undefined} />
+          <DutyPicker state={state} week={week} homeName={assignedClassName(profile?.assigned_class_id, state.classes)} myName={session.name} initialClassId={assignment?.classId} onConfirm={confirmDutyPick} onCancel={assignment ? () => setShowDutyPicker(false) : undefined} />
         ) : draft && (
           <>
             {session.role === 'codo' && assignment && (
@@ -1889,7 +1939,7 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
             <div className="row"><button className="btn ghost" type="button" onClick={onRefreshProfiles}>Làm mới danh sách</button></div>
             {sectionProfiles.length === 0 && <p>Chưa có tài khoản nào trong mục này.</p>}
             {sectionProfiles.map(p => {
-              const clsName = (p.role === 'codo' || p.role === 'viewer') ? state.classes.find(c => c.id === p.assigned_class_id)?.name : undefined;
+              const clsName = (p.role === 'codo' || p.role === 'viewer') ? assignedClassName(p.assigned_class_id, state.classes) : undefined;
               // Gợi ý lớp trực theo lịch cho tuần đã gán (hoặc tuần hiện tại).
               const dutyWk = p.role === 'codo' && clsName ? state.weeks[state.weeks.length - 1] : undefined;
               const dutyMon = dutyWk && clsName ? dutyMonitored(clsName, weekNumberOf(dutyWk, state.weeks.indexOf(dutyWk) + 1)) : null;
@@ -1904,10 +1954,10 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
                 {p.status === 'rejected' && p.reject_reason && <p>Lý do từ chối: {p.reject_reason}</p>}
                 {(p.role === 'codo' || p.role === 'viewer') && (
                   <div className="prof-grid">
-                    <div><label>{p.role === 'viewer' ? 'Lớp chủ nhiệm' : 'Lớp của cờ đỏ'}</label><select value={p.assigned_class_id ?? ''} onChange={e => onProfilePatch(p.id, { assigned_class_id: e.target.value || null })}><option value="" disabled>Chưa gán — chọn lớp</option>{state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                    <div><label>{p.role === 'viewer' ? 'Lớp chủ nhiệm' : 'Lớp của cờ đỏ'}</label><select value={classIdFromAssigned(p.assigned_class_id, state.classes) ?? ''} onChange={e => onProfilePatch(p.id, { assigned_class_id: e.target.value || null })}><option value="" disabled>Chưa gán — chọn lớp</option>{state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                   </div>
                 )}
-                {(p.role === 'codo' || p.role === 'viewer') && !p.assigned_class_id && <p>Chưa có lớp — gán lớp trước khi duyệt tài khoản này nhé.</p>}
+                {(p.role === 'codo' || p.role === 'viewer') && !classIdFromAssigned(p.assigned_class_id, state.classes) && <p>Chưa có lớp — gán lớp trước khi duyệt tài khoản này nhé.</p>}
                 {p.role === 'codo' && <p>Lớp mà tài khoản cờ đỏ này thuộc về, cố định (vd Đỗ Thuỳ Dương — Cờ đỏ lớp 10B1). Lớp trực tuần này gán theo lịch trực hoặc cờ đỏ tự chọn khi nhập điểm.</p>}
                 <div className="row" style={{ marginTop: 8 }}>
                   {p.status === 'pending' && <button className="btn green" type="button" onClick={() => onProfilePatch(p.id, { status: 'active' })}>Duyệt</button>}

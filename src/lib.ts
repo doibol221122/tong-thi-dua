@@ -136,6 +136,24 @@ export const DUTY_GROUP_B = ['11A1', '11A2', '11A3', '11A4', '12C1', '12C2', '12
 export const DUTY_CLASSES = [...DUTY_GROUP_A, ...DUTY_GROUP_B];
 export const DUTY_WEEKS = 17;
 
+// Lớp trong hồ sơ có thể tạm lưu dạng "name:10B1" khi tài khoản mới đăng
+// ký chưa đọc được danh sách lớp thật (RLS chỉ cho tài khoản đã duyệt
+// đọc dữ liệu chung). Khi danh sách lớp tải được, app tự đổi dạng tên
+// này thành id lớp thật — Ban thi đua không phải gán tay.
+export function classIdFromAssigned(value: string | null | undefined, classes: ClassItem[]): string | null {
+  if (!value) return null;
+  if (classes.some(c => c.id === value)) return value;
+  const name = value.startsWith('name:') ? value.slice(5) : value;
+  const found = classes.find(c => c.name.toUpperCase() === name.trim().toUpperCase());
+  return found?.id ?? null;
+}
+export function assignedClassName(value: string | null | undefined, classes: ClassItem[]): string | undefined {
+  const id = classIdFromAssigned(value, classes);
+  if (id) return classes.find(c => c.id === id)?.name;
+  if (value?.startsWith('name:')) return value.slice(5);
+  return undefined;
+}
+
 // Lớp mà cờ đỏ của lớp homeClass trực trong tuần weekNo (số tuần 1–17).
 // Trả về null nếu tên lớp không thuộc 2 nhóm trong lịch.
 export function dutyMonitored(homeClass: string, weekNo: number): string | null {
