@@ -854,3 +854,50 @@ export function violationStats(scores: Score[], classes: ClassItem[]): { topViol
     .slice(0, 5);
   return { topViolations, classWarnings, totalCount };
 }
+
+// Nhận xét chung tự động của một tuần, soạn từ số liệu phiếu đã duyệt:
+// lớp dẫn đầu, lớp tiến bộ/tụt điểm so với tuần duyệt trước, lỗi hay gặp,
+// lớp chưa có phiếu duyệt. Ban thi đua sửa lại trước khi dùng chính thức.
+export function autoGeneralComment(state: AppState, weekId: string): { pros: string; cons: string } {
+  const nameOf = (id: string) => state.classes.find(c => c.id === id)?.name ?? id;
+  const approved = state.scores
+    .filter(s => s.weekId === weekId && s.status === 'approved')
+    .map(s => ({ s, c: calcScore(s.details) }))
+    .sort((a, b) => b.c.final - a.c.final);
+  if (!approved.length) return { pros: 'Chưa có phiếu nào được duyệt trong tuần này.', cons: 'Chưa có phiếu nào được duyệt trong tuần này.' };
+  const prosParts: string[] = [];
+  const top = approved.slice(0, 3).map(x => `${nameOf(x.s.classId)} (${x.c.final}đ)`).join(', ');
+  prosParts.push(`Các lớp dẫn đầu tuần: ${top}.`);
+  const aClasses = approved.filter(x => x.c.cls === 'A').map(x => nameOf(x.s.classId));
+  if (aClasses.length) prosParts.push(`Có ${aClasses.length} lớp đạt loại A: ${aClasses.join(', ')}.`);
+  const tot100 = approved.filter(x => x.c.is100Tot).map(x => nameOf(x.s.classId));
+  if (tot100.length) prosParts.push(`Các lớp đạt 100% giờ học tốt: ${tot100.join(', ')}.`);
+  // So với tuần duyệt gần nhất trước đó của từng lớp.
+  const weekIdx = state.weeks.findIndex(w => w.id === weekId);
+  const curNum = weekIdx >= 0 ? weekNumberOf(state.weeks[weekIdx], weekIdx + 1) : 0;
+  const prevFinal = new Map<string, number>();
+  for (const x of approved) {
+    const prev = state.scores
+      .filter(s => s.classId === x.s.classId && s.status === 'approved' && s.weekId !== weekId)
+      .map(s => ({ s, n: weekNumberOf(state.weeks.find(w => w.id === s.weekId) ?? { id: s.weekId, label: '', dateRange: '' }, state.weeks.findIndex(w => w.id === s.weekId) + 1) }))
+      .filter(y => y.n < curNum)
+      .sort((a, b) => b.n - a.n)[0];
+    if (prev) prevFinal.set(x.s.classId, calcScore(prev.s.details).final);
+  }
+  const deltas = approved
+    .filter(x => prevFinal.has(x.s.classId))
+    .map(x => ({ name: nameOf(x.s.classId), d: x.c.final - (prevFinal.get(x.s.classId) ?? 0) }));
+  const improved = deltas.filter(x => x.d > 0).sort((a, b) => b.d - a.d).slice(0, 3);
+  if (improved.length) prosParts.push(`Tiến bộ so với tuần trước: ${improved.map(x => `${x.name} (+${x.d}đ)`).join(', ')}.`);
+  const consParts: string[] = [];
+  const dropped = deltas.filter(x => x.d < 0).sort((a, b) => a.d - b.d).slice(0, 3);
+  if (dropped.length) consParts.push(`Một số lớp giảm điểm so với tuần trước: ${dropped.map(x => `${x.name} (${x.d}đ)`).join(', ')}.`);
+  const low = approved.filter(x => x.c.cls === 'C' || x.c.cls === 'D').map(x => `${nameOf(x.s.classId)} (${x.c.final}đ, loại ${x.c.cls})`);
+  if (low.length) consParts.push(`Các lớp còn ở loại C/D cần nhắc nhở: ${low.join(', ')}.`);
+  const stats = violationStats(approved.map(x => x.s), state.classes);
+  if (stats.topViolations.length) consParts.push(`Lỗi vi phạm hay gặp: ${stats.topViolations.slice(0, 3).map(v => `${v.label} (${v.count} lượt)`).join(', ')}.`);
+  const missing = state.classes.filter(c => !approved.some(x => x.s.classId === c.id));
+  if (missing.length) consParts.push(`Còn ${missing.length} lớp chưa có phiếu đã duyệt.`);
+  if (!consParts.length) consParts.push('Chưa ghi nhận tồn tại đáng kể trong tuần này.');
+  return { pros: prosParts.join(' '), cons: consParts.join(' ') };
+}

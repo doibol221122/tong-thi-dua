@@ -1,7 +1,7 @@
 // Xuất .docx đúng mẫu TỔNG HỢP THI ĐUA TUẦN 04 (THPT Hùng Vương-Quảng Phú)
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, HeadingLevel, BorderStyle } from 'docx';
 import type { AppState, Score, Week } from './lib';
-import { calcScore, classAvg, classCoverage, clsOf, compareAvg, hocTapLines, neNepLines } from './lib';
+import { autoGeneralComment, calcScore, classAvg, classCoverage, clsOf, compareAvg, hocTapLines, neNepLines } from './lib';
 
 const FONT = 'Times New Roman';
 type Align = (typeof AlignmentType)[keyof typeof AlignmentType];
@@ -100,9 +100,11 @@ export async function exportWeekDocx(s: AppState, week: Week, approvedOnly: bool
       ]});
     }),
   ];
-  // Dòng "Ưu điểm" chỉ tính phiếu đã duyệt (file xếp hạng vốn chỉ gồm phiếu duyệt).
-  const pros = s.settings.generalPros || `Các lớp đạt 100% giờ học tốt: ${rows.filter(r => calcScore(r.details).is100Tot).map(r => clsOf(r.classId)).join(', ') || '—'}.`;
-  const cons = rows.length === 0 ? 'Chưa có phiếu nào được nộp trong tuần này.' : (s.settings.generalCons || 'Vẫn còn một số học sinh vi phạm nội quy đi muộn, mang đồ ăn vào lớp.');
+  // Nhận xét chung: ưu tiên bản Ban thi đua đã lưu; để trống thì app tự
+  // soạn từ số liệu phiếu đã duyệt của tuần.
+  const auto1 = autoGeneralComment(s, week.id);
+  const pros = s.settings.generalPros || auto1.pros;
+  const cons = rows.length === 0 ? 'Chưa có phiếu nào được nộp trong tuần này.' : (s.settings.generalCons || auto1.cons);
   const doc = new Document({
     sections: [{ children: [
       ...headerRows(s, `TỔNG HỢP THI ĐUA ${week.label.toUpperCase()}`, '1. Tổng kết tuần', week.dateRange),
@@ -120,7 +122,6 @@ export async function exportWeekDocx(s: AppState, week: Week, approvedOnly: bool
 // duyệt — liệt kê đủ các lớp từ khối 10 đến khối 12 theo thứ tự lớp,
 // kèm trạng thái từng phiếu (kể cả lớp chưa nộp), không sắp theo điểm.
 export async function exportWeekDocxNoRank(s: AppState, week: Week): Promise<Blob> {
-  const nameOf = (id: string) => s.classes.find(c => c.id === id)?.name ?? id;
   const statusLabel = (st: Score['status']) => st === 'approved' ? 'Đã duyệt' : st === 'submitted' ? 'Chờ duyệt' : st === 'returned' ? 'Bị trả lại' : 'Nháp';
   const tableRows = [
     weekHeaderRow(),
@@ -146,8 +147,9 @@ export async function exportWeekDocxNoRank(s: AppState, week: Week): Promise<Blo
     }),
   ];
   const weekScores = s.scores.filter(x => x.weekId === week.id && x.status === 'approved');
-  const pros = s.settings.generalPros || `Các lớp đạt 100% giờ học tốt: ${weekScores.filter(r => calcScore(r.details).is100Tot).map(r => nameOf(r.classId)).join(', ') || '—'}.`;
-  const cons = weekScores.length === 0 ? 'Chưa có phiếu nào được nộp trong tuần này.' : (s.settings.generalCons || 'Vẫn còn một số học sinh vi phạm nội quy đi muộn, mang đồ ăn vào lớp.');
+  const auto2 = autoGeneralComment(s, week.id);
+  const pros = s.settings.generalPros || auto2.pros;
+  const cons = weekScores.length === 0 ? 'Chưa có phiếu nào được nộp trong tuần này.' : (s.settings.generalCons || auto2.cons);
   const doc = new Document({
     sections: [{ children: [
       ...headerRows(s, `TỔNG HỢP THI ĐUA ${week.label.toUpperCase()} (KHÔNG XẾP HẠNG)`, '1. Tổng kết tuần', week.dateRange),

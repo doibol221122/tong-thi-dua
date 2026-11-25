@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, ClassGroup, ClassItem, Details, ExtraLine, Role, Score, Week } from './lib';
-import { assignedClassName, calcScore, classAvg, classCoverage, classGroup, classIdFromAssigned, cleanLogDetail, clsOf, compareAvg, deadlineInfo, detailsDiff, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, logScoreIds, monthBlockOf, monthLabel, neNepLines, notSubmittedClasses, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekDeadline, weekNumberOf } from './lib';
+import { assignedClassName, autoGeneralComment, calcScore, classAvg, classCoverage, classGroup, classIdFromAssigned, cleanLogDetail, clsOf, compareAvg, deadlineInfo, detailsDiff, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, logScoreIds, monthBlockOf, monthLabel, neNepLines, notSubmittedClasses, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekDeadline, weekNumberOf } from './lib';
 import { exportClassDocx, exportMonthDocx, exportWeekDocx, exportWeekDocxNoRank } from './docxExport';
 import { LOGO_DATA_URI } from './logoData';
 import AuthScreen from './AuthScreen';
@@ -1401,6 +1401,7 @@ export default function App() {
             </ol>
             <h3>Xuất file</h3>
             <div className="exportgrid"><button className="btn ghost" type="button" onClick={doExportDocxWeek}>Xuất Word (.docx)</button><button className="btn ghost" type="button" onClick={doExportDocxWeekNoRank}>Xuất .docx (không xếp hạng)</button><button className="btn ghost" type="button" onClick={exportCsv}>Tải CSV</button><button className="btn ghost" type="button" onClick={copyZalo}>Chép gửi Zalo</button></div>
+            <GeneralCommentCard key={`${week.id}-${state.settings.generalPros}-${state.settings.generalCons}`} state={state} weekId={week.id} weekLabel={week.label} isAdmin={session.role === 'admin'} onSave={(pros, cons) => { update(prev => ({ ...prev, settings: { ...prev.settings, generalPros: pros, generalCons: cons } }), 'Lưu nhận xét chung', week.label); setMsg('Đã lưu nhận xét chung. File .docx sẽ dùng bản này.'); }} />
             {session.role === 'admin' && <div className="divider">{week.submittedAt ? <button className="btn grey" type="button" onClick={reopenWeek}>Mở lại tuần</button> : <button className="btn green" type="button" onClick={closeWeek}>Nộp &amp; chốt tuần này</button>}</div>}
             </>) : (<>
             <div className="row" style={{ marginTop: 8 }}><label style={{ margin: 0 }}>Tháng</label><select value={selRankMonth} onChange={e => setRankMonthSel(Number(e.target.value))} style={{ maxWidth: 200 }}>{rankMonths.map(([m]) => <option key={m} value={m}>{monthLabel(m)}</option>)}</select><span>{rankMonthWeeks.map(w => w.label).join(', ')}</span></div>
@@ -1472,6 +1473,30 @@ function DutyPicker({ state, week, homeName, myName, initialClassId, onConfirm, 
         <button className="btn" type="button" disabled={!sel || !!otherHolder || !!locked} onClick={() => onConfirm(sel)}>Bắt đầu nhập điểm lớp này</button>
         {onCancel && <button className="btn grey" type="button" onClick={onCancel}>Hủy</button>}
       </div>
+    </div>
+  );
+}
+
+// Nhận xét chung của tuần: app tự soạn từ số liệu phiếu đã duyệt,
+// Ban thi đua sửa lại rồi lưu; file .docx dùng bản đã lưu (chưa lưu
+// thì dùng bản tự soạn).
+function GeneralCommentCard({ state, weekId, weekLabel, isAdmin, onSave }: { state: AppState; weekId: string; weekLabel: string; isAdmin: boolean; onSave: (pros: string, cons: string) => void }) {
+  const auto = autoGeneralComment(state, weekId);
+  const [pros, setPros] = useState(state.settings.generalPros || auto.pros);
+  const [cons, setCons] = useState(state.settings.generalCons || auto.cons);
+  const [note, setNote] = useState('');
+  return (
+    <div className="card general-comment" style={{ marginTop: 12 }}><h3>Nhận xét chung — {weekLabel}</h3>
+      <p>App tự soạn từ số liệu phiếu đã duyệt của tuần (lớp dẫn đầu, tiến bộ/tụt điểm, lỗi hay gặp). Ban thi đua sửa lại rồi lưu; file .docx sẽ dùng bản đã lưu.</p>
+      <label>Ưu điểm</label>
+      <textarea aria-label="Nhận xét chung — Ưu điểm" value={pros} disabled={!isAdmin} onChange={e => setPros(e.target.value)} rows={3} />
+      <label>Nhược điểm</label>
+      <textarea aria-label="Nhận xét chung — Nhược điểm" value={cons} disabled={!isAdmin} onChange={e => setCons(e.target.value)} rows={3} />
+      {isAdmin && <div className="row" style={{ marginTop: 8 }}>
+        <button className="btn ghost" type="button" onClick={() => { const a = autoGeneralComment(state, weekId); setPros(a.pros); setCons(a.cons); setNote('Đã tạo nhận xét tự động từ số liệu tuần. Sửa lại nếu cần rồi bấm Lưu.'); }}>Tạo nhận xét tự động</button>
+        <button className="btn" type="button" onClick={() => onSave(pros, cons)}>Lưu nhận xét chung</button>
+      </div>}
+      {note && <p className="ok">{note}</p>}
     </div>
   );
 }
