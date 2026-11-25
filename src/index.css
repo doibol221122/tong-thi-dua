@@ -253,3 +253,15 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(153,27,27,.35);ou
   .tabs button{flex:0 0 auto;padding:9px 12px;min-height:40px}
   .card{padding:14px}
 }
+
+/* Xếp hạng gọn: một hàng công cụ, danh sách hạng sạch, xuất file một hàng. */
+.rank-tools{display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;align-items:center;margin:10px 0 4px}
+.ranklist li{display:flex;align-items:center;gap:12px;padding:10px 14px}
+.ranklist .rank{width:30px;height:30px;border-radius:50%;background:var(--line-soft);display:inline-flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0}
+.ranklist .top1 .rank{background:#fef3c7;color:#92400e}
+.ranklist .top2 .rank{background:#e5e7eb;color:#374151}
+.ranklist .top3 .rank{background:#ffedd5;color:#9a3412}
+.ranklist .rclass{flex:1;min-width:0}
+.ranklist .rscore{display:flex;gap:8px;align-items:center}
+.exportgrid{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.exportgrid .btn{flex:1 1 160px}

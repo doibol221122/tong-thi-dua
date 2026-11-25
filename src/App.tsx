@@ -1384,22 +1384,23 @@ export default function App() {
             ) : (
               <p>Điểm trung bình tháng của các phiếu <b>đã duyệt</b>. Cứ 4 tuần là 1 tháng (tuần 1–4 là Tháng 9, tuần 5–8 là Tháng 10…).</p>
             )}
-            <div className="tabs">
-              <button type="button" className={rankMode === 'week' ? 'on' : ''} onClick={() => setRankMode('week')}>Theo tuần</button>
-              <button type="button" className={rankMode === 'month' ? 'on' : ''} onClick={() => setRankMode('month')}>Theo tháng</button>
+            <div className="rank-tools">
+              <div className="row">
+                <button type="button" className={rankMode === 'week' ? 'seg on' : 'seg'} onClick={() => setRankMode('week')}>Theo tuần</button>
+                <button type="button" className={rankMode === 'month' ? 'seg on' : 'seg'} onClick={() => setRankMode('month')}>Theo tháng</button>
+              </div>
+              <div className="row">{(['all', 'tu-nhien', 'xa-hoi'] as const).map(g => <button key={g} type="button" className={rankGroup === g ? 'seg on' : 'seg'} onClick={() => setRankGroup(g)}>{g === 'all' ? 'Tất cả' : groupLabel(g)}</button>)}</div>
             </div>
-            <div className="row"><span><b>Khối:</b></span>{(['all', 'tu-nhien', 'xa-hoi'] as const).map(g => <button key={g} type="button" className={rankGroup === g ? 'seg on' : 'seg'} onClick={() => setRankGroup(g)}>{g === 'all' ? 'Tất cả' : groupLabel(g)}</button>)}</div>
             {rankMode === 'week' ? (<>
             <ol className="ranklist">
               {rankedScores.map((s, i) => { const c = calcScore(s.details); const clsName = state.classes.find(x => x.id === s.classId)?.name ?? s.classId; return (
                 <li key={s.id} className={i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : ''}>
                   <span className="rank">{i + 1}</span>
-                  <span className="rclass"><b>{clsName}</b><small>{s.submittedBy ?? '—'}{s.submittedAt ? ` · ${s.submittedAt}` : ''}</small></span>
+                  <span className="rclass"><b>{clsName}</b></span>
                   <span className="rscore"><b>{c.final}đ</b><span className={`badge ${c.cls}`}>{c.cls}</span></span>
                 </li>); })}
               {rankedScores.length === 0 && <li>Chưa có lớp nào được duyệt trong tuần này{rankGroup === 'all' ? '' : ` ở ${groupLabel(rankGroup)}`}.</li>}
             </ol>
-            <h3>Xuất file</h3>
             <div className="exportgrid"><button className="btn ghost" type="button" onClick={doExportDocxWeek}>Xuất Word (.docx)</button><button className="btn ghost" type="button" onClick={doExportDocxWeekNoRank}>Xuất .docx (không xếp hạng)</button><button className="btn ghost" type="button" onClick={exportCsv}>Tải CSV</button><button className="btn ghost" type="button" onClick={copyZalo}>Chép gửi Zalo</button></div>
             <GeneralCommentCard key={`${week.id}-${state.settings.generalPros}-${state.settings.generalCons}`} state={state} weekId={week.id} weekLabel={week.label} isAdmin={session.role === 'admin'} onSave={(pros, cons) => { update(prev => ({ ...prev, settings: { ...prev.settings, generalPros: pros, generalCons: cons } }), 'Lưu nhận xét chung', week.label); setMsg('Đã lưu nhận xét chung. File .docx sẽ dùng bản này.'); }} />
             {session.role === 'admin' && <div className="divider">{week.submittedAt ? <button className="btn grey" type="button" onClick={reopenWeek}>Mở lại tuần</button> : <button className="btn green" type="button" onClick={closeWeek}>Nộp &amp; chốt tuần này</button>}</div>}
@@ -1506,7 +1507,7 @@ function GeneralCommentCard({ state, weekId, weekLabel, isAdmin, onSave }: { sta
     } finally { setAiBusy(false); }
   }
   return (
-    <div className="card general-comment" style={{ marginTop: 12 }}><h3>Nhận xét chung — {weekLabel}</h3>
+    <div className="general-comment" style={{ marginTop: 16, borderTop: '1px solid var(--line)', paddingTop: 12 }}><h3>Nhận xét chung — {weekLabel}</h3>
       <p>App tự soạn từ số liệu phiếu đã duyệt của tuần (lớp dẫn đầu, tiến bộ/tụt điểm, lỗi hay gặp). Ban thi đua sửa lại rồi lưu; file .docx sẽ dùng bản đã lưu.</p>
       <label>Ưu điểm</label>
       <textarea aria-label="Nhận xét chung — Ưu điểm" value={pros} disabled={!isAdmin} onChange={e => setPros(e.target.value)} rows={3} />
