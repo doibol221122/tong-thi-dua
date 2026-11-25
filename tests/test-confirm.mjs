@@ -23,8 +23,24 @@ const browser = await chromium.launch({ executablePath: EXE });
   await page.waitForTimeout(500);
   const weekRow = page.locator('main .card p', { hasText: /^Tuần 05 / });
   ok((await weekRow.count()) === 1, 'confirm: Quản lý liệt kê Tuần 05');
-  // Bấm Xóa -> hộp thoại trong app (không phải dialog trình duyệt).
-  await weekRow.getByRole('button', { name: 'Xóa', exact: true }).click();
+  ok((await weekRow.getByRole('button', { name: 'Xóa', exact: true }).count()) === 0, 'confirm: dòng tuần không còn nút Xóa trực tiếp');
+  // Muốn xóa tuần phải mở toàn bộ sổ tuần trước.
+  await weekRow.getByRole('button', { name: 'Mở sổ', exact: true }).click();
+  await page.waitForTimeout(400);
+  let t = await page.locator('main').innerText();
+  ok(t.includes('Sổ tuần — Tuần 05'), 'confirm: Mở sổ hiện sổ tuần Tuần 05');
+  ok(t.includes('128đ'), 'confirm: sổ tuần hiện điểm 128đ của lớp đã duyệt (10B1)');
+  ok(t.includes('4 phiếu đã nhập'), 'confirm: sổ tuần nêu đúng 4 phiếu đã nhập');
+  const soRows = await page.locator('main table tbody tr').count();
+  ok(soRows === 14, 'confirm: sổ tuần liệt kê đủ 14 lớp (có ' + soRows + ')');
+  // Đóng sổ -> tuần vẫn còn.
+  await page.getByRole('button', { name: 'Đóng sổ', exact: true }).click();
+  await page.waitForTimeout(300);
+  ok((await page.locator('main .card p', { hasText: /^Tuần 05 / }).count()) === 1, 'confirm: đóng sổ thì Tuần 05 vẫn còn');
+  // Mở sổ lại -> Xóa tuần này -> hộp thoại trong app (không phải dialog trình duyệt).
+  await page.locator('main .card p', { hasText: /^Tuần 05 / }).getByRole('button', { name: 'Mở sổ', exact: true }).click();
+  await page.waitForTimeout(400);
+  await page.getByRole('button', { name: 'Xóa tuần này', exact: true }).click();
   await page.waitForTimeout(400);
   const dlg = page.getByRole('dialog');
   ok((await dlg.count()) === 1, 'confirm: bấm Xóa tuần mở hộp thoại trong app');
@@ -38,17 +54,19 @@ const browser = await chromium.launch({ executablePath: EXE });
   ok(dt.includes('tránh bấm nhầm 2 lần'), 'confirm: hộp thoại ghi rõ nút xóa chờ 1 giây');
   await page.waitForTimeout(1000);
   ok(!(await page.getByTestId('confirm-ok').isDisabled()), 'confirm: nút Xóa tuần bấm được sau 1 giây');
-  // Bấm Hủy -> không đổi.
+  // Bấm Hủy -> không đổi, sổ vẫn mở.
   await page.getByTestId('confirm-cancel').click();
   await page.waitForTimeout(400);
   ok((await page.getByRole('dialog').count()) === 0, 'confirm: bấm Hủy đóng hộp thoại');
   ok((await page.locator('main .card p', { hasText: /^Tuần 05 / }).count()) === 1, 'confirm: bấm Hủy thì Tuần 05 vẫn còn');
-  // Bấm Xóa lại -> chờ nút xóa "mở khóa" -> Xác nhận -> tuần mất thật.
-  await page.locator('main .card p', { hasText: /^Tuần 05 / }).getByRole('button', { name: 'Xóa', exact: true }).click();
+  // Xóa lại -> chờ nút xóa "mở khóa" -> Xác nhận -> tuần mất thật, sổ đóng.
+  await page.getByRole('button', { name: 'Xóa tuần này', exact: true }).click();
   await page.waitForTimeout(1300);
   await page.getByTestId('confirm-ok').click();
   await page.waitForTimeout(500);
   ok((await page.locator('main .card p', { hasText: /^Tuần 05 / }).count()) === 0, 'confirm: Xác nhận xong Tuần 05 biến mất khỏi Quản lý');
+  t = await page.locator('main').innerText();
+  ok(!t.includes('Sổ tuần'), 'confirm: xóa xong sổ tuần tự đóng');
   const body = await page.locator('body').innerText();
   ok(body.includes('Tuần 04') && !body.includes('Tuần 05'), 'confirm: tuần hiện tại lùi về Tuần 04 sau khi xóa Tuần 05');
   await ctx.close();

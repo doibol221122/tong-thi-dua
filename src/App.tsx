@@ -1850,6 +1850,9 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
   const [inviteClass, setInviteClass] = useState(''); const [inviteNote, setInviteNote] = useState('');
   // Chia Quản lý thành mục: Tuần & lớp / Tài khoản cờ đỏ / Tài khoản GVCN / Tài khoản BTĐ / Cài đặt.
   const [section, setSection] = useState<'tuan' | 'codo' | 'gvcn' | 'btd' | 'caidat'>('tuan');
+  // Sổ tuần đang mở: phải mở xem hết sổ tuần mới xóa được tuần đó.
+  const [openWeekId, setOpenWeekId] = useState<string | null>(null);
+  const openWeek = state.weeks.find(w => w.id === openWeekId);
   // Hồ sơ của mục tài khoản đang mở (codo = cờ đỏ, viewer = GVCN, admin = Ban thi đua).
   const sectionProfiles = profiles.filter(p => section === 'codo' ? p.role === 'codo' : section === 'gvcn' ? p.role === 'viewer' : p.role === 'admin');
   function copyInvite() {
@@ -1920,21 +1923,34 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
       </div>}
       {section === 'tuan' && <div className="card"><h2>Tuần</h2>
         <div className="row"><input type="text" placeholder="Vd: Tuần 4" value={weekLabel} onChange={e => setWeekLabel(e.target.value)} style={{ maxWidth: 200 }} /><input type="text" placeholder="Vd: 17/11 – 22/11" value={weekRange} onChange={e => setWeekRange(e.target.value)} style={{ maxWidth: 220 }} /><button className="btn" type="button" onClick={() => { if (!weekLabel.trim()) return; const w: Week = { id: uid(), label: weekLabel.trim(), dateRange: weekRange.trim() }; setState({ ...state, weeks: [...state.weeks, w] }); onLog('Tạo tuần', `${w.label} — ${monthLabel(monthBlockOf(w, state.weeks.length + 1))}`); setWeekLabel(''); setWeekRange(''); }}>Thêm tuần</button></div>
-        {state.weeks.map((w, i) => <p key={w.id}>{w.label} {w.dateRange} — {monthLabel(monthBlockOf(w, i + 1))} {w.submittedAt ? `— Đã nộp ${w.submittedAt}` : '— Chưa chốt'} <button className="btn grey" type="button" onClick={() => {
-          const n = state.scores.filter(s => s.weekId === w.id).length;
-          onConfirm({
-            title: `Xóa ${w.label}?`,
-            body: 'Toàn bộ phiếu của tuần này sẽ bị xóa và không khôi phục được.',
-            consequences: [`${n} phiếu sẽ bị xóa.`, 'Phân công trực của tuần này cũng bị xóa.', 'Tài khoản đang gán tuần này sẽ bị gỡ gán.'],
-            confirmLabel: 'Xóa tuần',
-            danger: true,
-            onConfirm: () => {
-              profiles.filter(p => p.assigned_week_id === w.id).forEach(p => onProfilePatch(p.id, { assigned_week_id: null }));
-              setState({ ...state, weeks: state.weeks.filter(x => x.id !== w.id), scores: state.scores.filter(x => x.weekId !== w.id), roster: state.roster.filter(r => r.weekId !== w.id) });
-              onLog('Xóa tuần', w.label);
-            },
-          });
-        }}>Xóa</button></p>)}
+        {state.weeks.map((w, i) => <p key={w.id}>{w.label} {w.dateRange} — {monthLabel(monthBlockOf(w, i + 1))} {w.submittedAt ? `— Đã nộp ${w.submittedAt}` : '— Chưa chốt'} <button className="btn grey" type="button" onClick={() => setOpenWeekId(w.id)}>Mở sổ</button></p>)}
+      </div>}
+      {section === 'tuan' && openWeek && <div className="card"><h2>Sổ tuần — {openWeek.label}{openWeek.dateRange ? ` (${openWeek.dateRange})` : ''}</h2>
+        <p>Toàn bộ {state.classes.length} lớp của tuần này: {state.scores.filter(s => s.weekId === openWeek.id).length} phiếu đã nhập, {state.scores.filter(s => s.weekId === openWeek.id && s.status === 'approved').length} đã duyệt{openWeek.submittedAt ? ` — tuần đã chốt ${openWeek.submittedAt}` : ' — tuần chưa chốt'}.</p>
+        <div className="tablewrap slim"><table>
+          <thead><tr><th>Lớp</th><th>Trạng thái</th><th>Điểm</th><th>Loại</th></tr></thead>
+          <tbody>{state.classes.map(c => { const s = state.scores.find(x => x.weekId === openWeek.id && x.classId === c.id); const cc = s ? calcScore(s.details) : null; return <tr key={c.id}><td>{c.name}</td><td>{s ? STATUS_LABEL[s.status] : 'Chưa nộp'}</td><td>{cc ? `${cc.final}đ` : '—'}</td><td>{cc ? cc.cls : '—'}</td></tr>; })}</tbody>
+        </table></div>
+        <p>Muốn xóa tuần này thì xem hết sổ trên rồi mới bấm xóa.</p>
+        <div className="row">
+          <button className="btn grey" type="button" onClick={() => setOpenWeekId(null)}>Đóng sổ</button>
+          <button className="btn danger" type="button" onClick={() => {
+            const n = state.scores.filter(s => s.weekId === openWeek.id).length;
+            onConfirm({
+              title: `Xóa ${openWeek.label}?`,
+              body: 'Toàn bộ phiếu của tuần này sẽ bị xóa và không khôi phục được.',
+              consequences: [`${n} phiếu sẽ bị xóa.`, 'Phân công trực của tuần này cũng bị xóa.', 'Tài khoản đang gán tuần này sẽ bị gỡ gán.'],
+              confirmLabel: 'Xóa tuần',
+              danger: true,
+              onConfirm: () => {
+                profiles.filter(p => p.assigned_week_id === openWeek.id).forEach(p => onProfilePatch(p.id, { assigned_week_id: null }));
+                setState({ ...state, weeks: state.weeks.filter(x => x.id !== openWeek.id), scores: state.scores.filter(x => x.weekId !== openWeek.id), roster: state.roster.filter(r => r.weekId !== openWeek.id) });
+                onLog('Xóa tuần', openWeek.label);
+                setOpenWeekId(null);
+              },
+            });
+          }}>Xóa tuần này</button>
+        </div>
       </div>}
       {section === 'tuan' && <div className="card"><h2>Lớp</h2>
         <div className="row"><input type="text" placeholder="Vd: 10B1" value={className} onChange={e => setClassName(e.target.value)} style={{ maxWidth: 200 }} /><button className="btn" type="button" onClick={() => { if (!className.trim()) return; const nm = className.trim().toUpperCase(); if (state.classes.some(c => c.name.toUpperCase() === nm)) { setClassNote(`Đã có lớp ${nm} rồi.`); return; } const c: ClassItem = { id: uid(), name: nm }; setState({ ...state, classes: [...state.classes, c] }); onLog('Thêm lớp', c.name); setClassName(''); setClassNote(`Đã thêm lớp ${nm}.`); }}>Thêm lớp</button></div>
