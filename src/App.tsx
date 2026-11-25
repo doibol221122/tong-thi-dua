@@ -1470,6 +1470,75 @@ function DutyPicker({ state, week, homeName, myName, initialClassId, onConfirm, 
   );
 }
 
+function ClassProgressChart({ state, defaultClassId }: { state: AppState; defaultClassId?: string }) {
+  const firstWithData = state.classes.find(c => state.scores.some(s => s.classId === c.id && s.status === 'approved'))?.id;
+  const [classId, setClassId] = useState(defaultClassId ?? firstWithData ?? state.classes[0]?.id ?? '');
+  const selected = state.classes.find(c => c.id === classId) ?? state.classes[0];
+  const points = state.weeks.map((w, i) => {
+    const s = selected ? state.scores.find(x => x.weekId === w.id && x.classId === selected.id && x.status === 'approved') : undefined;
+    if (!s) return { week: w, weekNo: weekNumberOf(w, i + 1), score: null as number | null, cls: '', rank: 0 };
+    const c = calcScore(s.details);
+    const rank = state.scores.filter(x => x.weekId === w.id && x.status === 'approved').sort((a, b) => calcScore(b.details).final - calcScore(a.details).final).findIndex(x => x.classId === selected!.id) + 1;
+    return { week: w, weekNo: weekNumberOf(w, i + 1), score: c.final as number | null, cls: c.cls, rank };
+  });
+  const scored = points.filter(p => p.score !== null) as { week: Week; weekNo: number; score: number; cls: string; rank: number }[];
+  const latest = scored[scored.length - 1];
+  const prev = scored[scored.length - 2];
+  const avg = selected ? classAvg(state, selected.id, state.weeks.map(w => w.id)) : null;
+  const best = scored.length ? scored.reduce((a, b) => (b.score > a.score ? b : a)) : undefined;
+  const worst = scored.length ? scored.reduce((a, b) => (b.score < a.score ? b : a)) : undefined;
+  const W = 640; const H = 260; const padL = 46; const padR = 18; const padT = 20; const padB = 36;
+  const minScore = scored.length ? Math.min(...scored.map(p => p.score)) : 50;
+  const maxScore = scored.length ? Math.max(...scored.map(p => p.score)) : 90;
+  const minY = Math.floor(Math.min(50, minScore - 5) / 10) * 10;
+  const maxY = Math.ceil(Math.max(90, maxScore + 5) / 10) * 10;
+  const xOf = (i: number) => points.length <= 1 ? (padL + W - padR) / 2 : padL + (i * (W - padL - padR)) / (points.length - 1);
+  const yOf = (v: number) => padT + ((maxY - v) * (H - padT - padB)) / (maxY - minY);
+  const scoredLine = points.map((p, i) => p.score === null ? null : `${xOf(i)},${yOf(p.score)}`).filter(Boolean).join(' ');
+  const labelEvery = points.length > 16 ? 4 : points.length > 10 ? 2 : 1;
+  return (
+    <div className="card progress-card">
+      <h2>Biểu đồ tiến bộ từng lớp</h2>
+      <div className="progress-head">
+        <label>Chọn lớp <select aria-label="Chọn lớp xem biểu đồ tiến bộ" value={selected?.id ?? ''} onChange={e => setClassId(e.target.value)}>{state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+        <span>Chỉ tính phiếu đã duyệt.</span>
+      </div>
+      {!selected || scored.length === 0 ? <p>Lớp này chưa có phiếu đã duyệt nên chưa có dữ liệu biểu đồ.</p> : (
+        <>
+          <div className="progress-stats">
+            <span>Mới nhất: <b>{latest.week.label} — {latest.score}đ ({latest.cls})</b>{latest.rank > 0 ? `, hạng ${latest.rank}` : ''}</span>
+            {prev && <span>So với tuần duyệt trước: <b>{latest.score - prev.score >= 0 ? '+' : ''}{latest.score - prev.score}đ</b></span>}
+            {avg !== null && <span>Trung bình: <b>{avg.toFixed(1)}đ</b></span>}
+            {best && worst && best.week.id !== worst.week.id && <span>Cao nhất {best.score}đ ({best.week.label}) · Thấp nhất {worst.score}đ ({worst.week.label})</span>}
+          </div>
+          <div className="progress-svg-wrap">
+            <svg className="progress-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Biểu đồ điểm thi đua của lớp ${selected.name} qua các tuần`}>
+              {[80, 65, 50].filter(v => v >= minY && v <= maxY).map(v => (
+                <g key={v}>
+                  <line className="pc-threshold" x1={padL} x2={W - padR} y1={yOf(v)} y2={yOf(v)} />
+                  <text className="pc-axis" x={padL - 6} y={yOf(v) + 4} textAnchor="end">{v}</text>
+                </g>
+              ))}
+              <line className="pc-axis-line" x1={padL} x2={padL} y1={padT} y2={H - padB} />
+              <line className="pc-axis-line" x1={padL} x2={W - padR} y1={H - padB} y2={H - padB} />
+              {scored.length > 1 && <polyline className="pc-line" points={scoredLine} />}
+              {points.map((p, i) => p.score === null ? null : (
+                <g key={p.week.id}>
+                  <circle className="pc-point" cx={xOf(i)} cy={yOf(p.score)} r="5"><title>{p.week.label}: {p.score}đ, loại {p.cls}{p.rank > 0 ? `, hạng ${p.rank}` : ''}</title></circle>
+                  <text className="pc-score" x={xOf(i)} y={yOf(p.score) - 10} textAnchor="middle">{p.score}đ</text>
+                </g>
+              ))}
+              {points.map((p, i) => (i % labelEvery === 0 || i === points.length - 1) ? <text key={p.week.id} className="pc-axis" x={xOf(i)} y={H - 12} textAnchor="middle">T{p.weekNo}</text> : null)}
+            </svg>
+          </div>
+          {scored.length === 1 && <p>Lớp này mới có 1 tuần đã duyệt; có từ 2 tuần trở lên sẽ thấy rõ xu hướng tăng/giảm.</p>}
+          <div className="progress-points">{points.map(p => <span key={p.week.id} className="chip-mini">{p.week.label}: {p.score === null ? '—' : `${p.score}đ-${p.cls}${p.rank > 0 ? ` (#${p.rank})` : ''}`}</span>)}</div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function Overview({ state, week, role, assignment, homeClassId, onEnterScores, onGoTab, onCopyReminder, onOpenClass }: {
   state: AppState; week?: Week;
   role: Role;
@@ -1580,6 +1649,7 @@ function Overview({ state, week, role, assignment, homeClassId, onEnterScores, o
           {missing.length > 0 && <><p><b>Chưa nộp phiếu ({missing.length}):</b> {missing.map(c => <span key={c.id} className="chip-mini">{c.name}</span>)}</p><div className="row"><button className="btn ghost" type="button" onClick={() => onCopyReminder?.()}>Chép tin nhắc Zalo</button></div></>}
         </div>)}
       </div>
+      <ClassProgressChart state={state} defaultClassId={myHomeClass?.id} />
       {anomalies.length > 0 && <div className="card"><h2>Cảnh báo bất thường</h2>{anomalies.map(s => <p key={s.id}>Lớp {state.classes.find(c => c.id === s.classId)?.name}: {calcScore(s.details).final}đ — kiểm tra lại số liệu trước khi duyệt.</p>)}</div>}
       <div className="card"><h2>Cảnh báo lớp vi phạm{week ? ` — ${week.label}` : ''}</h2>
         {!week ? <p>Chưa có tuần nào nên chưa có cảnh báo.</p> : viol.classWarnings.length === 0 ? <p>Chưa ghi nhận lượt vi phạm nào trong các phiếu đã duyệt của tuần này.</p> : (

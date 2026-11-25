@@ -128,6 +128,21 @@ button.chip{cursor:pointer;font:inherit}
 .vbar-row b{white-space:nowrap;font-size:13px}
 .warn-row{border:1px solid var(--line);border-radius:12px;padding:12px;margin:8px 0;box-shadow:var(--shadow-sm)}
 .warn-row .row{margin-top:6px}
+.progress-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.progress-head label{display:flex;gap:8px;align-items:center;font-weight:700}
+.progress-head select{min-width:150px}
+.progress-head span{color:var(--muted);font-size:13px}
+.progress-stats{display:flex;gap:6px 14px;flex-wrap:wrap;margin:6px 0 10px;font-size:14px}
+.progress-svg-wrap{border:1px solid var(--line);border-radius:12px;background:#fff;padding:8px;overflow:hidden}
+.progress-svg{display:block;width:100%;height:auto}
+.pc-line{fill:none;stroke:var(--brand);stroke-width:3;stroke-linejoin:round;stroke-linecap:round}
+.pc-point{fill:#fff;stroke:var(--brand);stroke-width:3}
+.pc-threshold{stroke:#d8dee9;stroke-width:1;stroke-dasharray:5 5}
+.pc-axis-line{stroke:#cbd5e1;stroke-width:1}
+.pc-axis{font-size:12px;fill:var(--muted)}
+.pc-score{font-size:12px;font-weight:800;fill:var(--brand-deep)}
+.progress-points{display:flex;gap:2px;flex-wrap:wrap;margin-top:8px}
+@media(max-width:480px){.progress-head{align-items:stretch}.progress-head label{flex:1}.progress-head select{flex:1;min-width:0}.progress-stats{font-size:13px}.pc-score{font-size:11px}}
 .kpi b{font-size:22px;display:block}
 .warn{background:var(--amber-soft);border:1px solid var(--amber-border);border-left:4px solid #d97706;border-radius:10px;padding:10px;margin:8px 0}
 .err{background:var(--brand-soft);border:1px solid var(--brand-border);border-left:4px solid var(--brand);border-radius:10px;padding:10px;margin:8px 0}
