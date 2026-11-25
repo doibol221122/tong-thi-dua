@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, ClassGroup, ClassItem, Details, ExtraLine, Role, Score, Week } from './lib';
-import { calcScore, classAvg, classCoverage, classGroup, clsOf, compareAvg, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, monthBlockOf, monthLabel, neNepLines, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekNumberOf } from './lib';
+import { calcScore, classAvg, classCoverage, classGroup, clsOf, compareAvg, downloadBlob, dropLegacyWhenSplit, dutyMonitored, DUTY_CLASSES, DUTY_WEEKS, emptyDetails, emptyState, findDutyHolder, gateDuty, groupLabel, hocTapLines, legacyMixedClusters, monthBlockOf, monthLabel, neNepLines, nowStr, safeFilename, sectionSums, stamp, toCsv, uid, validateDetails, validateImportedState, violationStats, weekNumberOf } from './lib';
 import { exportClassDocx, exportMonthDocx, exportWeekDocx, exportWeekDocxNoRank } from './docxExport';
 import { LOGO_DATA_URI } from './logoData';
 import AuthScreen from './AuthScreen';
@@ -34,10 +34,22 @@ function loadState(): AppState {
 function Stepper({ label, pts, value, onChange, disabled }: { label: string; pts: string; value: number; onChange: (v: number) => void; disabled?: boolean }) {
   const timer = useRef<number | null>(null);
   const valueRef = useRef(value);
+  const onChangeRef = useRef(onChange);
   // Ô gõ tay: giữ nguyên nội dung người dùng gõ (kể cả rỗng/không hợp lệ)
   // để hiện "nhập số" thay vì lặng lẽ thành 0 — chỉ lưu 0 khi gõ số 0.
   const [raw, setRaw] = useState<string | null>(null);
-  useEffect(() => { valueRef.current = value; }, [value]);
+  // Khi phiếu đang mở đổi giá trị từ bên ngoài (đổi lớp/tuần, chép tuần
+  // trước, đồng bộ từ xa) mà ô đang gõ dở: bỏ chữ cũ, hiện đúng số mới.
+  // Nếu không, ô vẫn hiện số cũ và lần gõ tiếp theo ghi sai mục.
+  useEffect(() => { valueRef.current = value; setRaw(null); }, [value]);
+  // Giữ callback mới nhất cho interval giữ nút: interval tạo lúc bấm sẽ
+  // đóng kín callback cũ — nếu bản nháp đổi giữa chừng, tick sau ghi đè
+  // toàn bộ bản nháp cũ lên, xóa mất các lần sửa khác (gõ tên HS, bấm nút
+  // khác) — chính là lỗi "đang nhập mà tự điền lỗi khác".
+  useEffect(() => { onChangeRef.current = onChange; });
+  // Dừng hẳn interval khi ô bị gỡ khỏi màn hình (đổi tab giữa lúc giữ
+  // nút): nếu không, interval chạy mãi và tiếp tục ghi vào bản nháp.
+  useEffect(() => () => { if (timer.current) { clearInterval(timer.current); timer.current = null; } }, []);
   // Một lần bấm chỉ tính một lần: dùng pointer event (chuột hay cảm ứng
   // đều chỉ bắn một lần) thay cho cặp mousedown + touchstart trước đây —
   // trên điện thoại hai sự kiện đó bắn chồng nhau nên mỗi lần bấm nhảy 2.
@@ -49,7 +61,7 @@ function Stepper({ label, pts, value, onChange, disabled }: { label: string; pts
     const step = () => {
       const next = Math.max(0, valueRef.current + dir);
       valueRef.current = next;
-      onChange(next);
+      onChangeRef.current(next);
     };
     step();
     timer.current = window.setInterval(step, 120);
@@ -78,6 +90,38 @@ function Stepper({ label, pts, value, onChange, disabled }: { label: string; pts
   );
 }
 
+// Chân trang dùng chung mọi màn hình của app.
+function AppFooter() {
+  return <footer className="app-footer">Bản quyền thuộc về Đoàn Trường THPT Hùng Vương - Quảng Phú</footer>;
+}
+
+// Hộp thoại xác nhận trong app (P2-05, thay window.confirm): tiêu đề, nội
+// dung, danh sách hệ quả, nút Huỷ / Xác nhận (đỏ cho thao tác phá hủy).
+// Bấm nền mờ ngoài hộp cũng là Hủy.
+export interface ConfirmOpts {
+  title: string; body: string; consequences?: string[];
+  confirmLabel?: string; danger?: boolean;
+  onConfirm: () => void; onCancel?: () => void;
+}
+function ConfirmDialog({ dlg, onClose }: { dlg: ConfirmOpts; onClose: () => void }) {
+  const cancel = () => { dlg.onCancel?.(); onClose(); };
+  return (
+    <div className="confirm-overlay" role="dialog" aria-modal="true" aria-label={dlg.title} onClick={e => { if (e.target === e.currentTarget) cancel(); }}>
+      <div className="card confirm-box">
+        <h2>{dlg.title}</h2>
+        <p>{dlg.body}</p>
+        {dlg.consequences && dlg.consequences.length > 0 && (
+          <ul>{dlg.consequences.map((c, i) => <li key={i}>{c}</li>)}</ul>
+        )}
+        <div className="row" style={{ marginTop: 12 }}>
+          <button className="btn grey" type="button" data-testid="confirm-cancel" onClick={cancel}>Hủy</button>
+          <button className={dlg.danger ? 'btn danger' : 'btn'} type="button" data-testid="confirm-ok" onClick={() => { onClose(); dlg.onConfirm(); }}>{dlg.confirmLabel ?? 'Xác nhận'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Một mục trong phiếu nhập điểm: tiêu đề gọn kèm tổng điểm của mục,
 // bấm để thu gọn / mở ra.
 function Section({ title, sum, children }: { title: string; sum: string; children: React.ReactNode }) {
@@ -90,6 +134,19 @@ function Section({ title, sum, children }: { title: string; sum: string; childre
       {open && <div className="sec-body">{children}</div>}
     </div>
   );
+}
+
+// Màn hình hẹp (≤760px) hay không — dùng để chỉ render một bản nhật ký
+// (bảng ở màn rộng, danh sách ở màn hẹp) thay vì render cả hai rồi ẩn bằng CSS.
+function useIsNarrow() {
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width:760px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width:760px)');
+    const onChange = () => setNarrow(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
 }
 
 // Đồng hồ ngày/giờ hiện tại ở header, tự chạy từng giây. Chỉ render lại
@@ -133,7 +190,19 @@ export default function App() {
   const saveSeqRef = useRef(0);
   const syncedStateJsonRef = useRef('');
   const lastSaveNoteRef = useRef('');
-  const weekGoneAskedRef = useRef('');
+  // Tuần đã xóa ở máy khác mà người dùng chọn ở lại (Hủy ở hộp thoại):
+  // nhớ cặp (tuần, bản máy chủ) để không hỏi lại/nảy tuần lặng lẽ ở chu
+  // kỳ làm mới sau; có bản máy chủ mới hơn thì hỏi lại.
+  const weekGoneDeclinedRef = useRef<{ weekId: string; updatedAt: string } | null>(null);
+  // Hộp thoại xác nhận trong app (P2-05). confirmOpenRef để vòng làm mới
+  // 45 giây tạm dừng khi hộp thoại đang mở (tránh dữ liệu đổi ngay dưới
+  // hộp thoại đang chờ người dùng bấm).
+  const [confirmDlg, setConfirmDlg] = useState<ConfirmOpts | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const isNarrow = useIsNarrow();
+  const confirmOpenRef = useRef(false);
+  function askConfirm(opts: ConfirmOpts) { confirmOpenRef.current = true; setConfirmDlg(opts); }
+  function closeConfirm() { confirmOpenRef.current = false; setConfirmDlg(null); }
   const stateRef = useRef(state);
   stateRef.current = state;
   const profileRef = useRef<Profile | null>(null);
@@ -148,6 +217,9 @@ export default function App() {
   const [profile, setProfile] = useState<Profile | null>(null);
   profileRef.current = profile;
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  // Bản mới nhất của profiles (kiểm tra lại khoá ngay trước khi lưu).
+  const profilesRef = useRef(profiles);
+  profilesRef.current = profiles;
   const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
   const [profileErr, setProfileErr] = useState('');
   const [remoteLoaded, setRemoteLoaded] = useState(!isSupabaseConfigured);
@@ -155,6 +227,27 @@ export default function App() {
   const lastSavedAtRef = useRef<string | null>(null);
   const remoteLoadingRef = useRef(false);
   const [tab, setTab] = useState('tong-quan');
+  // Thanh tab theo vai trò — ĐẶT TRƯỚC mọi return sớm (màn chờ, màn chọn vai
+  // trò...): hook bên dưới phải chạy đủ mọi lần render, nếu không React báo
+  // lỗi "rendered fewer hooks" khi đổi vai trò/đăng xuất.
+  // Cờ đỏ chỉ thấy Nhập điểm + Xếp hạng; Chỉ xem không thấy Quản lý lẫn Lịch
+  // sử; Quản lý chỉ Ban thi đua.
+  const allTabs: [string, string][] = [['tong-quan', 'Tổng quan'], ['nhap-diem', 'Nhập điểm'], ['xep-hang', 'Xếp hạng'], ['tong-hop', 'Tổng hợp'], ['quan-ly', 'Quản lý'], ['lich-su', 'Lịch sử']];
+  const tabs: [string, string][] = session ? allTabs.filter(([k]) => {
+    if (session.role === 'codo') return k === 'nhap-diem' || k === 'xep-hang';
+    if (k === 'quan-ly') return session.role === 'admin';
+    if (k === 'lich-su') return session.role !== 'viewer';
+    return true;
+  }) : [];
+  // Guard: tab hiện tại không còn trong danh sách hiển thị của vai trò (vd
+  // trạng thái cũ còn 'tong-quan' sau khi đổi sang cờ đỏ) thì về tab đầu
+  // tiên hiển thị, không để trang trắng.
+  const visibleKeys = tabs.map(([k]) => k).join('|');
+  useEffect(() => {
+    if (!session) return;
+    const keys = visibleKeys.split('|');
+    if (!keys.includes(tab)) setTab(keys[0]);
+  }, [tab, visibleKeys, session]);
   const [weekId, setWeekId] = useState('');
   weekIdRef.current = weekId;
   const [classId, setClassId] = useState('');
@@ -167,6 +260,9 @@ export default function App() {
   const [returnReason, setReturnReason] = useState('');
   const [showPhieu, setShowPhieu] = useState(false);
   const [rankGroup, setRankGroup] = useState<'all' | ClassGroup>('all');
+  // Chế độ xếp hạng: theo tuần hay theo tháng (điểm trung bình tháng).
+  const [rankMode, setRankMode] = useState<'week' | 'month'>('week');
+  const [rankMonthSel, setRankMonthSel] = useState<number | ''>('');
   // Cờ đỏ tự chọn lớp trực: đang mở ô chọn lớp thì true.
   const [showDutyPicker, setShowDutyPicker] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -335,28 +431,39 @@ export default function App() {
     if (!isSupabaseConfigured || !remoteLoaded || !profile || profile.status !== 'active' || useLocalOnly) return;
     const id = window.setInterval(async () => {
       if (document.hidden || !navigator.onLine) return;
-      if (savePendingRef.current || syncStatus === 'error') return;
+      if (savePendingRef.current || syncStatus === 'error' || confirmOpenRef.current) return;
       try {
         const remote = await fetchSharedState();
         if (remote.data && remote.updatedAt && remote.updatedAt !== lastSavedAtRef.current && (!remoteUpdatedAtRef.current || remote.updatedAt > remoteUpdatedAtRef.current)) {
+          const data = remote.data;
+          const updatedAt = remote.updatedAt;
+          const applyRemote = () => {
+            setState(data);
+            remoteUpdatedAtRef.current = updatedAt;
+            remoteVersionRef.current = remote.version;
+            syncedStateJsonRef.current = JSON.stringify(data);
+          };
           // Tuần đang xem bị xóa ở máy khác thì hỏi trước khi nhảy tuần;
-          // giữ bản nháp nếu người dùng chọn ở lại.
+          // giữ bản nháp nếu người dùng chọn ở lại (ghi nhớ lựa chọn cho
+          // đúng bản máy chủ này — có bản mới hơn thì hỏi lại).
           const curWeekId = weekIdRef.current;
-          if (curWeekId && remote.data && !remote.data.weeks.some(w => w.id === curWeekId)) {
+          const declined = weekGoneDeclinedRef.current;
+          if (curWeekId && !data.weeks.some(w => w.id === curWeekId)) {
+            if (declined && declined.weekId === curWeekId && declined.updatedAt === updatedAt) return;
             const label = stateRef.current.weeks.find(w => w.id === curWeekId)?.label ?? curWeekId;
-            if (weekGoneAskedRef.current !== curWeekId) {
-              weekGoneAskedRef.current = curWeekId;
-              if (dirtyRef.current) {
-                if (!window.confirm(`Tuần ${label} đã bị xóa ở máy khác. Chuyển sang tuần mới nhất? (Bản nháp đang sửa sẽ được giữ lại nếu bạn chọn Hủy.)`)) return;
-              } else {
-                setMsg(`Tuần ${label} đã bị xóa ở máy khác, đã chuyển sang tuần mới nhất.`);
-              }
+            if (dirtyRef.current) {
+              askConfirm({
+                title: `Tuần ${label} đã bị xóa ở máy khác`,
+                body: 'Chuyển sang tuần mới nhất? Bản nháp đang sửa sẽ được giữ lại nếu bạn chọn Hủy.',
+                confirmLabel: 'Chuyển sang tuần mới nhất',
+                onConfirm: () => { weekGoneDeclinedRef.current = null; applyRemote(); },
+                onCancel: () => { weekGoneDeclinedRef.current = { weekId: curWeekId, updatedAt }; },
+              });
+              return;
             }
+            setMsg(`Tuần ${label} đã bị xóa ở máy khác, đã chuyển sang tuần mới nhất.`);
           }
-          setState(remote.data);
-          remoteUpdatedAtRef.current = remote.updatedAt;
-          remoteVersionRef.current = remote.version;
-          syncedStateJsonRef.current = JSON.stringify(remote.data);
+          applyRemote();
         }
       } catch { /* ngoại tuyến / lỗi mạng: lần sau thử lại */ }
     }, 45000);
@@ -402,8 +509,32 @@ export default function App() {
   async function resolveConflict(keepMine: boolean) {
     const prof = profileRef.current;
     if (!prof) return;
-    if (!keepMine && dirtyRef.current && !window.confirm('Phiếu đang sửa chưa lưu sẽ bị thay bằng bản trên máy chủ. Tiếp tục?')) return;
-    if (keepMine && !window.confirm('Ghi đè dữ liệu trên máy chủ bằng bản của bạn? Bản trên máy chủ sẽ mất (vẫn còn trong lịch sử sao lưu nếu đã bật sao lưu tự động).')) return;
+    const run = () => { void runResolve(keepMine); };
+    if (!keepMine && dirtyRef.current) {
+      askConfirm({
+        title: 'Tải bản mới từ máy chủ?',
+        body: 'Phiếu đang sửa chưa lưu sẽ bị thay bằng bản trên máy chủ.',
+        confirmLabel: 'Tải bản mới',
+        danger: true,
+        onConfirm: run,
+      });
+      return;
+    }
+    if (keepMine) {
+      askConfirm({
+        title: 'Ghi đè dữ liệu trên máy chủ?',
+        body: 'Bản trên máy chủ sẽ mất (vẫn còn trong lịch sử sao lưu nếu đã bật sao lưu tự động).',
+        confirmLabel: 'Ghi đè',
+        danger: true,
+        onConfirm: run,
+      });
+      return;
+    }
+    await runResolve(keepMine);
+  }
+  async function runResolve(keepMine: boolean) {
+    const prof = profileRef.current;
+    if (!prof) return;
     setSyncStatus('saving');
     try {
       if (keepMine) {
@@ -489,11 +620,25 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, authUser, state.classes, pendingRetry]);
 
-  // Cờ đỏ vào là tự mở đúng lớp được phân công
+  // Cờ đỏ vào là tự mở đúng lớp được phân công — chỉ mở một lần cho mỗi
+  // phân công. Trước đây effect chạy lại mỗi khi object session đổi (kể
+  // cả khi Supabase làm mới token), kéo người dùng về đúng lớp/tuần đang
+  // phân công giữa lúc đang nhập ở chỗ khác.
+  const autoOpenedRef = useRef('');
   useEffect(() => {
-    if (session?.role === 'codo' && assignment) { setWeekId(assignment.weekId); setClassId(assignment.classId); setTab('nhap-diem'); }
+    if (session?.role === 'codo' && assignment) {
+      const key = `${session.id || session.name}|${assignment.weekId}|${assignment.classId}`;
+      if (autoOpenedRef.current === key) return;
+      autoOpenedRef.current = key;
+      setWeekId(assignment.weekId); setClassId(assignment.classId); setTab('nhap-diem');
+    }
+    // Deps gồm assignment: ở chế độ Supabase, session về TRƯỚC khi hồ sơ/
+    // phân công tải xong — chỉ deps [session] thì effect chạy lúc assignment
+    // còn null rồi không chạy lại, cờ đỏ không được mở lớp trực (mất cả
+    // banner trả phiếu). Khóa key vẫn chặn chạy lại khi Supabase làm mới
+    // token (cùng phân công -> cùng key).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
+  }, [session, assignment]);
 
   useEffect(() => {
     if (currentScore) setDraft(currentScore.details);
@@ -504,14 +649,24 @@ export default function App() {
 
   const calc = useMemo(() => calcScore(draft ?? emptyDetails()), [draft]);
   const roleLabel = session?.role === 'admin' ? 'Ban thi đua' : session?.role === 'codo' ? 'Cờ đỏ' : 'Chỉ xem';
+  // P1-08: cờ đỏ khác đang giữ (lớp, tuần) này — qua roster hoặc qua hồ
+  // sơ. Người giữ chính mình thì không tính (findDutyHolder loại self).
+  const dutyHolder = useMemo(() => {
+    if (session?.role !== 'codo') return null;
+    return findDutyHolder(state.roster, profiles, classId, effectiveWeekId, { id: session.id, name: session.name });
+  }, [session, state.roster, profiles, classId, effectiveWeekId]);
   const canEdit = useMemo(() => {
     if (!session || session.role === 'viewer' || !draft) return false;
     if (week?.submittedAt) return false;
     if (currentScore && currentScore.status === 'approved') return false;
     if (currentScore && currentScore.status === 'submitted') return false;
-    if (session.role === 'codo') return assignment?.classId === classId && assignment?.weekId === effectiveWeekId;
+    if (session.role === 'codo') {
+      if (assignment?.classId !== classId || assignment?.weekId !== effectiveWeekId) return false;
+      if (dutyHolder) return false;
+      return true;
+    }
     return true;
-  }, [session, week, currentScore, assignment, classId, effectiveWeekId, draft]);
+  }, [session, week, currentScore, assignment, classId, effectiveWeekId, draft, dutyHolder]);
 
   // Bấm "Cài app": Android mở hộp thoại cài đặt của trình duyệt;
   // iPhone không có hộp thoại này nên hiện hướng dẫn thêm thủ công.
@@ -535,7 +690,7 @@ export default function App() {
     lastSavedAtRef.current = null;
     syncedStateJsonRef.current = '';
     savePendingRef.current = false;
-    weekGoneAskedRef.current = '';
+    weekGoneDeclinedRef.current = null;
     setSyncStatus('idle'); setSyncErr(''); setConflict(false); setLoadFailed(false); setUseLocalOnly(false);
     setDraft(null); setDirty(false); setWeekId(''); setClassId(''); setTab('tong-quan'); setShowPhieu(false); setReturnReason('');
     setMsg('Đã đăng xuất.');
@@ -552,16 +707,36 @@ export default function App() {
       setErrs(['Không thể làm vậy vì đây là tài khoản Ban thi đua đang dùng duy nhất. Cần có ít nhất một tài khoản Ban thi đua khác đang dùng trước.']);
       return;
     }
-    if (patch.role !== undefined && p && patch.role !== p.role && !window.confirm(`Đổi vai trò của ${p.full_name} thành ${patch.role === 'admin' ? 'Ban thi đua' : patch.role === 'codo' ? 'Cờ đỏ trực' : 'Chỉ xem'}?`)) return;
-    if (patch.status === 'disabled' && p && !window.confirm(`Khóa tài khoản ${p.full_name} (${p.email})? Người này sẽ không vào hệ thống được nữa.`)) return;
-    try {
-      await updateProfile(id, patch);
-      setProfiles(prev => prev.map(pp => (pp.id === id ? { ...pp, ...patch } : pp)));
-      update(s => s, 'Quản lý tài khoản', `${p?.full_name ?? ''} (${p?.email ?? ''})`);
-      setMsg('Đã cập nhật tài khoản.');
-    } catch {
-      setErrs(['Không cập nhật được tài khoản. Kiểm tra lại Supabase (đã chạy schema.sql chưa).']);
+    const runPatch = async () => {
+      try {
+        await updateProfile(id, patch);
+        setProfiles(prev => prev.map(pp => (pp.id === id ? { ...pp, ...patch } : pp)));
+        update(s => s, 'Quản lý tài khoản', `${p?.full_name ?? ''} (${p?.email ?? ''})`);
+        setMsg('Đã cập nhật tài khoản.');
+      } catch {
+        setErrs(['Không cập nhật được tài khoản. Kiểm tra lại Supabase (đã chạy schema.sql chưa).']);
+      }
+    };
+    if (patch.role !== undefined && p && patch.role !== p.role) {
+      askConfirm({
+        title: `Đổi vai trò của ${p.full_name}?`,
+        body: `Vai trò mới: ${patch.role === 'admin' ? 'Ban thi đua' : patch.role === 'codo' ? 'Cờ đỏ trực' : 'Chỉ xem'}.`,
+        confirmLabel: 'Đổi vai trò',
+        onConfirm: () => { void runPatch(); },
+      });
+      return;
     }
+    if (patch.status === 'disabled' && p) {
+      askConfirm({
+        title: `Khóa tài khoản ${p.full_name}?`,
+        body: `Tài khoản ${p.email} sẽ không vào hệ thống được nữa.`,
+        confirmLabel: 'Khóa tài khoản',
+        danger: true,
+        onConfirm: () => { void runPatch(); },
+      });
+      return;
+    }
+    await runPatch();
   }
 
   // Học sinh đang chờ duyệt tự lưu lớp của mình (màn hình chờ duyệt).
@@ -601,15 +776,23 @@ export default function App() {
     if (session?.id === id) { setErrs(['Không xóa được tài khoản của chính mình.']); return; }
     const isLastAdmin = p.role === 'admin' && p.status === 'active' && profiles.filter(x => x.role === 'admin' && x.status === 'active').length <= 1;
     if (isLastAdmin) { setErrs(['Không xóa được vì đây là tài khoản Ban thi đua đang dùng duy nhất. Cần có ít nhất một tài khoản Ban thi đua khác đang dùng trước.']); return; }
-    if (!window.confirm(`Xóa tài khoản ${p.full_name} (${p.email})? Người này sẽ không đăng nhập vào hệ thống được nữa. Phiếu đã nhập vẫn giữ lại.`)) return;
-    try {
-      await deleteProfile(id);
-      setProfiles(prev => prev.filter(x => x.id !== id));
-      update(s => ({ ...s, roster: s.roster.filter(r => r.name !== p.full_name) }), 'Xóa tài khoản', `${p.full_name} (${p.email})`);
-      setMsg('Đã xóa tài khoản.');
-    } catch {
-      setErrs(['Không xóa được tài khoản. Kiểm tra lại Supabase (đã chạy dòng chính sách xóa trong schema.sql chưa).']);
-    }
+    askConfirm({
+      title: `Xóa tài khoản ${p.full_name}?`,
+      body: `Người này (${p.email}) sẽ không đăng nhập vào hệ thống được nữa. Phiếu đã nhập vẫn giữ lại.`,
+      consequences: ['Phân công trực theo tên người này cũng bị xóa.'],
+      confirmLabel: 'Xóa tài khoản',
+      danger: true,
+      onConfirm: () => { void (async () => {
+        try {
+          await deleteProfile(id);
+          setProfiles(prev => prev.filter(x => x.id !== id));
+          update(s => ({ ...s, roster: s.roster.filter(r => r.name !== p.full_name) }), 'Xóa tài khoản', `${p.full_name} (${p.email})`);
+          setMsg('Đã xóa tài khoản.');
+        } catch {
+          setErrs(['Không xóa được tài khoản. Kiểm tra lại Supabase (đã chạy dòng chính sách xóa trong schema.sql chưa).']);
+        }
+      })(); },
+    });
   }
 
   function update(fn: (s: AppState) => AppState, logAction?: string, logDetail?: string) {
@@ -622,17 +805,42 @@ export default function App() {
   }
   function setD<K extends keyof Details>(key: K, v: Details[K]) {
     if (!draft) return;
-    setDraft({ ...draft, [key]: v }); setDirty(true);
+    // Cập nhật theo hàm (functional update): các lần sửa liên tiếp nhanh
+    // (giữ nút +/− trong khi gõ tên HS, bấm hai nút gần nhau) không được
+    // dùng bản nháp cũ đóng kín trong closure — nếu không, lần sửa sau
+    // ghi đè toàn bộ bản nháp cũ lên và xóa mất lần sửa trước đó.
+    setDraft(prev => prev ? { ...prev, [key]: v } : prev); setDirty(true);
   }
-  function confirmDirty(): boolean {
-    if (!dirty) return true;
-    return window.confirm('Phiếu đang sửa chưa lưu & nộp. Chuyển đi sẽ mất số liệu chưa lưu. Bạn có chắc muốn chuyển đi?');
+  // Chuyển đi khi đang sửa dở: hỏi trong app thay vì window.confirm.
+  // Chưa sửa gì thì chạy ngay; đang sửa dở thì hiện hộp thoại, bấm Xác
+  // nhận mới chạy tiếp (Hủy thì ở lại, bản nháp còn nguyên).
+  function confirmDirtyAsync(action: () => void) {
+    if (!dirty) { action(); return; }
+    askConfirm({
+      title: 'Chưa lưu phiếu đang sửa',
+      body: 'Phiếu đang sửa chưa lưu & nộp. Chuyển đi sẽ mất số liệu chưa lưu.',
+      confirmLabel: 'Chuyển đi (mất bản nháp)',
+      danger: true,
+      onConfirm: action,
+    });
   }
-  function switchTab(t: string) { if (confirmDirty()) { setTab(t); setDirty(false); } }
-  function switchClass(id: string) { if (confirmDirty()) setClassId(id); }
+  function switchTab(t: string) { confirmDirtyAsync(() => { setTab(t); setDirty(false); }); }
+  function switchClass(id: string) { confirmDirtyAsync(() => setClassId(id)); }
 
   function saveScore(status: 'draft' | 'submitted') {
     if (!draft || !week || !classId) return;
+    // P1-08: kiểm tra lại với dữ liệu MỚI NHẤT ngay trước khi lưu — phiếu
+    // có thể đã được nộp/duyệt, tuần đã chốt, hoặc lớp đã có cờ đỏ khác
+    // giữ trong lúc mình đang sửa (đồng bộ 45 giây chưa kịp về máy này).
+    // Dùng stateRef/profilesRef, không dùng bản render cũ (canEdit).
+    const latest = stateRef.current;
+    const latestScore = latest.scores.find(s => s.weekId === week.id && s.classId === classId);
+    if (latestScore && (latestScore.status === 'submitted' || latestScore.status === 'approved')) { setErrs(['Phiếu này vừa được nộp/duyệt (có thể từ máy khác) nên không ghi đè được. Tải lại trang để xem bản mới nhất nhé.']); return; }
+    if (latest.weeks.find(w => w.id === week.id)?.submittedAt) { setErrs(['Tuần này vừa được chốt (có thể từ máy khác) nên không lưu được nữa.']); return; }
+    if (session?.role === 'codo') {
+      const holder = findDutyHolder(latest.roster, profilesRef.current, classId, week.id, { id: session.id, name: session.name });
+      if (holder) { setErrs([`Lớp này đã có cờ đỏ ${holder.name} trực ${week.label} — phiếu đang do bạn ấy giữ, bạn không lưu đè được. Liên hệ Ban thi đua nếu trực thay nhé.`]); return; }
+    }
     // Chốt khóa: phiếu đã nộp/duyệt hoặc tuần đã chốt thì không ai lưu đè
     // được nữa (kể cả cờ đỏ tự chọn lại lớp) — Ban thi đua phải mở lại trước.
     if (!canEdit) { setErrs(['Phiếu này không sửa được nữa (đã nộp, đã duyệt hoặc tuần đã chốt). Ban thi đua mở lại thì mới sửa được.']); return; }
@@ -667,9 +875,16 @@ export default function App() {
     const errors = validateDetails(currentScore.details);
     if (errors.length) { setErrs([`Phiếu chưa đủ điều kiện duyệt: ${errors[0]}`]); return; }
     const clsName = state.classes.find(c => c.id === currentScore.classId)?.name ?? '';
-    if (!window.confirm(`Duyệt phiếu lớp ${clsName} (${calcScore(currentScore.details).final}đ, loại ${calcScore(currentScore.details).cls})? Phiếu đã duyệt sẽ vào xếp hạng chính thức.`)) return;
-    update(prev => ({ ...prev, scores: prev.scores.map(s => s.id === currentScore.id ? { ...s, status: 'approved', approvedBy: session?.name, approvedAt: nowStr() } : s) }), 'Duyệt phiếu', `${clsName} — ${week?.label}`);
-    setMsg(`Đã duyệt phiếu lớp ${clsName}.`); setDraft(currentScore.details);
+    const c = calcScore(currentScore.details);
+    askConfirm({
+      title: `Duyệt phiếu lớp ${clsName}?`,
+      body: `Phiếu ${c.final}đ, loại ${c.cls}. Phiếu đã duyệt sẽ vào xếp hạng chính thức.`,
+      confirmLabel: 'Duyệt phiếu',
+      onConfirm: () => {
+        update(prev => ({ ...prev, scores: prev.scores.map(s => s.id === currentScore.id ? { ...s, status: 'approved', approvedBy: session?.name, approvedAt: nowStr() } : s) }), 'Duyệt phiếu', `${clsName} — ${week?.label}`);
+        setMsg(`Đã duyệt phiếu lớp ${clsName}.`); setDraft(currentScore.details);
+      },
+    });
   }
   // Duyệt tất cả phiếu đã nộp của tuần hiện tại (chỉ Ban thi đua).
   // Phiếu chưa đủ điều kiện thì bỏ qua và báo rõ từng phiếu.
@@ -677,25 +892,37 @@ export default function App() {
     if (!week || session?.role !== 'admin') return;
     const ids = pendingScores.map(s => s.id);
     if (!ids.length) return;
-    if (!window.confirm(`Duyệt tất cả ${ids.length} phiếu đã nộp của ${week.label}?`)) return;
-    const okIds: string[] = [];
-    const skipped: string[] = [];
-    for (const s of pendingScores) {
-      const errs = validateDetails(s.details);
-      if (errs.length) skipped.push(`${state.classes.find(c => c.id === s.classId)?.name ?? s.classId} (${errs[0]})`);
-      else okIds.push(s.id);
-    }
-    if (!okIds.length) { setErrs([`Không duyệt được phiếu nào: ${skipped.join('; ')}`]); return; }
-    const idSet = new Set(okIds);
-    update(prev => ({ ...prev, scores: prev.scores.map(s => idSet.has(s.id) ? { ...s, status: 'approved', approvedBy: session?.name, approvedAt: nowStr() } : s) }), 'Duyệt tất cả phiếu', `${week.label} — ${okIds.length} phiếu`);
-    setMsg(`Đã duyệt ${okIds.length} phiếu của ${week.label}.${skipped.length ? ` Bỏ qua ${skipped.length} phiếu chưa đủ điều kiện: ${skipped.join('; ')}.` : ''}`);
+    askConfirm({
+      title: `Duyệt tất cả ${ids.length} phiếu đã nộp?`,
+      body: `${week.label} — các phiếu chưa đủ điều kiện sẽ được kiểm tra lại lúc duyệt và bỏ qua nếu chưa đủ.`,
+      confirmLabel: 'Duyệt tất cả',
+      onConfirm: () => {
+        const okIds: string[] = [];
+        const skipped: string[] = [];
+        for (const s of pendingScores) {
+          const errs = validateDetails(s.details);
+          if (errs.length) skipped.push(`${state.classes.find(c => c.id === s.classId)?.name ?? s.classId} (${errs[0]})`);
+          else okIds.push(s.id);
+        }
+        if (!okIds.length) { setErrs([`Không duyệt được phiếu nào: ${skipped.join('; ')}`]); return; }
+        const idSet = new Set(okIds);
+        update(prev => ({ ...prev, scores: prev.scores.map(s => idSet.has(s.id) ? { ...s, status: 'approved', approvedBy: session?.name, approvedAt: nowStr() } : s) }), 'Duyệt tất cả phiếu', `${week.label} — ${okIds.length} phiếu`);
+        setMsg(`Đã duyệt ${okIds.length} phiếu của ${week.label}.${skipped.length ? ` Bỏ qua ${skipped.length} phiếu chưa đủ điều kiện: ${skipped.join('; ')}.` : ''}`);
+      },
+    });
   }
   // Cờ đỏ tự chọn lớp trực tuần hiện tại: ghi thành phân công (roster) để
   // Ban thi đua thấy trong Quản lý; chọn lại thì cập nhật dòng cũ, không
   // nhân đôi. Sau khi chọn, phân công này được ưu tiên như gán tay.
   function confirmDutyPick(classId: string) {
     if (!week || session?.role !== 'codo' || !classId) return;
-    if (!confirmDirty()) return;
+    confirmDirtyAsync(() => {
+    // P1-08: kiểm tra lại trước khi ghi phân công — lớp có thể vừa có cờ
+    // đỏ khác giữ hoặc vừa có phiếu đã nộp/duyệt trong lúc mình đang chọn.
+    const pickHolder = findDutyHolder(stateRef.current.roster, profilesRef.current, classId, week.id, { id: session.id, name: session.name });
+    if (pickHolder) { setErrs([`Lớp ${state.classes.find(c => c.id === classId)?.name ?? ''} đã có cờ đỏ ${pickHolder.name} trực ${week.label} — bạn liên hệ Ban thi đua nếu trực thay nhé.`]); setShowDutyPicker(false); return; }
+    const pickScore = stateRef.current.scores.find(s => s.weekId === week.id && s.classId === classId);
+    if (pickScore && (pickScore.status === 'submitted' || pickScore.status === 'approved')) { setErrs([`Lớp ${state.classes.find(c => c.id === classId)?.name ?? ''} đã có phiếu ${STATUS_LABEL[pickScore.status]} — phiếu đã khóa, không nhập lại được.`]); setShowDutyPicker(false); return; }
     const clsName = state.classes.find(c => c.id === classId)?.name ?? '';
     update(prev => {
       const roster = [...prev.roster];
@@ -706,14 +933,21 @@ export default function App() {
     }, 'Tự chọn lớp trực', `${session.name} — ${clsName} — ${week.label}`);
     setShowDutyPicker(false);
     setWeekId(week.id); setClassId(classId);
+    });
   }
   function returnScore() {
     if (!currentScore || session?.role !== 'admin' || !returnReason.trim()) { setErrs(['Trả lại phiếu phải ghi rõ lý do.']); return; }
     if (currentScore.status !== 'submitted') { setErrs(['Chỉ trả lại được phiếu đang ở trạng thái Chờ duyệt.']); return; }
     const clsName = state.classes.find(c => c.id === currentScore.classId)?.name ?? '';
-    if (!window.confirm(`Trả lại phiếu lớp ${clsName} với lý do: “${returnReason.trim()}”?`)) return;
-    update(prev => ({ ...prev, scores: prev.scores.map(s => s.id === currentScore.id ? { ...s, status: 'returned', returnReason: returnReason.trim() } : s) }), 'Trả lại phiếu', `${clsName} — Lý do: ${returnReason.trim()}`);
-    setMsg(`Đã trả lại phiếu lớp ${clsName}.`); setReturnReason(''); setDraft(currentScore.details);
+    askConfirm({
+      title: `Trả lại phiếu lớp ${clsName}?`,
+      body: `Lý do: “${returnReason.trim()}”. Cờ đỏ sẽ sửa lại rồi nộp lại.`,
+      confirmLabel: 'Trả lại phiếu',
+      onConfirm: () => {
+        update(prev => ({ ...prev, scores: prev.scores.map(s => s.id === currentScore.id ? { ...s, status: 'returned', returnReason: returnReason.trim() } : s) }), 'Trả lại phiếu', `${clsName} — Lý do: ${returnReason.trim()}`);
+        setMsg(`Đã trả lại phiếu lớp ${clsName}.`); setReturnReason(''); setDraft(currentScore.details);
+      },
+    });
   }
   // Hủy duyệt khi Ban thi đua lỡ duyệt nhầm: phiếu trở về nháp để sửa
   // lại (xóa cả người/giờ duyệt cũ và người/giờ nộp cũ). Nếu tuần đã chốt
@@ -723,28 +957,49 @@ export default function App() {
     if (!currentScore || session?.role !== 'admin') return;
     const clsName = state.classes.find(c => c.id === currentScore.classId)?.name ?? '';
     const weekClosed = !!week?.submittedAt;
-    if (!window.confirm(weekClosed ? `Hủy duyệt phiếu lớp ${clsName} sẽ mở lại cả ${week?.label} cho tất cả các lớp (tuần đang chốt). Tiếp tục?` : `Mở lại phiếu lớp ${clsName} để sửa? Phiếu trở về bản nháp.`)) return;
-    update(prev => ({
-      ...prev,
-      scores: prev.scores.map(s => s.id === currentScore.id ? { ...s, status: 'draft', returnReason: undefined, approvedBy: undefined, approvedAt: undefined, submittedBy: undefined, submittedAt: undefined } : s),
-      weeks: weekClosed && week ? prev.weeks.map(w => w.id === week.id ? { ...w, submittedAt: null, submittedBy: null } : w) : prev.weeks,
-    }), weekClosed ? 'Hủy duyệt phiếu + mở lại tuần' : 'Hủy duyệt phiếu', `${clsName} — ${week?.label}${weekClosed ? ' (tuần đã chốt nên mở lại luôn tuần)' : ''}`);
-    setMsg(weekClosed ? `Đã hủy duyệt phiếu lớp ${clsName} và mở lại ${week?.label} để sửa.` : `Đã hủy duyệt phiếu lớp ${clsName}. Phiếu trở về nháp để sửa lại.`);
+    const isApproved = currentScore.status === 'approved';
+    askConfirm({
+      title: isApproved ? `Hủy duyệt phiếu lớp ${clsName}?` : `Mở lại phiếu lớp ${clsName}?`,
+      body: isApproved
+        ? (weekClosed ? `Tuần đang chốt — hủy duyệt sẽ mở lại cả ${week?.label} cho tất cả các lớp.` : 'Phiếu trở về bản nháp để sửa lại.')
+        : 'Phiếu trở về bản nháp để sửa lại.',
+      confirmLabel: isApproved ? 'Hủy duyệt' : 'Mở lại phiếu',
+      onConfirm: () => {
+        update(prev => ({
+          ...prev,
+          scores: prev.scores.map(s => s.id === currentScore.id ? { ...s, status: 'draft', returnReason: undefined, approvedBy: undefined, approvedAt: undefined, submittedBy: undefined, submittedAt: undefined } : s),
+          weeks: weekClosed && week ? prev.weeks.map(w => w.id === week.id ? { ...w, submittedAt: null, submittedBy: null } : w) : prev.weeks,
+        }), weekClosed ? 'Hủy duyệt phiếu + mở lại tuần' : 'Hủy duyệt phiếu', `${clsName} — ${week?.label}${weekClosed ? ' (tuần đã chốt nên mở lại luôn tuần)' : ''}`);
+        setMsg(weekClosed ? `Đã hủy duyệt phiếu lớp ${clsName} và mở lại ${week?.label} để sửa.` : `Đã hủy duyệt phiếu lớp ${clsName}. Phiếu trở về nháp để sửa lại.`);
+      },
+    });
   }
   function closeWeek() {
     if (!week || session?.role !== 'admin') return;
     const missing = state.classes.filter(c => !state.scores.some(s => s.weekId === week.id && s.classId === c.id && s.status === 'approved'));
     if (missing.length) { setErrs([`Chưa chốt được tuần: còn ${missing.length} lớp chưa có phiếu đã duyệt (${missing.map(c => c.name).join(', ')}).`]); return; }
-    if (!window.confirm(`Nộp & chốt ${week.label}? Sau khi chốt, các lớp không sửa phiếu được nữa (Ban thi đua vẫn mở lại được).`)) return;
-    setErrs([]);
-    update(prev => ({ ...prev, weeks: prev.weeks.map(w => w.id === week.id ? { ...w, submittedAt: nowStr(), submittedBy: session?.name } : w) }), 'Nộp & chốt tuần', week.label);
-    setMsg(`Đã nộp & chốt ${week.label}.`);
+    askConfirm({
+      title: `Nộp & chốt ${week.label}?`,
+      body: 'Sau khi chốt, các lớp không sửa phiếu được nữa (Ban thi đua vẫn mở lại được).',
+      confirmLabel: 'Nộp & chốt tuần',
+      onConfirm: () => {
+        setErrs([]);
+        update(prev => ({ ...prev, weeks: prev.weeks.map(w => w.id === week.id ? { ...w, submittedAt: nowStr(), submittedBy: session?.name } : w) }), 'Nộp & chốt tuần', week.label);
+        setMsg(`Đã nộp & chốt ${week.label}.`);
+      },
+    });
   }
   function reopenWeek() {
     if (!week || session?.role !== 'admin') return;
-    if (!window.confirm(`Mở lại ${week.label}? Các lớp sẽ sửa được phiếu trở lại.`)) return;
-    update(prev => ({ ...prev, weeks: prev.weeks.map(w => w.id === week.id ? { ...w, submittedAt: null, submittedBy: null } : w) }), 'Mở lại tuần', week.label);
-    setMsg(`Đã mở lại ${week.label}.`);
+    askConfirm({
+      title: `Mở lại ${week.label}?`,
+      body: 'Các lớp sẽ sửa được phiếu trở lại.',
+      confirmLabel: 'Mở lại tuần',
+      onConfirm: () => {
+        update(prev => ({ ...prev, weeks: prev.weeks.map(w => w.id === week.id ? { ...w, submittedAt: null, submittedBy: null } : w) }), 'Mở lại tuần', week.label);
+        setMsg(`Đã mở lại ${week.label}.`);
+      },
+    });
   }
   function copyPrevWeek() {
     if (!draft || !classId) return;
@@ -758,11 +1013,22 @@ export default function App() {
       .filter(x => x.n < curNum)
       .sort((a, b) => b.n - a.n)[0]?.w;
     if (!prevWeek) { setMsg('Chưa có tuần trước để chép.'); return; }
-    if (dirty && !window.confirm('Phiếu đang sửa chưa lưu sẽ bị thay bằng số liệu tuần trước. Tiếp tục?')) return;
-    const prevScore = state.scores.find(s => s.weekId === prevWeek.id && s.classId === classId);
-    if (!prevScore) { setMsg(`Lớp này chưa có phiếu ở ${prevWeek.label}.`); return; }
-    // Bỏ trường gộp cũ khi đã có trường tách nhỏ (tránh trừ trùng).
-    setDraft(dropLegacyWhenSplit(prevScore.details)); setDirty(true); setMsg(`Đã chép số liệu từ ${prevWeek.label}. Nhớ kiểm tra rồi Lưu & nộp.`);
+    const doCopy = () => {
+      const prevScore = state.scores.find(s => s.weekId === prevWeek.id && s.classId === classId);
+      if (!prevScore) { setMsg(`Lớp này chưa có phiếu ở ${prevWeek.label}.`); return; }
+      setDraft(dropLegacyWhenSplit(prevScore.details)); setDirty(true); setMsg(`Đã chép số liệu từ ${prevWeek.label}. Nhớ kiểm tra rồi Lưu & nộp.`);
+    };
+    if (dirty) {
+      askConfirm({
+        title: 'Chép đè bản nháp đang sửa?',
+        body: `Phiếu đang sửa chưa lưu sẽ bị thay bằng số liệu ${prevWeek.label}.`,
+        confirmLabel: 'Chép đè',
+        danger: true,
+        onConfirm: doCopy,
+      });
+      return;
+    }
+    doCopy();
   }
   async function doExportDocxWeek() {
     if (!week) return;
@@ -800,20 +1066,28 @@ export default function App() {
   // kiểm tra toàn bộ file rồi mới nhập; file lỗi thì từ chối toàn bộ,
   // dữ liệu hiện tại giữ nguyên.
   function importJson(file: File) {
-    if (!window.confirm('Nhập file sao lưu sẽ THAY TOÀN BỘ dữ liệu hiện tại (tuần, lớp, phiếu, phân công, nhật ký). Trước khi nhập, hệ thống sẽ tải về một bản sao lưu JSON của dữ liệu hiện tại. Tiếp tục?')) return;
-    exportJson();
-    const reader = new FileReader();
-    reader.onload = () => {
-      let parsed: unknown;
-      try { parsed = JSON.parse(String(reader.result)); }
-      catch { setErrs(['File sao lưu không đúng định dạng JSON.']); return; }
-      const res = validateImportedState(parsed);
-      if (!res.ok) { setErrs([`Không nhập được file sao lưu: ${res.error} Dữ liệu hiện tại vẫn giữ nguyên.`]); return; }
-      setState(res.state);
-      update(s => s, 'Nhập JSON sao lưu', file.name);
-      setMsg('Đã nhập dữ liệu sao lưu thành công.');
-    };
-    reader.readAsText(file);
+    askConfirm({
+      title: 'Nhập file sao lưu?',
+      body: 'Nhập file sao lưu sẽ THAY TOÀN BỘ dữ liệu hiện tại (tuần, lớp, phiếu, phân công, nhật ký).',
+      consequences: ['Trước khi nhập, hệ thống sẽ tải về một bản sao lưu JSON của dữ liệu hiện tại.'],
+      confirmLabel: 'Nhập file',
+      danger: true,
+      onConfirm: () => {
+        exportJson();
+        const reader = new FileReader();
+        reader.onload = () => {
+          let parsed: unknown;
+          try { parsed = JSON.parse(String(reader.result)); }
+          catch { setErrs(['File sao lưu không đúng định dạng JSON.']); return; }
+          const res = validateImportedState(parsed);
+          if (!res.ok) { setErrs([`Không nhập được file sao lưu: ${res.error} Dữ liệu hiện tại vẫn giữ nguyên.`]); return; }
+          setState(res.state);
+          update(s => s, 'Nhập JSON sao lưu', file.name);
+          setMsg('Đã nhập dữ liệu sao lưu thành công.');
+        };
+        reader.readAsText(file);
+      },
+    });
   }
   function copyZalo() {
     if (!week) return;
@@ -833,6 +1107,23 @@ export default function App() {
   const approvedScores = useMemo(() => week ? state.scores.filter(s => s.weekId === week.id && s.status === 'approved').sort((a, b) => calcScore(b.details).final - calcScore(a.details).final) : [], [state.scores, week]);
   const rankedScores = useMemo(() => rankGroup === 'all' ? approvedScores : approvedScores.filter(s => classGroup(state.classes.find(c => c.id === s.classId)?.name ?? '') === rankGroup), [approvedScores, rankGroup, state.classes]);
   const pendingScores = useMemo(() => week ? state.scores.filter(s => s.weekId === week.id && s.status === 'submitted') : [], [state.scores, week]);
+  // Các tháng có tuần (khối 4 tuần, như tab Tổng hợp) + xếp hạng tháng theo
+  // điểm trung bình các phiếu đã duyệt — chỉ tính phiếu đã duyệt.
+  const rankMonths = useMemo(() => {
+    const map = new Map<number, Week[]>();
+    state.weeks.forEach((w, i) => { const b = monthBlockOf(w, i + 1); const arr = map.get(b) ?? []; arr.push(w); map.set(b, arr); });
+    return [...map.entries()].sort((a, b) => a[0] - b[0]);
+  }, [state.weeks]);
+  const selRankMonth = rankMonthSel === '' ? (rankMonths.length ? rankMonths[rankMonths.length - 1][0] : 0) : rankMonthSel;
+  const rankMonthWeeks = rankMonths.find(([m]) => m === selRankMonth)?.[1] ?? [];
+  const monthRanked = useMemo(() => {
+    let r = 0;
+    return [...state.classes]
+      .map(c => ({ c, a: classAvg(state, c.id, rankMonthWeeks.map(w => w.id)), cov: classCoverage(state, c.id, rankMonthWeeks.map(w => w.id)) }))
+      .sort((x, y) => compareAvg(x.a, y.a))
+      .filter(x => rankGroup === 'all' || classGroup(x.c.name) === rankGroup)
+      .map(x => ({ ...x, rank: x.a === null ? null : ++r }));
+  }, [state.classes, rankMonthWeeks, rankGroup]);
   // Cờ đỏ chỉ xem được hoạt động của chính mình trong nhật ký.
   const myLogs = useMemo(() => [...state.logs].reverse().filter(l => l.actor === session?.name), [state.logs, session?.name]);
   const filteredClasses = state.classes.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
@@ -842,14 +1133,14 @@ export default function App() {
     // --- Chế độ Supabase: đăng nhập bằng email + mật khẩu ---
     if (isSupabaseConfigured) {
       if (!authReady) {
-        return (<div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header><main className="wrap"><div className="card"><p>Đang kiểm tra phiên đăng nhập…</p>{authErr && <><div className="err">{authErr}</div><div className="row"><button className="btn" type="button" onClick={() => { setAuthErr(''); setAuthRetry(r => r + 1); }}>Thử lại</button></div></>}</div></main></div>);
+        return (<div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header><main className="wrap"><div className="card"><p>Đang kiểm tra phiên đăng nhập…</p>{authErr && <><div className="err">{authErr}</div><div className="row"><button className="btn" type="button" onClick={() => { setAuthErr(''); setAuthRetry(r => r + 1); }}>Thử lại</button></div></>}</div></main><AppFooter /></div>);
       }
       if (authUser && profile && profile.status === 'rejected') {
         return (
           <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header>
           <main className="wrap"><div className="card"><h2>Tài khoản của bạn đã bị từ chối</h2>
           <p>Xin chào <b>{profile.full_name}</b> ({profile.email}). Ban thi đua đã từ chối tài khoản này{profile.reject_reason ? ` — lý do: ${profile.reject_reason}` : ''}. Bạn liên hệ Ban thi đua để biết thêm nhé.</p>
-          <div className="row"><button className="btn grey" type="button" onClick={handleSignOut}>Đăng xuất</button></div></div></main></div>
+          <div className="row"><button className="btn grey" type="button" onClick={handleSignOut}>Đăng xuất</button></div></div></main><AppFooter /></div>
         );
       }
       if (authUser && profile && (profile.status === 'pending' || profile.status === 'disabled')) {
@@ -878,15 +1169,15 @@ export default function App() {
             {pendingErr && <div className="err">{pendingErr}</div>}
             </div>
           )}
-          </main></div>
+          </main><AppFooter /></div>
         );
       }
       if (authUser && !profile) {
-        return (<div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header><main className="wrap"><div className="card"><p>Đang tải hồ sơ tài khoản…</p>{profileErr && <><div className="err">{profileErr}</div><div className="row"><button className="btn" type="button" onClick={() => { setProfileErr(''); setProfileRetry(r => r + 1); }}>Thử lại</button></div></>}<div className="row"><button className="btn grey" type="button" onClick={handleSignOut}>Đăng xuất</button></div></div></main></div>);
+        return (<div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header><main className="wrap"><div className="card"><p>Đang tải hồ sơ tài khoản…</p>{profileErr && <><div className="err">{profileErr}</div><div className="row"><button className="btn" type="button" onClick={() => { setProfileErr(''); setProfileRetry(r => r + 1); }}>Thử lại</button></div></>}<div className="row"><button className="btn grey" type="button" onClick={handleSignOut}>Đăng xuất</button></div></div></main><AppFooter /></div>);
       }
       return (
         <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header>
-        <main className="wrap"><AuthScreen initialMode={recoveryMode ? 'reset' : undefined} onRecoveryDone={() => setRecoveryMode(false)} />{profileErr && <div className="err">{profileErr}</div>}{authErr && <div className="err">{authErr}</div>}{msg && <div className="ok">{msg}</div>}</main></div>
+        <main className="wrap"><AuthScreen initialMode={recoveryMode ? 'reset' : undefined} onRecoveryDone={() => setRecoveryMode(false)} />{profileErr && <div className="err">{profileErr}</div>}{authErr && <div className="err">{authErr}</div>}{msg && <div className="ok">{msg}</div>}</main><AppFooter /></div>
       );
     }
     // --- Chế độ cũ (chưa cấu hình Supabase): chọn vai trò, dữ liệu trên máy này ---
@@ -895,10 +1186,15 @@ export default function App() {
       <main className="wrap"><div className="card"><h2>Chọn vai trò để vào hệ thống</h2><p>Ban thi đua quản lý toàn bộ. Cờ đỏ chỉ nhập lớp được phân công. Chỉ xem không được nhập hay sửa.</p>
       <p><b>CHƯA CẤU HÌNH SUPABASE — dữ liệu chỉ lưu trên máy này, không đồng bộ.</b> Dữ liệu và vai trò chỉ lưu trên trình duyệt này; muốn đăng nhập dùng chung cho mọi máy, cấu hình Supabase theo hướng dẫn trong README.</p>
       <div className="rolecard">
-        <button type="button" onClick={() => { if (!window.confirm('Chế độ trên máy này chưa cấu hình Supabase. Vai trò Ban thi đua tự chọn chỉ dùng để thử trên máy này, không đồng bộ với ai. Bạn có chắc muốn vào với vai trò Ban thi đua?')) return; setSession({ role: 'admin', name: state.settings.signer }); }}><b>Ban thi đua</b><br />{state.settings.signer} — toàn quyền: tạo tuần/lớp, phân công cờ đỏ, duyệt, chốt tuần, xuất file.</button>
+        <button type="button" onClick={() => askConfirm({
+          title: 'Vào với vai trò Ban thi đua?',
+          body: 'Chế độ trên máy này chưa cấu hình Supabase. Vai trò Ban thi đua tự chọn chỉ dùng để thử trên máy này, không đồng bộ với ai.',
+          confirmLabel: 'Vào với vai trò Ban thi đua',
+          onConfirm: () => setSession({ role: 'admin', name: state.settings.signer }),
+        })}><b>Ban thi đua</b><br />{state.settings.signer} — toàn quyền: tạo tuần/lớp, phân công cờ đỏ, duyệt, chốt tuần, xuất file.</button>
         <button type="button" onClick={() => { const names = state.roster.filter(r => r.active).map(r => r.name); if (!names.length) { setMsg('Chưa có cờ đỏ nào được phân công. Nhờ Ban thi đua thêm ở tab Quản lý.'); return; } const n = window.prompt('Nhập đúng tên cờ đỏ của bạn:\n' + names.join(', ')); if (n && names.includes(n.trim())) setSession({ role: 'codo', name: n.trim() }); else if (n) setMsg('Tên này không có trong danh sách phân công.'); }}><b>Cờ đỏ trực</b><br />Chọn đúng tên được phân công, hệ thống tự mở lớp của bạn để nhập trực tiếp.</button>
         <button type="button" onClick={() => setSession({ role: 'viewer', name: 'Khách xem' })}><b>Chỉ xem (GVCN / BGH)</b><br />Chỉ xem xếp hạng, phiếu và tổng hợp, không nhập, không sửa.</button>
-      </div>{msg && <div className="warn">{msg}</div>}</div></main></div>
+      </div>{msg && <div className="warn">{msg}</div>}</div></main><AppFooter />{confirmDlg && <ConfirmDialog dlg={confirmDlg} onClose={closeConfirm} />}</div>
     );
   }
 
@@ -907,19 +1203,11 @@ export default function App() {
   if (recoveryMode && isSupabaseConfigured) {
     return (
       <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header>
-      <main className="wrap"><AuthScreen initialMode="reset" onRecoveryDone={() => setRecoveryMode(false)} /></main></div>
+      <main className="wrap"><AuthScreen initialMode="reset" onRecoveryDone={() => setRecoveryMode(false)} /></main><AppFooter /></div>
     );
   }
 
-  // Thanh tab theo vai trò: Cờ đỏ không thấy tab Quản lý (chỉ Ban thi đua
-  // mới quản lý được); Chỉ xem không thấy Quản lý lẫn Lịch sử (không có
-  // nội dung gì cho vai trò này ở 2 tab đó).
-  const allTabs: [string, string][] = [['tong-quan', 'Tổng quan'], ['nhap-diem', 'Nhập điểm'], ['xep-hang', 'Xếp hạng'], ['tong-hop', 'Tổng hợp'], ['quan-ly', 'Quản lý'], ['lich-su', 'Lịch sử']];
-  const tabs: [string, string][] = allTabs.filter(([k]) => {
-    if (k === 'quan-ly') return session.role === 'admin';
-    if (k === 'lich-su') return session.role !== 'viewer';
-    return true;
-  });
+  // Thanh tab theo vai trò (định nghĩa + guard ở trên, trước mọi return sớm).
   return (
     <div>
       <div className="top-sticky">
@@ -927,14 +1215,26 @@ export default function App() {
       {updateAvailable && !updateDismissed && (
         <div className="update-banner">
           <span>Đã có bản cập nhật mới của app.</span>
-          <button type="button" onClick={() => { if (dirty && !window.confirm('Phiếu đang nhập dở chưa lưu — cập nhật ngay sẽ mất phần chưa lưu. Cập nhật luôn?')) return; window.location.reload(); }}>Cập nhật ngay</button>
+          <button type="button" onClick={() => {
+            if (dirty) {
+              askConfirm({
+                title: 'Cập nhật ngay?',
+                body: 'Phiếu đang nhập dở chưa lưu — cập nhật ngay sẽ mất phần chưa lưu.',
+                confirmLabel: 'Cập nhật luôn',
+                danger: true,
+                onConfirm: () => window.location.reload(),
+              });
+              return;
+            }
+            window.location.reload();
+          }}>Cập nhật ngay</button>
           <button type="button" className="ghost" onClick={() => setUpdateDismissed(true)}>Để sau</button>
         </div>
       )}
       <header className="top"><div className="top-inner">
         <div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div>
         <div className="userbox">
-          <span className="chip">{week ? week.label : 'Chưa có tuần'}</span>
+          <span className="chip hide-m">{week ? week.label : 'Chưa có tuần'}</span>
           {isSupabaseConfigured ? (
             conflict ? <span className="chip sync-err">Có bản mới hơn — xem banner bên dưới</span>
             : syncStatus === 'error' ? <button type="button" className="chip sync-err" title={syncErr} onClick={() => { setSyncErr(''); setSyncStatus('saving'); setSyncRetry(r => r + 1); }}>Lỗi đồng bộ — Thử lại</button>
@@ -944,12 +1244,21 @@ export default function App() {
           ) : (
             syncStatus === 'error' ? <span className="chip sync-err" title={syncErr}>Lỗi lưu trên máy này</span> : <span className="chip">Chỉ lưu trên máy này</span>
           )}
-          {session.role === 'codo' && assignment?.classId && <span className="chip">{assignment.source === 'roster' ? 'Trực lớp' : 'Lớp'} {state.classes.find(c => c.id === assignment.classId)?.name}</span>}
-          <span className="chip rolebadge">{roleLabel}</span>
-          <span className="chip"><span className="who">{session.name}</span></span>
-          {showInstall && <button type="button" className="btn logout" onClick={installApp}>Cài app</button>}
-          <button type="button" className="btn logout" onClick={handleSignOut}>{isSupabaseConfigured ? 'Đăng xuất' : 'Đổi vai trò'}</button>
+          {session.role === 'codo' && assignment?.classId && <span className="chip hide-m">{assignment.source === 'roster' ? 'Trực lớp' : 'Lớp'} {state.classes.find(c => c.id === assignment.classId)?.name}</span>}
+          <span className="chip rolebadge hide-m">{roleLabel}</span>
+          <span className="chip hide-m"><span className="who">{session.name}</span></span>
+          {showInstall && <button type="button" className="btn logout hide-m" onClick={installApp}>Cài app</button>}
+          <button type="button" className="btn logout hide-m" onClick={handleSignOut}>{isSupabaseConfigured ? 'Đăng xuất' : 'Đổi vai trò'}</button>
+          <span className="chip header-summary">{week ? week.label : 'Chưa có tuần'}{session.role === 'codo' && assignment?.classId ? ` • ${assignment.source === 'roster' ? 'Trực lớp' : 'Lớp'} ${state.classes.find(c => c.id === assignment.classId)?.name}` : ''} • {roleLabel} • {session.name}</span>
+          <button type="button" className="btn logout menu-btn" aria-label="Mở menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(o => !o)}>⋮</button>
         </div>
+        {menuOpen && (<>
+          <div className="menu-backdrop" onClick={() => setMenuOpen(false)} />
+          <div className="header-menu" role="menu">
+            {showInstall && <button type="button" onClick={() => { setMenuOpen(false); installApp(); }}>Cài app</button>}
+            <button type="button" onClick={() => { setMenuOpen(false); handleSignOut(); }}>{isSupabaseConfigured ? 'Đăng xuất' : 'Đổi vai trò'}</button>
+          </div>
+        </>)}
       </div></header>
       </div>
       <main className="wrap">
@@ -980,11 +1289,11 @@ export default function App() {
           </div>
         ) : (<>
 
-        {tab === 'tong-quan' && <Overview state={state} week={week} role={session.role} assignment={assignment?.classId && assignment?.weekId ? { classId: assignment.classId, weekId: assignment.weekId, homeClassId: assignment.homeClassId ?? undefined, source: assignment.source } : undefined} homeClassId={profile?.assigned_class_id ?? undefined} onEnterScores={() => { if (assignment) { if (!confirmDirty()) return; setWeekId(assignment.weekId); setClassId(assignment.classId); setTab('nhap-diem'); setDirty(false); } }} onGoTab={switchTab} onCopyReminder={copyReminder} onOpenClass={(cid: string) => { if (confirmDirty()) { setWeekId(effectiveWeekId); setClassId(cid); setTab('nhap-diem'); setDirty(false); } }} />}
+        {tab === 'tong-quan' && <Overview state={state} week={week} role={session.role} assignment={assignment?.classId && assignment?.weekId ? { classId: assignment.classId, weekId: assignment.weekId, homeClassId: assignment.homeClassId ?? undefined, source: assignment.source } : undefined} homeClassId={profile?.assigned_class_id ?? undefined} onEnterScores={() => { if (assignment) { confirmDirtyAsync(() => { setWeekId(assignment.weekId); setClassId(assignment.classId); setTab('nhap-diem'); setDirty(false); }); } }} onGoTab={switchTab} onCopyReminder={copyReminder} onOpenClass={(cid: string) => { confirmDirtyAsync(() => { setWeekId(effectiveWeekId); setClassId(cid); setTab('nhap-diem'); setDirty(false); }); }} />}
         {tab === 'nhap-diem' && (!week ? (
           <div className="card"><h2>Nhập điểm</h2><p>Chưa có tuần nào nên chưa nhập điểm được.</p>{session.role === 'admin' ? <><p>Tạo tuần đầu tiên để bắt đầu chấm thi đua nhé.</p><div className="row"><button className="btn" type="button" onClick={() => setTab('quan-ly')}>Sang tab Quản lý tạo tuần</button></div></> : <p>Nhờ Ban thi đua tạo tuần nhé.</p>}</div>
         ) : session.role === 'codo' && (!assignment || showDutyPicker) ? (
-          <DutyPicker state={state} week={week} homeName={profile?.assigned_class_id ? state.classes.find(c => c.id === profile.assigned_class_id)?.name : undefined} myName={session.name} initialClassId={assignment?.classId} onConfirm={confirmDutyPick} onCancel={assignment ? () => setShowDutyPicker(false) : undefined} />
+          <DutyPicker state={state} week={week} homeName={profile?.assigned_class_id ? state.classes.find(c => c.id === profile.assigned_class_id)?.name : undefined} myName={session.name} initialClassId={assignment?.classId} profiles={profiles} onConfirm={confirmDutyPick} onCancel={assignment ? () => setShowDutyPicker(false) : undefined} />
         ) : draft && (
           <>
             {session.role === 'codo' && assignment && (
@@ -993,13 +1302,22 @@ export default function App() {
             {session.role === 'admin' && pendingScores.length > 0 && (
               <div className="row" style={{ marginBottom: 10 }}><button className="btn green" type="button" onClick={approveAllScores}>Duyệt tất cả {pendingScores.length} phiếu đã nộp</button><span>Còn {pendingScores.length} phiếu chờ duyệt trong {week.label}.</span></div>
             )}
-            <ScoreForm state={state} week={week} draft={draft} calc={calc} canEdit={canEdit} classId={classId} setClassId={switchClass} weekId={effectiveWeekId} setWeekId={(id: string) => { if (confirmDirty()) setWeekId(id); }} search={search} setSearch={setSearch} classes={visibleClasses} currentScore={currentScore} setD={setD} dirty={dirty} onSaveDraft={() => saveScore('draft')} onSubmit={() => saveScore('submitted')} onApprove={approveScore} onReturn={returnScore} returnReason={returnReason} setReturnReason={setReturnReason} onReopen={reopenScore} onCopyPrev={copyPrevWeek} onShowPhieu={() => setShowPhieu(true)} showPhieu={showPhieu} onExportClass={doExportDocxClass} sessionRole={session.role} />
+            <ScoreForm state={state} week={week} draft={draft} calc={calc} canEdit={canEdit} lockHolder={dutyHolder?.name ?? null} classId={classId} setClassId={switchClass} weekId={effectiveWeekId} setWeekId={(id: string) => confirmDirtyAsync(() => setWeekId(id))} search={search} setSearch={setSearch} classes={visibleClasses} currentScore={currentScore} setD={setD} dirty={dirty} onSaveDraft={() => saveScore('draft')} onSubmit={() => saveScore('submitted')} onApprove={approveScore} onReturn={returnScore} returnReason={returnReason} setReturnReason={setReturnReason} onReopen={reopenScore} onCopyPrev={copyPrevWeek} onShowPhieu={() => setShowPhieu(true)} showPhieu={showPhieu} onExportClass={doExportDocxClass} sessionRole={session.role} />
           </>
         ))}
         {tab === 'xep-hang' && (week ? (
           <div className="card"><h2>Xếp hạng — {week.label} {week.submittedAt ? <span className="badge approved">Đã nộp {week.submittedAt}</span> : <span className="badge draft">Chưa chốt tuần</span>}</h2>
-            <p>Chỉ phiếu <b>đã duyệt</b> mới vào xếp hạng chính thức. Còn {pendingScores.length} phiếu chờ duyệt, {state.classes.length - approvedScores.length} lớp chưa có phiếu duyệt.</p>
+            {rankMode === 'week' ? (
+              <p>Chỉ phiếu <b>đã duyệt</b> mới vào xếp hạng chính thức. Còn {pendingScores.length} phiếu chờ duyệt, {state.classes.length - approvedScores.length} lớp chưa có phiếu duyệt.</p>
+            ) : (
+              <p>Điểm trung bình tháng của các phiếu <b>đã duyệt</b>. Cứ 4 tuần là 1 tháng (tuần 1–4 là Tháng 9, tuần 5–8 là Tháng 10…).</p>
+            )}
+            <div className="tabs">
+              <button type="button" className={rankMode === 'week' ? 'on' : ''} onClick={() => setRankMode('week')}>Theo tuần</button>
+              <button type="button" className={rankMode === 'month' ? 'on' : ''} onClick={() => setRankMode('month')}>Theo tháng</button>
+            </div>
             <div className="row"><span><b>Khối:</b></span>{(['all', 'tu-nhien', 'xa-hoi'] as const).map(g => <button key={g} type="button" className={rankGroup === g ? 'seg on' : 'seg'} onClick={() => setRankGroup(g)}>{g === 'all' ? 'Tất cả' : groupLabel(g)}</button>)}</div>
+            {rankMode === 'week' ? (<>
             <ol className="ranklist">
               {rankedScores.map((s, i) => { const c = calcScore(s.details); const clsName = state.classes.find(x => x.id === s.classId)?.name ?? s.classId; return (
                 <li key={s.id} className={i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : ''}>
@@ -1012,17 +1330,32 @@ export default function App() {
             <h3>Xuất file</h3>
             <div className="exportgrid"><button className="btn ghost" type="button" onClick={doExportDocxWeek}>Xuất Word (.docx)</button><button className="btn ghost" type="button" onClick={doExportDocxWeekNoRank}>Xuất .docx (không xếp hạng)</button><button className="btn ghost" type="button" onClick={exportCsv}>Tải CSV</button><button className="btn ghost" type="button" onClick={copyZalo}>Chép gửi Zalo</button></div>
             {session.role === 'admin' && <div className="divider">{week.submittedAt ? <button className="btn grey" type="button" onClick={reopenWeek}>Mở lại tuần</button> : <button className="btn green" type="button" onClick={closeWeek}>Nộp &amp; chốt tuần này</button>}</div>}
+            </>) : (<>
+            <div className="row" style={{ marginTop: 8 }}><label style={{ margin: 0 }}>Tháng</label><select value={selRankMonth} onChange={e => setRankMonthSel(Number(e.target.value))} style={{ maxWidth: 200 }}>{rankMonths.map(([m]) => <option key={m} value={m}>{monthLabel(m)}</option>)}</select><span>{rankMonthWeeks.map(w => w.label).join(', ')}</span></div>
+            <ol className="ranklist">
+              {monthRanked.map(({ c, a, cov: cv, rank }) => (
+                <li key={c.id} className={rank === 1 ? 'top1' : rank === 2 ? 'top2' : rank === 3 ? 'top3' : ''}>
+                  <span className="rank">{rank ?? '—'}</span>
+                  <span className="rclass"><b>{c.name}</b><small>nộp {cv.approved}/{cv.total} tuần</small></span>
+                  <span className="rscore"><b>{a === null ? '—' : `${a.toFixed(1)}đ`}</b>{a !== null && <span className={`badge ${clsOf(a)}`}>{clsOf(a)}</span>}</span>
+                </li>))}
+              {monthRanked.length === 0 && <li>Chưa có lớp nào trong khối này.</li>}
+            </ol>
+            </>)}
           </div>
         ) : (
           <div className="card"><h2>Xếp hạng</h2><p>Chưa có tuần nào nên chưa có bảng xếp hạng.</p>{session.role === 'admin' ? <><p>Tạo tuần đầu tiên để bắt đầu chấm thi đua nhé.</p><div className="row"><button className="btn" type="button" onClick={() => setTab('quan-ly')}>Sang tab Quản lý tạo tuần</button></div></> : <p>Nhờ Ban thi đua tạo tuần nhé.</p>}</div>
         ))}
         {tab === 'tong-hop' && <SummaryTab state={state} onExportMonth={doExportDocxMonth} />}
-        {tab === 'quan-ly' && <ManageTab state={state} setState={setState} session={session} onLog={(a: string, d: string) => update(s => s, a, d)} onExportJson={exportJson} onImportJson={importJson} profiles={profiles} onProfilePatch={patchProfile} onProfileDelete={removeProfile} onRefreshProfiles={() => { if (isSupabaseConfigured) listProfiles().then(setProfiles).catch(() => undefined); }} />}
+        {tab === 'quan-ly' && <ManageTab state={state} setState={setState} session={session} onLog={(a: string, d: string) => update(s => s, a, d)} onExportJson={exportJson} onImportJson={importJson} profiles={profiles} onProfilePatch={patchProfile} onProfileDelete={removeProfile} onConfirm={askConfirm} onRefreshProfiles={() => { if (isSupabaseConfigured) listProfiles().then(setProfiles).catch(() => undefined); }} />}
         {tab === 'lich-su' && (
           <div className="card"><h2>Lịch sử hoạt động</h2>
           {session.role === 'admin' ? (state.logs.length === 0 ? <p>Chưa có hoạt động nào.</p> : <>
-            <div className="tablewrap log-table-wrap"><table className="log-table"><thead><tr><th>Thời gian</th><th>Người làm</th><th>Vai trò</th><th>Việc làm</th><th>Chi tiết</th></tr></thead><tbody>{[...state.logs].reverse().map(l => <tr key={l.id}><td>{l.time}</td><td>{l.actor}</td><td>{l.role}</td><td>{l.action}</td><td>{l.detail}</td></tr>)}</tbody></table></div>
-            <div className="log-list">{[...state.logs].reverse().map(l => <div key={l.id} className="log-item"><b>{l.action}</b>{l.detail ? ` — ${l.detail}` : ''}<div className="meta">{l.actor} • {l.role} • {l.time}</div></div>)}</div>
+            {isNarrow ? (
+              <div className="log-list">{[...state.logs].reverse().map(l => <div key={l.id} className="log-item"><b>{l.action}</b>{l.detail ? ` — ${l.detail}` : ''}<div className="meta">{l.actor} • {l.role} • {l.time}</div></div>)}</div>
+            ) : (
+              <div className="tablewrap log-table-wrap"><table className="log-table"><thead><tr><th>Thời gian</th><th>Người làm</th><th>Vai trò</th><th>Việc làm</th><th>Chi tiết</th></tr></thead><tbody>{[...state.logs].reverse().map(l => <tr key={l.id}><td>{l.time}</td><td>{l.actor}</td><td>{l.role}</td><td>{l.action}</td><td>{l.detail}</td></tr>)}</tbody></table></div>
+            )}
           </>) : session.role === 'codo' ? (
             myLogs.length === 0 ? <p>Bạn chưa có hoạt động nào được ghi lại.</p> : <div className="log-list always">{myLogs.map(l => <div key={l.id} className="log-item"><b>{l.action}</b>{l.detail ? ` — ${l.detail}` : ''}<div className="meta">{l.time}</div></div>)}</div>
           ) : <p>Vai trò Chỉ xem không xem được nhật ký chi tiết.</p>}
@@ -1030,6 +1363,8 @@ export default function App() {
         )}
         </>)}
       </main>
+      <AppFooter />
+      {confirmDlg && <ConfirmDialog dlg={confirmDlg} onClose={closeConfirm} />}
     </div>
   );
 }
@@ -1038,14 +1373,18 @@ export default function App() {
 // lịch trực từ lớp của chính cờ đỏ; chọn lớp khác vẫn được (vd trực thay).
 // Chặn nhập thay: lớp đã có cờ đỏ khác trực, hoặc phiếu đã nộp/duyệt thì
 // không chọn được nữa (phiếu đã duyệt là khóa hẳn, chỉ Ban thi đua mở lại).
-function DutyPicker({ state, week, homeName, myName, initialClassId, onConfirm, onCancel }: {
+function DutyPicker({ state, week, homeName, myName, initialClassId, profiles, onConfirm, onCancel }: {
   state: AppState; week: Week; homeName?: string; myName: string; initialClassId?: string;
+  profiles?: Profile[];
   onConfirm: (classId: string) => void; onCancel?: () => void;
 }) {
   const suggested = homeName ? dutyMonitored(homeName, weekNumberOf(week, state.weeks.indexOf(week) + 1)) : null;
   const [sel, setSel] = useState(initialClassId ?? state.classes.find(c => c.name === suggested)?.id ?? '');
   const existing = sel ? state.scores.find(s => s.weekId === week.id && s.classId === sel) : undefined;
   const otherDuty = sel ? state.roster.find(r => r.weekId === week.id && r.classId === sel && r.active && r.name !== myName) : undefined;
+  // P1-08: cờ đỏ khác giữ lớp này qua hồ sơ (không qua roster) cũng chặn.
+  const otherProfile = sel ? (profiles ?? []).find(p => p.role === 'codo' && p.status === 'active' && p.assigned_class_id === sel && p.assigned_week_id === week.id && p.full_name !== myName) : undefined;
+  const otherHolder = otherDuty ? otherDuty.name : otherProfile?.full_name;
   const locked = existing && (existing.status === 'submitted' || existing.status === 'approved');
   return (
     <div className="card"><h2>Chọn lớp trực — {week.label}</h2>
@@ -1056,11 +1395,11 @@ function DutyPicker({ state, week, homeName, myName, initialClassId, onConfirm, 
         <option value="">— Chọn lớp —</option>
         {state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
-      {otherDuty && <p>Lớp {state.classes.find(c => c.id === sel)?.name} đã có cờ đỏ {otherDuty.name} trực tuần này — bạn liên hệ Ban thi đua nếu trực thay nhé.</p>}
+      {otherHolder && <p>Lớp {state.classes.find(c => c.id === sel)?.name} đã có cờ đỏ {otherHolder} trực tuần này — bạn liên hệ Ban thi đua nếu trực thay nhé.</p>}
       {existing && locked && <p>Lớp {state.classes.find(c => c.id === sel)?.name} đã có phiếu {STATUS_LABEL[existing.status]} — phiếu đã khóa, không nhập lại được.</p>}
       {existing && !locked && <p>Lớp {state.classes.find(c => c.id === sel)?.name} đã có phiếu {STATUS_LABEL[existing.status]} — bấm vào để nhập tiếp.</p>}
       <div className="row" style={{ marginTop: 10 }}>
-        <button className="btn" type="button" disabled={!sel || !!otherDuty || !!locked} onClick={() => onConfirm(sel)}>Bắt đầu nhập điểm lớp này</button>
+        <button className="btn" type="button" disabled={!sel || !!otherHolder || !!locked} onClick={() => onConfirm(sel)}>Bắt đầu nhập điểm lớp này</button>
         {onCancel && <button className="btn grey" type="button" onClick={onCancel}>Hủy</button>}
       </div>
     </div>
@@ -1278,6 +1617,7 @@ function ScoreForm(props: {
   onSaveDraft: () => void; onSubmit: () => void; onApprove: () => void; onReturn: () => void;
   returnReason: string; setReturnReason: (s: string) => void; onReopen: () => void; onCopyPrev: () => void;
   onShowPhieu: () => void; showPhieu: boolean; onExportClass: () => void; sessionRole: Role;
+  lockHolder?: string | null;
 }) {
   const extraRow = (key: 'extraPlus' | 'extraMinus', i: number) => {
     const list = (props.draft[key] ?? []) as ExtraLine[];
@@ -1321,12 +1661,14 @@ function ScoreForm(props: {
           <div style={{ flex: 1, minWidth: 160 }}><label>Tuần</label><select value={props.weekId} onChange={e => props.setWeekId(e.target.value)}>{state.weeks.map(w => <option key={w.id} value={w.id}>{w.label} {w.dateRange}</option>)}</select></div>
           <div style={{ flex: 1, minWidth: 160 }}><label>Tìm lớp</label><input type="text" placeholder="Nhập tên lớp, vd 10B1" value={props.search} onChange={e => props.setSearch(e.target.value)} /></div>
         </div>
-        <div className="row" style={{ marginTop: 8 }}>{props.classes.map(c => <button key={c.id} type="button" className={props.classId === c.id ? 'btn' : 'btn ghost'} onClick={() => props.setClassId(c.id)}>{c.name}</button>)}</div>
+        <div className="class-select-wrap"><label>Lớp</label><select aria-label="Chọn lớp" value={props.classId} onChange={e => props.setClassId(e.target.value)}>{!props.classId && <option value="" disabled>Chọn lớp</option>}{props.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+        <div className="row class-btns" style={{ marginTop: 8 }}>{props.classes.map(c => <button key={c.id} type="button" className={props.classId === c.id ? 'btn' : 'btn ghost'} onClick={() => props.setClassId(c.id)}>{c.name}</button>)}</div>
         {props.classes.length === 0 && <p>Chưa có lớp nào. Ban thi đua thêm lớp ở tab Quản lý.</p>}
       </div>
       {week && props.classId && (
         <div className="card">
           <h2>Phiếu tổng kết — Lớp {state.classes.find(c => c.id === props.classId)?.name} — {week.label} {props.currentScore && <span className={`badge ${props.currentScore.status}`}>{STATUS_LABEL[props.currentScore.status]}</span>} {props.dirty && <span className="badge">Chưa lưu</span>}</h2>
+          {props.lockHolder && <div className="warn">Lớp này đang có cờ đỏ {props.lockHolder} trực {week.label} — phiếu đang do bạn ấy giữ, bạn không sửa được. Liên hệ Ban thi đua nếu trực thay nhé.</div>}
           {mixedLegacy.length > 0 && <div className="warn">Phiếu này có cả số liệu cũ (gộp) và mới (tách nhỏ) ở: {mixedLegacy.join('; ')} — đang tính cả hai, kiểm tra lại trước khi nộp nhé.</div>}
           <div className="row"><button className="btn ghost" type="button" disabled={!canEdit} onClick={props.onCopyPrev}>Chép số liệu tuần trước</button><button className="btn ghost" type="button" onClick={props.onShowPhieu}>Xem phiếu tổng kết</button>{props.currentScore && <button className="btn ghost" type="button" onClick={props.onExportClass}>Xuất .docx phiếu này</button>}</div>
           <div className="grid2">
@@ -1464,10 +1806,11 @@ function ScoreForm(props: {
   );
 }
 
-function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson, profiles, onProfilePatch, onProfileDelete, onRefreshProfiles }: {
+function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson, profiles, onProfilePatch, onProfileDelete, onRefreshProfiles, onConfirm }: {
   state: AppState; setState: (s: AppState) => void; session: { role: Role; name: string; id?: string; email?: string };
   onLog: (a: string, d: string) => void; onExportJson: () => void; onImportJson: (f: File) => void;
   profiles: Profile[]; onProfilePatch: (id: string, patch: Partial<Pick<Profile, 'role' | 'status' | 'reject_reason' | 'assigned_class_id' | 'assigned_week_id'>>) => void; onProfileDelete: (id: string) => void; onRefreshProfiles: () => void;
+  onConfirm: (opts: ConfirmOpts) => void;
 }) {
   const [weekLabel, setWeekLabel] = useState(''); const [weekRange, setWeekRange] = useState('');
   const [className, setClassName] = useState('');
@@ -1486,12 +1829,19 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
     else setHistoryNote('');
   }
   async function restoreVersion(id: string, at: string) {
-    if (!window.confirm(`Khôi phục dữ liệu về bản sao lưu lúc ${at}? Dữ liệu hiện tại sẽ bị thay thế (bản hiện tại vẫn còn trong lịch sử sao lưu nếu đã bật).`)) return;
-    const data = await fetchHistoryData(id);
-    if (!data) { setHistoryNote('Không đọc được bản sao lưu này. Thử bản khác nhé.'); return; }
-    setState(data);
-    onLog('Khôi phục dữ liệu', `về bản ${at}`);
-    setHistoryNote(`Đã khôi phục dữ liệu về bản ${at}.`);
+    onConfirm({
+      title: `Khôi phục dữ liệu về bản sao lưu lúc ${at}?`,
+      body: 'Dữ liệu hiện tại sẽ bị thay thế (bản hiện tại vẫn còn trong lịch sử sao lưu nếu đã bật).',
+      confirmLabel: 'Khôi phục',
+      danger: true,
+      onConfirm: () => { void (async () => {
+        const data = await fetchHistoryData(id);
+        if (!data) { setHistoryNote('Không đọc được bản sao lưu này. Thử bản khác nhé.'); return; }
+        setState(data);
+        onLog('Khôi phục dữ liệu', `về bản ${at}`);
+        setHistoryNote(`Đã khôi phục dữ liệu về bản ${at}.`);
+      })(); },
+    });
   }
   // Mời GVCN: chọn lớp rồi chép link mời (form đăng ký mở sẵn đúng lớp).
   const [inviteClass, setInviteClass] = useState(''); const [inviteNote, setInviteNote] = useState('');
@@ -1522,15 +1872,15 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
               <div key={p.id} className="card" style={{ marginTop: 10 }}>
                 <p><b>{p.full_name}</b>{clsName ? ` — Lớp ${clsName}` : p.role === 'codo' ? <span style={{ color: '#9ca3af' }}> — Chưa gán lớp</span> : ''} — {p.email} {session.id === p.id && <span className="badge">Tài khoản của bạn</span>}</p>
                 {dutyMon && dutyWk && <p>Theo lịch trực: {dutyWk.label}, cờ đỏ lớp {clsName} trực lớp <b>{dutyMon}</b>.</p>}
-                <div className="row">
-                  <div style={{ minWidth: 150 }}><label>Vai trò</label><select value={p.role} disabled={session.id === p.id} onChange={e => onProfilePatch(p.id, { role: e.target.value as Role })}><option value="admin">Ban thi đua</option><option value="codo">Cờ đỏ trực</option><option value="viewer">Chỉ xem</option></select></div>
-                  <div style={{ minWidth: 150 }}><label>Trạng thái</label><span className={`badge ${p.status === 'active' ? 'approved' : p.status === 'pending' ? 'submitted' : 'returned'}`}>{p.status === 'active' ? 'Đang dùng' : p.status === 'pending' ? 'Chờ duyệt' : p.status === 'rejected' ? 'Đã từ chối' : 'Đã khóa'}</span></div>
+                <div className="prof-grid">
+                  <div><label>Vai trò</label><select value={p.role} disabled={session.id === p.id} onChange={e => onProfilePatch(p.id, { role: e.target.value as Role })}><option value="admin">Ban thi đua</option><option value="codo">Cờ đỏ trực</option><option value="viewer">Chỉ xem</option></select></div>
+                  <div><label>Trạng thái</label><span className={`badge ${p.status === 'active' ? 'approved' : p.status === 'pending' ? 'submitted' : 'returned'}`}>{p.status === 'active' ? 'Đang dùng' : p.status === 'pending' ? 'Chờ duyệt' : p.status === 'rejected' ? 'Đã từ chối' : 'Đã khóa'}</span></div>
                 </div>
                 {p.status === 'rejected' && p.reject_reason && <p>Lý do từ chối: {p.reject_reason}</p>}
                 {(p.role === 'codo' || p.role === 'viewer') && (
-                  <div className="row">
-                    <div style={{ minWidth: 150 }}><label>{p.role === 'viewer' ? 'Lớp chủ nhiệm' : 'Gán lớp'}</label><select value={p.assigned_class_id ?? ''} onChange={e => onProfilePatch(p.id, { assigned_class_id: e.target.value || null })}><option value="">Chưa gán</option>{state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-                    {p.role === 'codo' && <div style={{ minWidth: 150 }}><label>Gán tuần</label><select value={p.assigned_week_id ?? ''} onChange={e => onProfilePatch(p.id, { assigned_week_id: e.target.value || null })}><option value="">Chưa gán</option>{state.weeks.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}</select></div>}
+                  <div className="prof-grid">
+                    <div><label>{p.role === 'viewer' ? 'Lớp chủ nhiệm' : 'Gán lớp'}</label><select value={p.assigned_class_id ?? ''} onChange={e => onProfilePatch(p.id, { assigned_class_id: e.target.value || null })}><option value="">Chưa gán</option>{state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                    {p.role === 'codo' && <div><label>Gán tuần</label><select value={p.assigned_week_id ?? ''} onChange={e => onProfilePatch(p.id, { assigned_week_id: e.target.value || null })}><option value="">Chưa gán</option>{state.weeks.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}</select></div>}
                   </div>
                 )}
                 <div className="row" style={{ marginTop: 8 }}>
@@ -1558,7 +1908,21 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
       </div>
       <div className="card"><h2>Tuần</h2>
         <div className="row"><input type="text" placeholder="Vd: Tuần 4" value={weekLabel} onChange={e => setWeekLabel(e.target.value)} style={{ maxWidth: 200 }} /><input type="text" placeholder="Vd: 17/11 – 22/11" value={weekRange} onChange={e => setWeekRange(e.target.value)} style={{ maxWidth: 220 }} /><button className="btn" type="button" onClick={() => { if (!weekLabel.trim()) return; const w: Week = { id: uid(), label: weekLabel.trim(), dateRange: weekRange.trim() }; setState({ ...state, weeks: [...state.weeks, w] }); onLog('Tạo tuần', `${w.label} — ${monthLabel(monthBlockOf(w, state.weeks.length + 1))}`); setWeekLabel(''); setWeekRange(''); }}>Thêm tuần</button></div>
-        {state.weeks.map((w, i) => <p key={w.id}>{w.label} {w.dateRange} — {monthLabel(monthBlockOf(w, i + 1))} {w.submittedAt ? `— Đã nộp ${w.submittedAt}` : '— Chưa chốt'} <button className="btn grey" type="button" onClick={() => { if (!window.confirm(`Xóa ${w.label} và toàn bộ phiếu của tuần này? Phân công trực của tuần này cũng bị xóa, tài khoản đang gán tuần này sẽ bị gỡ gán.`)) return; profiles.filter(p => p.assigned_week_id === w.id).forEach(p => onProfilePatch(p.id, { assigned_week_id: null })); setState({ ...state, weeks: state.weeks.filter(x => x.id !== w.id), scores: state.scores.filter(x => x.weekId !== w.id), roster: state.roster.filter(r => r.weekId !== w.id) }); onLog('Xóa tuần', w.label); }}>Xóa</button></p>)}
+        {state.weeks.map((w, i) => <p key={w.id}>{w.label} {w.dateRange} — {monthLabel(monthBlockOf(w, i + 1))} {w.submittedAt ? `— Đã nộp ${w.submittedAt}` : '— Chưa chốt'} <button className="btn grey" type="button" onClick={() => {
+          const n = state.scores.filter(s => s.weekId === w.id).length;
+          onConfirm({
+            title: `Xóa ${w.label}?`,
+            body: 'Toàn bộ phiếu của tuần này sẽ bị xóa và không khôi phục được.',
+            consequences: [`${n} phiếu sẽ bị xóa.`, 'Phân công trực của tuần này cũng bị xóa.', 'Tài khoản đang gán tuần này sẽ bị gỡ gán.'],
+            confirmLabel: 'Xóa tuần',
+            danger: true,
+            onConfirm: () => {
+              profiles.filter(p => p.assigned_week_id === w.id).forEach(p => onProfilePatch(p.id, { assigned_week_id: null }));
+              setState({ ...state, weeks: state.weeks.filter(x => x.id !== w.id), scores: state.scores.filter(x => x.weekId !== w.id), roster: state.roster.filter(r => r.weekId !== w.id) });
+              onLog('Xóa tuần', w.label);
+            },
+          });
+        }}>Xóa</button></p>)}
       </div>
       <div className="card"><h2>Lớp</h2>
         <div className="row"><input type="text" placeholder="Vd: 10B1" value={className} onChange={e => setClassName(e.target.value)} style={{ maxWidth: 200 }} /><button className="btn" type="button" onClick={() => { if (!className.trim()) return; const nm = className.trim().toUpperCase(); if (state.classes.some(c => c.name.toUpperCase() === nm)) { setClassNote(`Đã có lớp ${nm} rồi.`); return; } const c: ClassItem = { id: uid(), name: nm }; setState({ ...state, classes: [...state.classes, c] }); onLog('Thêm lớp', c.name); setClassName(''); setClassNote(`Đã thêm lớp ${nm}.`); }}>Thêm lớp</button></div>
@@ -1575,8 +1939,15 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
                   const nm = editingClassName.trim().toUpperCase();
                   if (!nm) { setClassNote('Tên lớp không được để trống.'); return; }
                   if (state.classes.some(x => x.id !== c.id && x.name.toUpperCase() === nm)) { setClassNote(`Đã có lớp ${nm} rồi.`); return; }
-                  setState({ ...state, classes: state.classes.map(x => x.id === c.id ? { ...x, name: nm } : x) });
-                  onLog('Sửa tên lớp', `${c.name} → ${nm}`); setClassNote(`Đã đổi tên lớp ${c.name} thành ${nm}.`); setEditingClassId(''); setEditingClassName('');
+                  onConfirm({
+                    title: `Đổi tên lớp ${c.name} thành ${nm}?`,
+                    body: 'Tên lớp đổi ở mọi nơi (phiếu, xếp hạng, lịch trực). Số liệu các phiếu không đổi vì phiếu gắn theo mã lớp.',
+                    confirmLabel: 'Đổi tên lớp',
+                    onConfirm: () => {
+                      setState({ ...state, classes: state.classes.map(x => x.id === c.id ? { ...x, name: nm } : x) });
+                      onLog('Sửa tên lớp', `${c.name} → ${nm}`); setClassNote(`Đã đổi tên lớp ${c.name} thành ${nm}.`); setEditingClassId(''); setEditingClassName('');
+                    },
+                  });
                 }}>Lưu</button>
                 <button className="btn grey" type="button" onClick={() => { setEditingClassId(''); setEditingClassName(''); }}>Hủy</button>
               </>) : (<>
@@ -1584,10 +1955,18 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
                 <button className="btn ghost" type="button" onClick={() => { setEditingClassId(c.id); setEditingClassName(c.name); setClassNote(''); }}>Sửa tên</button>
                 {hasScores ? <span style={{ color: '#9ca3af' }}>đã có phiếu</span> : (
                   <button className="btn grey" type="button" onClick={() => {
-                    if (!window.confirm(`Xóa lớp ${c.name}? Lớp chưa có phiếu nào nên xóa được. Tài khoản đang gán lớp này sẽ bị gỡ gán.`)) return;
-                    profiles.filter(p => p.assigned_class_id === c.id).forEach(p => onProfilePatch(p.id, { assigned_class_id: null }));
-                    setState({ ...state, classes: state.classes.filter(x => x.id !== c.id), roster: state.roster.filter(r => r.classId !== c.id) });
-                    onLog('Xóa lớp', c.name); setClassNote(`Đã xóa lớp ${c.name}.`);
+                    onConfirm({
+                      title: `Xóa lớp ${c.name}?`,
+                      body: 'Lớp chưa có phiếu nào nên xóa được.',
+                      consequences: ['Tài khoản đang gán lớp này sẽ bị gỡ gán.'],
+                      confirmLabel: 'Xóa lớp',
+                      danger: true,
+                      onConfirm: () => {
+                        profiles.filter(p => p.assigned_class_id === c.id).forEach(p => onProfilePatch(p.id, { assigned_class_id: null }));
+                        setState({ ...state, classes: state.classes.filter(x => x.id !== c.id), roster: state.roster.filter(r => r.classId !== c.id) });
+                        onLog('Xóa lớp', c.name); setClassNote(`Đã xóa lớp ${c.name}.`);
+                      },
+                    });
                   }}>Xóa</button>
                 )}
               </>)}
@@ -1607,26 +1986,39 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
           <button className="btn" type="button" onClick={() => {
             const wk = state.weeks.find(w => w.id === (dutyWeekId || state.weeks[state.weeks.length - 1]?.id));
             if (!wk) { setDutyNote('Chưa có tuần nào để gán.'); return; }
-            const wn = weekNumberOf(wk, state.weeks.indexOf(wk) + 1);
-            let assigned = 0; const skipped: string[] = [];
-            const roster = [...state.roster];
-            for (const p of profiles.filter(x => x.role === 'codo' && x.status === 'active')) {
-              const home = state.classes.find(c => c.id === p.assigned_class_id)?.name;
-              const mon = home ? dutyMonitored(home, wn) : null;
-              const monId = mon ? state.classes.find(c => c.name.toUpperCase() === mon)?.id : undefined;
-              if (!monId) { skipped.push(p.full_name); continue; }
-              const ex = roster.findIndex(r => r.name === p.full_name && r.weekId === wk.id);
-              if (ex >= 0) roster[ex] = { ...roster[ex], classId: monId, active: true };
-              else roster.push({ id: uid(), name: p.full_name, classId: monId, weekId: wk.id, active: true });
-              assigned++;
-            }
-            setState({ ...state, roster });
-            onLog('Gán trực theo lịch', `${wk.label}: ${assigned} cờ đỏ${skipped.length ? ` — chưa gán được: ${skipped.join(', ')}` : ''}`);
-            setDutyNote(`Đã gán ${assigned} cờ đỏ trực ${wk.label} theo lịch.${skipped.length ? ` Chưa gán được: ${skipped.join(', ')} (chưa có lớp).` : ''}`);
+            const targets = profiles.filter(x => x.role === 'codo' && x.status === 'active' && x.assigned_class_id);
+            onConfirm({
+              title: `Gán trực ${wk.label} theo lịch?`,
+              body: `Sẽ gán ${targets.length} cờ đỏ trực ${wk.label} theo lịch (cờ đỏ chưa có lớp sẽ bỏ qua). Phân công cũ của tuần này sẽ được cập nhật theo lịch mới.`,
+              confirmLabel: 'Gán cả tuần',
+              onConfirm: () => {
+                const wn = weekNumberOf(wk, state.weeks.indexOf(wk) + 1);
+                let assigned = 0; const skipped: string[] = [];
+                const roster = [...state.roster];
+                for (const p of profiles.filter(x => x.role === 'codo' && x.status === 'active')) {
+                  const home = state.classes.find(c => c.id === p.assigned_class_id)?.name;
+                  const mon = home ? dutyMonitored(home, wn) : null;
+                  const monId = mon ? state.classes.find(c => c.name.toUpperCase() === mon)?.id : undefined;
+                  if (!monId) { skipped.push(p.full_name); continue; }
+                  const ex = roster.findIndex(r => r.name === p.full_name && r.weekId === wk.id);
+                  if (ex >= 0) roster[ex] = { ...roster[ex], classId: monId, active: true };
+                  else roster.push({ id: uid(), name: p.full_name, classId: monId, weekId: wk.id, active: true });
+                  assigned++;
+                }
+                setState({ ...state, roster });
+                onLog('Gán trực theo lịch', `${wk.label}: ${assigned} cờ đỏ${skipped.length ? ` — chưa gán được: ${skipped.join(', ')}` : ''}`);
+                setDutyNote(`Đã gán ${assigned} cờ đỏ trực ${wk.label} theo lịch.${skipped.length ? ` Chưa gán được: ${skipped.join(', ')} (chưa có lớp).` : ''}`);
+              },
+            });
           }}>Gán cả tuần theo lịch trực</button>
         </div>
         {dutyNote && <p>{dutyNote}</p>}
-        {state.roster.map(r => <p key={r.id}>{r.name} — Lớp {state.classes.find(c => c.id === r.classId)?.name} — {state.weeks.find(w => w.id === r.weekId)?.label} — {r.active ? 'Đang trực' : 'Đã tắt'} <button className="btn grey" type="button" onClick={() => setState({ ...state, roster: state.roster.map(x => x.id === r.id ? { ...x, active: !x.active } : x) })}>{r.active ? 'Tắt' : 'Bật'}</button></p>)}
+        {state.roster.map(r => <p key={r.id}>{r.name} — Lớp {state.classes.find(c => c.id === r.classId)?.name} — {state.weeks.find(w => w.id === r.weekId)?.label} — {r.active ? 'Đang trực' : 'Đã tắt'} <button className="btn grey" type="button" onClick={() => onConfirm({
+          title: `${r.active ? 'Tắt' : 'Bật'} phân công trực?`,
+          body: `${r.name} — Lớp ${state.classes.find(c => c.id === r.classId)?.name} — ${state.weeks.find(w => w.id === r.weekId)?.label}: ${r.active ? 'cờ đỏ này sẽ không trực tuần này nữa.' : 'cờ đỏ này sẽ trực lại tuần này.'}`,
+          confirmLabel: r.active ? 'Tắt trực' : 'Bật trực',
+          onConfirm: () => setState({ ...state, roster: state.roster.map(x => x.id === r.id ? { ...x, active: !x.active } : x) }),
+        })}>{r.active ? 'Tắt' : 'Bật'}</button></p>)}
         {state.roster.length === 0 && <p>Chưa phân công cờ đỏ nào.</p>}
       </div>
       <div className="card"><h2>Lịch trực cờ đỏ — Học kì 1, năm học 2026–2027</h2>

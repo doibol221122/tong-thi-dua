@@ -91,9 +91,10 @@ async function newPage(seed, session) {
 }
 
 // ---- C: ô chọn lớp trực chặn nhập thay ----
+// Cờ đỏ chưa có phân công thì Nhập điểm mở thẳng DutyPicker (không còn qua
+// Tổng quan — cờ đỏ chỉ thấy 2 tab Nhập điểm + Xếp hạng).
 {
   const { ctx, page } = await newPage(seedPick, { role: 'codo', name: 'Nguyễn Văn A' });
-  await page.getByRole('button', { name: 'Chọn lớp trực để nhập điểm' }).click();
   await page.waitForTimeout(400);
   const sel = page.locator('main select').first();
   const confirm = page.getByRole('button', { name: 'Bắt đầu nhập điểm lớp này' });
@@ -120,7 +121,7 @@ async function newPage(seed, session) {
   const { ctx, page } = await newPage(seed5, { role: 'admin', name: 'Ban thi đua' });
   await page.getByRole('button', { name: 'Nhập điểm' }).click();
   await page.waitForTimeout(400);
-  await page.getByRole('button', { name: '10B2', exact: true }).click();
+  await page.locator('.class-select-wrap select').selectOption({ label: '10B2' });
   await page.waitForTimeout(400);
   // Chưa nhập giờ nào: nộp thì báo thiếu giờ.
   await page.getByRole('button', { name: 'Lưu & nộp phiếu từng lớp' }).click();
@@ -149,11 +150,13 @@ async function newPage(seed, session) {
   const { ctx, page } = await newPage(seed5, { role: 'admin', name: 'Ban thi đua' });
   await page.getByRole('button', { name: 'Nhập điểm' }).click();
   await page.waitForTimeout(400);
-  await page.getByRole('button', { name: '10B1', exact: true }).click();
+  await page.locator('.class-select-wrap select').selectOption({ label: '10B1' });
   await page.waitForTimeout(400);
   ok((await page.getByRole('button', { name: 'Hủy duyệt (lỡ duyệt nhầm)' }).count()) === 1, 'E: phiếu đã duyệt hiện nút Hủy duyệt');
   ok((await page.getByRole('button', { name: 'Duyệt phiếu', exact: true }).count()) === 0, 'E: phiếu đã duyệt không còn nút Duyệt phiếu');
   await page.getByRole('button', { name: 'Hủy duyệt (lỡ duyệt nhầm)' }).click();
+  await page.waitForTimeout(300);
+  await page.getByTestId('confirm-ok').click();
   await page.waitForTimeout(500);
   let st = JSON.parse(await page.evaluate(() => localStorage.getItem('tong-thi-dua-v1')));
   let sc = st.scores.find(x => x.weekId === 'w5' && x.classId === 'c0');
@@ -170,10 +173,12 @@ async function newPage(seed, session) {
   const { ctx, page } = await newPage(seedClosed, { role: 'admin', name: 'Ban thi đua' });
   await page.getByRole('button', { name: 'Nhập điểm' }).click();
   await page.waitForTimeout(400);
-  await page.getByRole('button', { name: '10B1', exact: true }).click();
+  await page.locator('.class-select-wrap select').selectOption({ label: '10B1' });
   await page.waitForTimeout(400);
   ok(await page.getByRole('button', { name: 'Lưu & nộp phiếu từng lớp' }).isDisabled(), 'E2: tuần đã chốt -> phiếu chưa sửa được');
   await page.getByRole('button', { name: 'Hủy duyệt (lỡ duyệt nhầm)' }).click();
+  await page.waitForTimeout(300);
+  await page.getByTestId('confirm-ok').click();
   await page.waitForTimeout(500);
   const st = JSON.parse(await page.evaluate(() => localStorage.getItem('tong-thi-dua-v1')));
   const sc = st.scores.find(x => x.weekId === 'w5' && x.classId === 'c0');
@@ -188,7 +193,7 @@ async function newPage(seed, session) {
   const { ctx, page } = await newPage(seed5, { role: 'admin', name: 'Ban thi đua' });
   await page.getByRole('button', { name: 'Nhập điểm' }).click();
   await page.waitForTimeout(400);
-  await page.getByRole('button', { name: '10B2', exact: true }).click();
+  await page.locator('.class-select-wrap select').selectOption({ label: '10B2' });
   await page.waitForTimeout(400);
   ok((await page.locator('.top100').count()) === 2, 'F: hai hộp 100%, mỗi hộp một ô ngay trước mục của nó');
   ok((await page.getByLabel('100% giờ Tốt (+20đ)').count()) === 1, 'F: chỉ còn một ô 100% giờ Tốt (đã dời khỏi cuối mục)');
@@ -241,7 +246,7 @@ async function newPage(seed, session) {
   const { ctx, page } = await newPage(seedDraft, { role: 'admin', name: 'Ban thi đua' });
   await page.getByRole('button', { name: 'Nhập điểm' }).click();
   await page.waitForTimeout(400);
-  await page.getByRole('button', { name: '10B2', exact: true }).click();
+  await page.locator('.class-select-wrap select').selectOption({ label: '10B2' });
   await page.waitForTimeout(400);
   ok((await page.getByRole('button', { name: 'Duyệt phiếu', exact: true }).count()) === 0, 'G1: phiếu Nháp -> không có nút Duyệt phiếu');
   ok((await page.locator('main').innerText()).includes('Phiếu đang ở trạng thái Nháp'), 'G1: phiếu Nháp -> ghi chú chờ nộp rồi mới duyệt');
@@ -255,7 +260,7 @@ async function newPage(seed, session) {
   const { ctx, page } = await newPage(seedInvalid, { role: 'admin', name: 'Ban thi đua' });
   await page.getByRole('button', { name: 'Nhập điểm' }).click();
   await page.waitForTimeout(400);
-  await page.getByRole('button', { name: '10B3', exact: true }).click();
+  await page.locator('.class-select-wrap select').selectOption({ label: '10B3' });
   await page.waitForTimeout(400);
   await page.getByRole('button', { name: 'Duyệt phiếu', exact: true }).click();
   await page.waitForTimeout(500);
@@ -265,6 +270,8 @@ async function newPage(seed, session) {
   ok(st.scores.find(x => x.weekId === 'w5' && x.classId === 'c2')?.status === 'submitted', 'G2: phiếu 0 giờ -> vẫn ở Chờ duyệt');
   // G4: duyệt tất cả -> bỏ qua phiếu chưa đủ điều kiện, báo rõ từng phiếu.
   await page.getByRole('button', { name: 'Duyệt tất cả 2 phiếu đã nộp' }).click();
+  await page.waitForTimeout(300);
+  await page.getByTestId('confirm-ok').click();
   await page.waitForTimeout(500);
   t = await page.locator('main').innerText();
   ok(t.includes('Đã duyệt 1 phiếu của Tuần 05'), 'G4: duyệt tất cả -> chỉ duyệt 1 phiếu đủ điều kiện');
@@ -279,20 +286,24 @@ async function newPage(seed, session) {
   const { ctx, page } = await newPage(seed5, { role: 'admin', name: 'Ban thi đua' });
   await page.getByRole('button', { name: 'Nhập điểm' }).click();
   await page.waitForTimeout(400);
-  await page.getByRole('button', { name: '10B4', exact: true }).click();
+  await page.locator('.class-select-wrap select').selectOption({ label: '10B4' });
   await page.waitForTimeout(400);
   await page.getByRole('button', { name: 'Duyệt phiếu', exact: true }).click();
+  await page.waitForTimeout(300);
+  await page.getByTestId('confirm-ok').click();
   await page.waitForTimeout(500);
   let st = JSON.parse(await page.evaluate(() => localStorage.getItem('tong-thi-dua-v1')));
   ok(st.scores.find(x => x.weekId === 'w5' && x.classId === 'c3')?.status === 'approved', 'G3: phiếu Chờ duyệt đủ điều kiện -> duyệt được');
-  await page.getByRole('button', { name: '10B3', exact: true }).click();
+  await page.locator('.class-select-wrap select').selectOption({ label: '10B3' });
   await page.waitForTimeout(400);
   await page.getByRole('button', { name: 'Mở lại để sửa', exact: true }).click();
+  await page.waitForTimeout(300);
+  await page.getByTestId('confirm-ok').click();
   await page.waitForTimeout(500);
   st = JSON.parse(await page.evaluate(() => localStorage.getItem('tong-thi-dua-v1')));
   ok(st.scores.find(x => x.weekId === 'w5' && x.classId === 'c2')?.status === 'draft', 'G5: mở lại phiếu đã nộp -> về Nháp');
   // G6: phiếu Bị trả lại -> không có nút Duyệt/Trả lại.
-  await page.getByRole('button', { name: '10B5', exact: true }).click();
+  await page.locator('.class-select-wrap select').selectOption({ label: '10B5' });
   await page.waitForTimeout(400);
   ok((await page.getByRole('button', { name: 'Duyệt phiếu', exact: true }).count()) === 0, 'G6: phiếu Bị trả lại -> không có nút Duyệt phiếu');
   ok((await page.getByRole('button', { name: 'Trả lại phiếu', exact: true }).count()) === 0, 'G6: phiếu Bị trả lại -> không có nút Trả lại phiếu');
@@ -311,7 +322,7 @@ async function newPage(seed, session) {
   await page.getByRole('button', { name: 'Nhập điểm' }).click();
   await page.waitForTimeout(400);
   // Tuần hiện tại là tuần cuối mảng (Tuần 04); tuần trước theo số tuần là Tuần 03, không phải Tuần 05.
-  await page.getByRole('button', { name: '10B2', exact: true }).click();
+  await page.locator('.class-select-wrap select').selectOption({ label: '10B2' });
   await page.waitForTimeout(400);
   await page.getByRole('button', { name: 'Chép số liệu tuần trước' }).click();
   await page.waitForTimeout(400);
@@ -350,6 +361,8 @@ async function newPage(seed, session) {
   await page.waitForTimeout(400);
   const bad = Buffer.from(JSON.stringify({ settings: seed5.settings, weeks: [], classes: [], roster: [], logs: [] }));
   await page.locator('input[type=file]').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: bad });
+  await page.waitForTimeout(300);
+  await page.getByTestId('confirm-ok').click();
   await page.waitForTimeout(800);
   let t = await page.locator('main').innerText();
   ok(t.includes('Không nhập được file sao lưu'), 'I1: file thiếu mục scores -> báo không nhập được');
@@ -358,6 +371,8 @@ async function newPage(seed, session) {
   const good = Buffer.from(JSON.stringify(seed5));
   const dlPromise = page.waitForEvent('download');
   await page.locator('input[type=file]').setInputFiles({ name: 'good.json', mimeType: 'application/json', buffer: good });
+  await page.waitForTimeout(300);
+  await page.getByTestId('confirm-ok').click();
   const dl = await dlPromise;
   ok(/tong-thi-dua-sao-luu_\d{8}-\d{4}\.json$/.test(dl.suggestedFilename()), 'I2: nhập JSON -> tải bản sao lưu hiện tại trước, tên có dấu ngày giờ');
   await page.waitForTimeout(800);

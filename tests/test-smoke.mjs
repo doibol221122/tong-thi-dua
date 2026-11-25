@@ -43,6 +43,8 @@ async function newPage(seed, session) {
   await page.waitForTimeout(400);
   ok(await page.getByRole('button', { name: 'Duyệt tất cả 2 phiếu đã nộp' }).count() === 1, 'admin: có nút Duyệt tất cả 2 phiếu');
   await page.getByRole('button', { name: 'Duyệt tất cả 2 phiếu đã nộp' }).click();
+  await page.waitForTimeout(300);
+  await page.getByTestId('confirm-ok').click();
   await page.waitForTimeout(500);
   t = await page.locator('main').innerText();
   ok(t.includes('Đã duyệt 2 phiếu của Tuần 05'), 'admin: duyệt tất cả -> báo đã duyệt 2 phiếu');
@@ -60,6 +62,8 @@ async function newPage(seed, session) {
   const rename = page.locator('main input[value="10B1"]');
   await rename.fill('10B1X');
   await page.getByRole('button', { name: 'Lưu', exact: true }).click();
+  await page.waitForTimeout(300);
+  await page.getByTestId('confirm-ok').click();
   await page.waitForTimeout(400);
   t = await page.locator('main').innerText();
   ok(t.includes('10B1X'), 'admin: sửa tên lớp 10B1 -> 10B1X');
@@ -78,11 +82,8 @@ async function newPage(seed, session) {
   ok(t.includes('Phiếu bị trả lại'), 'codo: Nhập điểm hiện banner "Phiếu bị trả lại"');
   ok(t.includes('Thiếu số liệu giờ Khá'), 'codo: banner hiện đúng lý do trả lại');
   ok(await page.getByRole('button', { name: 'Đổi lớp trực' }).count() === 1, 'codo: có nút Đổi lớp trực');
-  await page.getByRole('button', { name: 'Tổng quan' }).click();
-  await page.waitForTimeout(400);
-  t = await page.locator('main').innerText();
-  ok(t.includes('Bị trả lại') && t.includes('Thiếu số liệu giờ Khá'), 'codo: Tổng quan hiện "Phiếu tuần này: Bị trả lại — lý do"');
-  ok(t.includes('Tuần này bạn trực lớp 10B5'), 'codo: thẻ Lớp của bạn hiện trực lớp 10B5');
+  // Cờ đỏ không còn tab Tổng quan (chỉ Nhập điểm + Xếp hạng) — thông tin trả
+  // phiếu và lớp trực đã kiểm ở trên (banner Nhập điểm + chip header).
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   ok(overflow <= 0, 'codo: không tràn ngang 390px');
   await ctx.close();
@@ -102,6 +103,8 @@ async function newPage(seed, session) {
   await page.getByRole('button', { name: 'Nhập điểm' }).click();
   await page.waitForTimeout(400);
   await page.getByRole('button', { name: 'Duyệt tất cả 2 phiếu đã nộp' }).click();
+  await page.waitForTimeout(300);
+  await page.getByTestId('confirm-ok').click();
   await page.waitForTimeout(500);
   await page.getByRole('button', { name: 'Xếp hạng', exact: true }).click();
   await page.waitForTimeout(400);
@@ -128,7 +131,8 @@ async function newPage(seed, session) {
   ok(t.includes('Chỉ lưu trên máy này'), 'local: chip đồng bộ hiện "Chỉ lưu trên máy này"');
   await page.getByRole('button', { name: 'Nhập điểm' }).click();
   await page.waitForTimeout(400);
-  await page.getByRole('button', { name: '10B2', exact: true }).click();
+  // P2-06: ở 390px hàng nút chọn lớp bị ẩn, chọn lớp bằng dropdown.
+  await page.locator('.class-select-wrap select').selectOption({ label: '10B2' });
   await page.waitForTimeout(400);
   // Cuộn xuống cuối trang: ô cuối (Ý kiến của cờ đỏ) không bị thanh điểm cố định che.
   const clear = await page.evaluate(() => {

@@ -1,5 +1,5 @@
 // Unit: tên HS theo từng mục vi phạm + vắng tự tính + khóa phiếu.
-import { calcScore, sectionSums, validateDetails, validateImportedState, hocTapLines, neNepLines, absentTotalOf, isNoAbsentLate, emptyDetails, emptyState, violLine, compareAvg, classAvg, classCoverage, legacyMixedClusters, dropLegacyWhenSplit, safeFilename } from './lib.mjs';
+import { calcScore, sectionSums, validateDetails, validateImportedState, hocTapLines, neNepLines, absentTotalOf, isNoAbsentLate, emptyDetails, emptyState, violLine, compareAvg, classAvg, classCoverage, legacyMixedClusters, dropLegacyWhenSplit, safeFilename, findDutyHolder } from './lib.mjs';
 
 const fails = [];
 function ok(c, label) { console.log((c ? 'OK   ' : 'FAIL ') + label); if (!c) fails.push(label); }
@@ -15,6 +15,28 @@ ok(neNepLines(d).includes('Không vắng, không đi muộn: +10đ'), 'dòng +10
 d.absentPermit = 2; d.absentNoPermit = 1; d.violNames = { absentNoPermit: 'Lan, Sang' };
 ok(neNepLines(d).some(x => x === 'Vắng: 3 (2p, 1Kp) — Lan, Sang (-5)'), 'dòng Vắng: tổng 3 + tên HS vắng không phép');
 d.absentPermit = 0; d.absentNoPermit = 0; d.violNames = {};
+
+// findDutyHolder (P1-08): ai giữ (lớp, tuần) — roster hoặc hồ sơ.
+const R = [
+  { id: 'r1', name: 'Nguyễn Văn A', classId: 'c4', weekId: 'w5', active: true },
+  { id: 'r2', name: 'Trần Thị B', classId: 'c1', weekId: 'w5', active: true },
+  { id: 'r3', name: 'Lê Văn C', classId: 'c2', weekId: 'w5', active: false },
+];
+const P = [
+  { id: 'p1', full_name: 'Phạm Văn D', role: 'codo', status: 'active', assigned_class_id: 'c3', assigned_week_id: 'w5' },
+  { id: 'p2', full_name: 'Nguyễn Văn A', role: 'codo', status: 'active', assigned_class_id: 'c4', assigned_week_id: 'w5' },
+  { id: 'p3', full_name: 'Hoàng Văn E', role: 'codo', status: 'pending', assigned_class_id: 'c5', assigned_week_id: 'w5' },
+  { id: 'p4', full_name: 'Đỗ Thị F', role: 'viewer', status: 'active', assigned_class_id: 'c6', assigned_week_id: 'w5' },
+];
+ok(findDutyHolder(R, P, 'c4', 'w5', { name: 'Trần Thị B' })?.name === 'Nguyễn Văn A', 'holder roster: c4/w5 do Nguyễn Văn A giữ (người khác hỏi)');
+ok(findDutyHolder(R, P, 'c4', 'w5', { name: 'Nguyễn Văn A' }) === null, 'holder roster: chính mình giữ thì không tính');
+ok(findDutyHolder(R, P, 'c3', 'w5', { name: 'Trần Thị B' })?.name === 'Phạm Văn D', 'holder hồ sơ: c3/w5 do Phạm Văn D giữ (gán qua assigned_class_id)');
+ok(findDutyHolder(R, P, 'c3', 'w5', { id: 'p1', name: 'Phạm Văn D' }) === null, 'holder hồ sơ: chính mình giữ (khớp id) thì không tính');
+ok(findDutyHolder(R, P, 'c2', 'w5', { name: 'Trần Thị B' }) === null, 'roster inactive thì không tính là giữ');
+ok(findDutyHolder(R, P, 'c5', 'w5', { name: 'Trần Thị B' }) === null, 'hồ sơ pending thì không tính là giữ');
+ok(findDutyHolder(R, P, 'c6', 'w5', { name: 'Trần Thị B' }) === null, 'người xem (viewer) gán lớp cũng không tính là giữ');
+ok(findDutyHolder(R, P, 'c9', 'w5', { name: 'Trần Thị B' }) === null, 'lớp chưa ai giữ thì null');
+ok(findDutyHolder(R, P, '', '', { name: 'Trần Thị B' }) === null, 'chưa chọn lớp/tuần thì null');
 
 // Tên HS theo từng mục vi phạm.
 d = emptyDetails();

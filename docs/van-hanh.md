@@ -3,11 +3,14 @@
 > Dành cho Ban thi đua (người quản trị, không cần biết code). App chạy tại
 > https://tong-thi-dua.vercel.app — dữ liệu dùng chung lưu trên Supabase.
 >
-> **Lưu ý trạng thái (24/11/2026):** gói nâng cấp "pro-1" đã làm xong
+> **Lưu ý trạng thái (25/11/2026):** gói nâng cấp "pro-1" đã làm xong
 > trong code ngày 24/11/2026 nhưng **chưa deploy** — các mục đánh dấu ⏳
 > chỉ chạy được sau khi deploy bản mới (và, với sao lưu/từ chối, sau khi
-> chạy `migration-pro.sql` trong Supabase). Cho tới lúc đó, làm theo
-> bước "quy trình tay" ghi kèm. Mục không đánh dấu là đã có sẵn trong app.
+> chạy `migration-pro.sql` trong Supabase). Đợt "pro-2" ngày 25/11/2026
+> (cờ đỏ 2 tab, xếp hạng tháng, hộp thoại xác nhận trong app, gọn header
+> trên điện thoại — xem mục 9) cũng đã làm xong trong code và **chưa
+> deploy**. Cho tới lúc đó, làm theo bước "quy trình tay" ghi kèm. Mục
+> không đánh dấu là đã có sẵn trong app.
 
 ## 1. Checklist Supabase Dashboard (kiểm tra sau mỗi lần deploy)
 
@@ -158,7 +161,37 @@ máy này, không đồng bộ"**:
       hồ sơ thi đua của tuần/tháng đó.
 - [ ] Sao lưu JSON một bản (mục 3) rồi mới sang tuần mới.
 
-## 9. Các quyết định đã chốt (để khỏi hỏi lại)
+## 9. Cờ đỏ: chỉ 2 tab + xếp hạng theo tháng (pro-2, 25/11/2026)
+
+**Cờ đỏ chỉ thấy 2 tab: Nhập điểm và Xếp hạng.** Các tab Tổng quan, Tổng
+hợp, Lịch sử (và Quản lý) không hiện với cờ đỏ — cờ đỏ vào app là thấy
+ngay phiếu của lớp mình đang trực để nhập. Thông báo phiếu bị trả lại vẫn
+hiện ngay ở đầu tab Nhập điểm ("Phiếu bị trả lại — lý do: … Sửa lại rồi
+nộp lại nhé."), và chip ở header vẫn ghi "Trực lớp X".
+
+**Tab Xếp hạng có thêm chuyển đổi Theo tuần | Theo tháng:**
+
+- **Theo tuần:** như cũ (xếp hạng tuần, lọc khối, nút xuất file, chốt/mở
+  tuần của Ban thi đua).
+- **Theo tháng:** xếp các lớp theo điểm trung bình tháng (cứ 4 tuần là 1
+  tháng: tuần 1–4 là Tháng 9, tuần 5–8 là Tháng 10…), chọn tháng ở ô
+  "Tháng" (mặc định tháng mới nhất có tuần). Mỗi lớp một dòng: hạng, điểm
+  trung bình, loại, "nộp n/m tuần". Lớp chưa có phiếu duyệt trong tháng
+  thì không có số hạng (hiện "—"). Chỉ tính phiếu **đã duyệt**, giống mọi
+  xếp hạng khác. Lọc khối (Tất cả / Tự nhiên / Xã hội) áp cho cả hai chế độ.
+
+**Hộp thoại xác nhận trong app:** các thao tác phá hủy (xóa tuần/lớp/tài
+khoản, chốt/mở tuần, duyệt tất cả, khôi phục sao lưu, ghi đè khi xung đột…)
+nay hỏi bằng hộp thoại trong app, ghi rõ hệ quả (vd xóa tuần hiện đúng số
+phiếu sẽ mất) — bấm **Hủy** thì không đổi, **Xác nhận** (nút đỏ) mới làm.
+
+**Trên điện thoại (màn hẹp):** chọn lớp bằng ô dropdown gọn (màn hình lớn
+vẫn là hàng nút bấm); header gọn thành một dòng tóm tắt (tuần • trực lớp •
+vai trò • tên), nút Đăng xuất / Cài app nằm trong menu **⋮** ở góc phải.
+Cuối trang có dòng "Bản quyền thuộc về Đoàn Trường THPT Hùng Vương -
+Quảng Phú".
+
+## 10. Các quyết định đã chốt (để khỏi hỏi lại)
 
 | # | Quyết định |
 |---|---|
@@ -170,4 +203,4 @@ máy này, không đồng bộ"**:
 | D5 | ⏳ Chưa chốt trần điểm cộng/trừ đột xuất mỗi dòng (đề xuất: tối đa 20đ/dòng, bắt buộc ghi chú). |
 | D8 | ⏳ Chưa chốt: người xem (GVCN) có được xuất .docx phiếu của lớp khác không — hiện tại được. |
 
-_Cập nhật lần cuối: 24/11/2026 (theo bản audit `tong-thi-dua-tests/audit-pro.md`)._
+_Cập nhật lần cuối: 25/11/2026 (đợt pro-2: cờ đỏ 2 tab, xếp hạng tháng, hộp thoại xác nhận, gọn mobile; theo bản audit `tong-thi-dua-tests/audit-pro.md`)._

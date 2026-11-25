@@ -28,6 +28,10 @@ input,select,textarea{font:inherit}
 .chip .who{font-weight:700;white-space:nowrap}
 .rolebadge{background:#fff;color:var(--brand-deep);border-color:#fff}
 .btn.logout{background:#fff;color:var(--brand-deep);border:none;padding:8px 14px;border-radius:999px;font-weight:700;white-space:nowrap;box-shadow:var(--shadow-sm)}
+/* P2-06: dropdown chọn lớp + tóm tắt header + nút menu — chỉ hiện ở màn hẹp (≤480px). */
+.class-select-wrap{display:none}
+.header-summary{display:none}
+.menu-btn{display:none}
 @media(max-width:760px){.top-inner{flex-direction:column;align-items:flex-start;gap:10px}.top h1{font-size:18px}.brand .logo{width:46px;height:46px}}
 .wrap{max-width:1152px;margin:0 auto;padding:12px 12px 90px}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
@@ -49,9 +53,15 @@ label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px;color:#3341
 .btn:hover{filter:brightness(1.07)}
 .btn.ghost{background:#fff;color:var(--brand);border:1px solid var(--brand);box-shadow:none}
 .btn.green{background:var(--green);box-shadow:0 1px 3px rgba(21,128,61,.35)}
+.btn.danger{background:#b91c1c;box-shadow:0 1px 3px rgba(185,28,28,.35)}
+.confirm-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:60}
+.confirm-box{max-width:440px;width:100%}
+.confirm-box ul{margin:8px 0 0;padding-left:20px}
+.confirm-box ul li{margin:4px 0}
+.app-footer{text-align:center;font-size:12px;color:var(--muted);padding:16px 12px 24px}
 .btn.grey{background:#e5e7eb;color:#111;box-shadow:none}
 .btn:disabled{opacity:.45;cursor:not-allowed}
-.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700;background:#e5e7eb}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:13px;font-weight:700;background:#e5e7eb}
 .badge.A{background:var(--green-soft);color:var(--green);border:1px solid var(--green-border)}.badge.B{background:var(--blue-soft);color:var(--blue);border:1px solid var(--blue-border)}.badge.C{background:var(--amber-soft);color:var(--amber);border:1px solid var(--amber-border)}.badge.D{background:var(--brand-soft);color:var(--brand-deep);border:1px solid var(--brand-border)}
 .badge.submitted{background:var(--blue-soft);color:var(--blue);border:1px solid var(--blue-border)}.badge.approved{background:var(--green-soft);color:var(--green);border:1px solid var(--green-border)}.badge.returned{background:var(--brand-soft);color:var(--brand-deep);border:1px solid var(--brand-border)}.badge.draft{background:#e5e7eb}
 .stepper{display:flex;align-items:center;gap:6px;flex-shrink:0}
@@ -59,8 +69,7 @@ label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px;color:#3341
 .stepper button:hover{border-color:var(--brand);background:var(--brand-soft)}
 .stepper input{width:84px;text-align:center}
 .field{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line-soft)}
-.field .nm{flex:1;min-width:0}.field .pts{font-size:12px;color:var(--muted)}
-@media(max-width:480px){.field{flex-wrap:wrap}.field .nm{flex:1 1 100%}.stepper{margin-left:auto}}
+.field .nm{flex:1;min-width:0}.field .pts{font-size:13px;color:var(--muted)}
 .scorebar{position:sticky;bottom:0;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;margin-top:12px;box-shadow:var(--shadow-lg)}
 .scorebar-scores{display:flex;gap:10px;align-items:center;flex-wrap:wrap;color:var(--muted)}
 .scorebar-btns{display:flex;gap:8px;flex-wrap:wrap}
@@ -70,7 +79,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}
 .tablewrap table{min-width:560px}
 .tablewrap.slim table{min-width:0}
 th,td{border-bottom:1px solid #e5e7eb;padding:8px 6px;text-align:left;vertical-align:top}
-th{background:#f8fafc;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+th{background:#f8fafc;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
 tbody tr:hover{background:#f8fafc}
 /* Lọc khối ở tab Xếp hạng: viên thuốc nhỏ, vừa một hàng trên điện thoại. */
 .seg{border:1px solid var(--line);background:#fff;color:#334155;padding:6px 10px;border-radius:999px;font-weight:600;font-size:13px;min-height:34px;cursor:pointer;white-space:nowrap}
@@ -85,7 +94,7 @@ tbody tr:hover{background:#f8fafc}
 .ranklist li.top2 .rank{background:#e2e8f0;color:#334155}
 .ranklist li.top3 .rank{background:#ffedd5;color:#9a3412}
 .ranklist .rclass{flex:1;min-width:0}
-.ranklist .rclass small{display:block;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ranklist .rclass small{display:block;color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ranklist .rscore{display:flex;align-items:center;gap:6px;font-size:15px;white-space:nowrap}
 /* Hai ô tích 100%: mỗi ô một hộp xanh lá nằm ngay trước mục của nó
    (100% giờ Tốt trước mục Giờ học, 100% không vắng trước mục Nề nếp). */
@@ -93,11 +102,10 @@ tbody tr:hover{background:#f8fafc}
 .top100 label{display:flex;gap:8px;align-items:center;font-weight:700;min-height:44px;cursor:pointer}
 .top100 .note{margin:6px 0 0;color:var(--muted);font-size:13px}
 .local-banner{background:#7f1d1d;color:#fff;font-weight:800;text-align:center;padding:10px 12px;font-size:14px}
-.chip.sync-ok{background:#f0fdf4;color:#166534}
 .chip.sync-saving{background:#fefce8;color:#854d0e}
 .chip.sync-err{background:#fef2f2;color:#b91c1c;font-weight:700}
 button.chip{cursor:pointer;font:inherit}
-.stepper .num-hint{font-size:12px;color:#b91c1c;white-space:nowrap;font-weight:700}
+.stepper .num-hint{font-size:13px;color:#b91c1c;white-space:nowrap;font-weight:700}
 /* Nhóm nút xuất file: lưới 2 cột, các nút bằng nhau. */
 .exportgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
 .exportgrid .btn{width:100%}
@@ -148,13 +156,15 @@ button.chip{cursor:pointer;font:inherit}
 .top-inner{gap:8px}
 .brand .logo{width:42px;height:42px}
 .top h1{font-size:16px}
-.top .school{font-size:11px}
+.top .school{font-size:13px}
 .userbox{gap:4px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;max-width:100%}
 .userbox::-webkit-scrollbar{display:none}
-.chip{padding:4px 8px;font-size:12px;flex-shrink:0}
-.btn.logout{padding:4px 8px;min-height:30px;font-size:12px;flex-shrink:0}
+.chip{padding:4px 8px;font-size:13px;flex-shrink:0}
+.btn.logout{padding:4px 8px;min-height:30px;font-size:13px;flex-shrink:0}
 .tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin:10px 0}
 .tabs::-webkit-scrollbar{display:none}
+/* Dấu hiệu "còn nữa": làm mờ mép phải của tab/chip cuộn ngang để người dùng biết còn nội dung. */
+.tabs,.userbox{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
 .tabs button{flex-shrink:0;padding:9px 13px;min-height:40px}
 .row.stack-m{flex-direction:column;align-items:stretch}
 .scorebar{padding:8px 10px}
@@ -167,6 +177,22 @@ button.chip{cursor:pointer;font:inherit}
 .stepper button{width:40px;height:40px}
 .stepper input{width:64px}
 .exportgrid{grid-template-columns:1fr}
+/* P2-06: header gọn — logo nhỏ, chip gộp thành một dòng tóm tắt, nút đăng xuất/cài app vào menu. */
+.top-inner{gap:6px}
+.brand .logo{width:36px;height:36px}
+.top h1{font-size:15px}
+/* Ngoại lệ P2-04 ở ≤480px: tên trường 12px (không giãn chữ) để vừa một dòng,
+   nếu không header vượt 120px vì tên trường ngắt thành 2 dòng. */
+.top .school{font-size:12px;letter-spacing:0}
+.userbox{flex-wrap:nowrap}
+.hide-m{display:none}
+.header-summary{display:inline-flex;overflow:hidden;text-overflow:ellipsis;max-width:calc(100% - 44px)}
+.menu-btn{display:inline-flex;padding:4px 12px;font-size:18px;line-height:1}
+.header-menu{position:absolute;right:12px;top:calc(100% - 6px);background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-lg);padding:6px;z-index:2;display:flex;flex-direction:column;gap:4px;min-width:170px}
+.header-menu button{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px 12px;text-align:left;font-weight:700;color:var(--ink);min-height:44px}
+.menu-backdrop{position:fixed;inset:0;z-index:1}
+.class-select-wrap{display:block;margin-top:8px}
+.class-btns{display:none}
 }
 .card h2{font-size:16px}
 .card h3{margin:10px 0 6px}
@@ -176,12 +202,13 @@ button.chip{cursor:pointer;font:inherit}
 .field{padding:6px 0}
 @media(min-width:761px){.scorebar-btns{justify-content:flex-end}.scorebar-btns .btn{flex:0 0 auto}}
 .log-table td:nth-child(1),.log-table td:nth-child(3){white-space:nowrap}
-.log-list{display:none}
 @media(max-width:760px){
-.log-table-wrap{display:none}
 .log-list{display:block}
 .log-item{padding:10px 0;border-bottom:1px solid #f0f2f6}
 .log-item:last-child{border-bottom:none}
-.log-item .meta{font-size:12px;color:var(--muted);margin-top:2px}
+.log-item .meta{font-size:13px;color:var(--muted);margin-top:2px}
 }
 .log-list.always{display:block}
+/* Lưới hồ sơ ở Quản lý: co được theo chiều rộng, không dùng minWidth inline. */
+.prof-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.prof-grid>*{min-width:0}
