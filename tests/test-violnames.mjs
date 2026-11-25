@@ -55,6 +55,17 @@ d.lightsLeftOn = 101;
 ok(validateDetails(d).some(e => e.includes('Không tắt điện ra về') && e.includes('100')), 'không tắt điện > 100 lượt -> báo lỗi validation');
 d.lightsLeftOn = 0;
 
+// Không lặn thùng (-1đ/lượt).
+d = emptyDetails(); d.hoursTot = 25; d.allGood = true;
+d.binNotCleaned = 4;
+ok(sectionSums(d).neNepMinus === 4, 'không lặn thùng: 4 lượt -> trừ 4đ');
+ok(neNepLines(d).some(x => x === 'Không lặn thùng: 4 lượt (-4)'), 'dòng Không lặn thùng đúng mẫu');
+d.binNotCleaned = 1; d.violNames = { binNotCleaned: 'Sang' };
+ok(neNepLines(d).some(x => x === 'Không lặn thùng: Sang (-1)'), 'dòng Không lặn thùng gắn tên HS');
+d.binNotCleaned = 101;
+ok(validateDetails(d).some(e => e.includes('Không lặn thùng') && e.includes('100')), 'không lặn thùng > 100 lượt -> báo lỗi validation');
+d.binNotCleaned = 0;
+
 // Vi phạm không ghi tên: giữ số lượt.
 d = emptyDetails(); d.hoursTot = 25; d.allGood = true;
 d.lateLate = 2;

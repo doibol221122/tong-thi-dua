@@ -39,6 +39,8 @@ export interface Details {
   trashDesk?: number; // Rác trong hộc bàn
   // Điện (-5đ/lượt mỗi lỗi)
   lightsLeftOn?: number; // Không tắt điện ra về
+  // Thùng rác (-1đ/lượt mỗi lỗi)
+  binNotCleaned?: number; // Không lặn thùng
   // Ăn uống / điện thoại (-2đ/lượt mỗi lỗi)
   foodEat?: number; // Ăn/mang đồ ăn vào lớp
   foodPhone?: number; // Không bỏ điện thoại vào tủ
@@ -174,7 +176,7 @@ export function emptyDetails(): Details {
     studyNoLearn: 0, studyNoPrepare: 0, studyNoMaterial: 0,
     lateLate: 0, lateOut: 0,
     workPrivate: 0, workNotSerious: 0, workSleep: 0,
-    trashDesk: 0, lightsLeftOn: 0,
+    trashDesk: 0, lightsLeftOn: 0, binNotCleaned: 0,
     foodEat: 0, foodPhone: 0,
     dressSlipper: 0, dressNoCard: 0, dressNoBadge: 0, dressHair: 0, dressEarring: 0,
     dishonestLie: 0, dishonestSwear: 0,
@@ -262,7 +264,7 @@ export function sectionSums(d: Details): SectionSums {
       + num(d.lateOut) * 2
       + d.noisy * 5
       + num(d.privateWork) * 2 + num(d.workPrivate) * 2 + num(d.workNotSerious) * 2 + num(d.workSleep) * 2
-      + d.lateDuty * 2 + d.dirty * 5 + num(d.trashDesk) * 2 + num(d.lightsLeftOn) * 5
+      + d.lateDuty * 2 + d.dirty * 5 + num(d.trashDesk) * 2 + num(d.lightsLeftOn) * 5 + num(d.binNotCleaned) * 1
       + num(d.food) * 2 + num(d.foodEat) * 2 + num(d.foodPhone) * 2
       + num(d.dress) * 1 + num(d.dressSlipper) * 1 + num(d.dressNoCard) * 1 + num(d.dressNoBadge) * 1 + num(d.dressHair) * 1 + num(d.dressEarring) * 1
       + d.skip * 5
@@ -296,7 +298,7 @@ const NUM_INT_FIELDS: (keyof Details)[] = [
   'studyNoLearn', 'studyNoPrepare', 'studyNoMaterial',
   'lateLate', 'lateOut',
   'workPrivate', 'workNotSerious', 'workSleep',
-  'trashDesk', 'lightsLeftOn',
+  'trashDesk', 'lightsLeftOn', 'binNotCleaned',
   'foodEat', 'foodPhone',
   'dressSlipper', 'dressNoCard', 'dressNoBadge', 'dressHair', 'dressEarring',
   'dishonestLie', 'dishonestSwear',
@@ -620,6 +622,7 @@ export function neNepLines(d: Details): string[] {
   if (d.dirty) out.push(violLine(d, 'dirty', 'Lớp bẩn', d.dirty, -(d.dirty * 5)));
   if (num(d.trashDesk)) out.push(violLine(d, 'trashDesk', 'Rác trong hộc bàn', num(d.trashDesk), -(num(d.trashDesk) * 2)));
   if (num(d.lightsLeftOn)) out.push(violLine(d, 'lightsLeftOn', 'Không tắt điện ra về', num(d.lightsLeftOn), -(num(d.lightsLeftOn) * 5)));
+  if (num(d.binNotCleaned)) out.push(violLine(d, 'binNotCleaned', 'Không lặn thùng', num(d.binNotCleaned), -(num(d.binNotCleaned))));
   if (num(d.foodEat)) out.push(violLine(d, 'foodEat', 'Ăn/mang đồ ăn vào lớp', num(d.foodEat), -(num(d.foodEat) * 2)));
   if (num(d.foodPhone)) out.push(violLine(d, 'foodPhone', 'Không bỏ điện thoại vào tủ', num(d.foodPhone), -(num(d.foodPhone) * 2)));
   if (num(d.food)) out.push(violLine(d, 'food', 'Ăn/mang đồ ăn vào lớp', num(d.food), -(num(d.food) * 2)));
@@ -679,6 +682,7 @@ export const VIOLATION_FIELDS: { key: keyof Details; label: string }[] = [
   { key: 'dirty', label: 'Lớp bẩn' },
   { key: 'trashDesk', label: 'Rác trong hộc bàn' },
   { key: 'lightsLeftOn', label: 'Không tắt điện ra về' },
+  { key: 'binNotCleaned', label: 'Không lặn thùng' },
   { key: 'foodEat', label: 'Ăn/mang đồ ăn vào lớp' },
   { key: 'foodPhone', label: 'Không bỏ ĐT vào tủ' },
   { key: 'dressSlipper', label: 'Mang dép lê' },
