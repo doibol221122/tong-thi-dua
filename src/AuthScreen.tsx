@@ -164,6 +164,7 @@ export default function AuthScreen({ initialMode, onRecoveryDone }: { initialMod
               {DUTY_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             {requestedRole === 'viewer' && <p style={{ margin: 0 }}>GVCN chọn lớp mình chủ nhiệm để theo dõi lớp mình; BGH để trống.</p>}
+            {requestedRole === 'codo' && <p style={{ margin: 0 }}>Lớp bạn đang học — bạn là cờ đỏ của lớp này (cố định). Lớp trực sẽ theo lịch trực, hoặc bạn tự chọn khi nhập điểm.</p>}
           </>
           <p>Không tự đăng ký được vai trò Ban thi đua.</p>
         </>

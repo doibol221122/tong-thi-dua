@@ -4,7 +4,9 @@
 // - Cờ đỏ tự chọn lớp trực (DutyPicker): gợi ý theo lịch trực, chọn lớp
 //   khác được, ghi thành 1 dòng roster (không nhân đôi), đồng bộ lên remote.
 // - Lớp đã có phiếu nộp/duyệt thì khóa: không chọn được.
-// - Chưa có roster thì dùng lớp/tuần gán trong hồ sơ (chip "Lớp ...").
+// - Chưa có roster: lớp trong hồ sơ CHỈ là lớp của cờ đỏ (cố định), KHÔNG
+//   phải lớp trực — cờ đỏ vào thẳng DutyPicker để tự chọn lớp trực
+//   (sửa 25/11 theo yêu cầu làm rõ "gắn lớp").
 import { chromium } from 'playwright-core';
 import { readFileSync } from 'fs';
 import { EXE, SbStub, newSbPage, waitText } from './sb-stub.mjs';
@@ -91,17 +93,24 @@ async function loginAs(page, email, password) {
   await ctx.close();
 }
 
-// ---- B. Chưa có roster: dùng lớp/tuần gán trong hồ sơ ----
+// ---- B. Chưa có roster: lớp trong hồ sơ chỉ là lớp của cờ đỏ ----
 {
   const stub = new SbStub(seed5);
   const codo = stub.seedUser({ email: 'codo2@example.com', password: 'matkhau1', full_name: 'Trần Thị B', requested_role: 'codo', requested_class: '10B3' });
   stub.seedProfile({ user: codo, role: 'codo', status: 'active', assigned_class_id: 'c2', assigned_week_id: 'w5' });
   const { ctx, page } = await newSbPage(browser, stub);
   await loginAs(page, 'codo2@example.com', 'matkhau1');
-  await waitText(page, 'Lớp 10B3');
+  await waitText(page, 'Chọn lớp trực — Tuần 05');
   const t = await page.locator('body').innerText();
-  ok(t.includes('Lớp 10B3'), 'duty-B: chưa có roster -> chip "Lớp 10B3" từ hồ sơ (không phải "Trực lớp")');
-  ok(t.includes('Bạn đang nhập cho lớp 10B3 — Tuần 05.'), 'duty-B: banner nhập lớp 10B3 tuần 05 theo hồ sơ (không có "(lớp bạn trực)")');
+  ok(t.includes('Theo lịch trực, cờ đỏ lớp 10B3 trực lớp 10B2 tuần này.'), 'duty-B: chưa có roster -> vào thẳng DutyPicker, gợi ý theo lịch trực từ lớp của mình (10B3 -> 10B2)');
+  ok(!t.includes('Bạn đang nhập cho lớp 10B3'), 'duty-B: KHÔNG tự khóa vào lớp của mình (10B3 chỉ là lớp của cờ đỏ, không phải lớp trực)');
+  ok(!t.includes('Lớp 10B3'), 'duty-B: header không hiện chip "Lớp 10B3" (không còn phân công theo hồ sơ)');
+  // Chọn đúng lớp gợi ý (10B2, chưa có phiếu) -> chip trực đổi theo.
+  await page.locator('main select').selectOption('c1'); // 10B2
+  await page.waitForTimeout(300);
+  await page.getByRole('button', { name: 'Bắt đầu nhập điểm lớp này' }).click();
+  await waitText(page, 'Trực lớp 10B2');
+  ok((await page.locator('body').innerText()).includes('Trực lớp 10B2'), 'duty-B: chọn 10B2 -> chip đổi thành "Trực lớp 10B2"');
   if (stub.unhandled.length) { console.log('UNHANDLED: ' + JSON.stringify(stub.unhandled)); fails.push('duty-B: có request supabase không được stub'); }
   await ctx.close();
 }

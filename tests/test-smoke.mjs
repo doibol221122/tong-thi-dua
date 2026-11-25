@@ -169,6 +169,9 @@ async function newPage(seed, session) {
   // Export grid 1 cột ở 390px.
   await page.getByRole('button', { name: 'Xếp hạng', exact: true }).click();
   await page.waitForTimeout(400);
+  // Gõ Giờ Tốt làm dirty -> chuyển tab mở hộp thoại xác nhận (P2-05).
+  await page.getByTestId('confirm-ok').click();
+  await page.waitForTimeout(300);
   const cols = await page.evaluate(() => getComputedStyle(document.querySelector('.exportgrid')).gridTemplateColumns.split(' ').length);
   ok(cols === 1, 'mobile: lưới xuất file 1 cột ở 390px');
   await ctx.close();

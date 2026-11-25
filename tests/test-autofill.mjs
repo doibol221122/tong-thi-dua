@@ -40,10 +40,12 @@ const pup = (loc) => loc.evaluate(el => el.dispatchEvent(new PointerEvent('point
 await page.getByLabel('Đi muộn', { exact: true }).click();
 await page.keyboard.type('e');
 await page.waitForTimeout(200);
-await page.getByRole('button', { name: '10B3', exact: true }).evaluate(el => el.click());
+// Nút lớp bị display:none ở 390px nên getByRole không thấy (cây AX bỏ
+// phần tử ẩn) — dùng CSS selector + click tổng hợp (không blur) như cũ.
+await page.locator('.class-btns button', { hasText: '10B3' }).evaluate(el => el.click());
 await page.waitForTimeout(400);
 ok((await fieldValue('Đi muộn')) === '2', 'autofill H1: gõ "e" rồi đổi lớp -> ô Đi muộn hiện 2 của phiếu 10B3, không còn chữ cũ');
-await page.getByRole('button', { name: '10B2', exact: true }).evaluate(el => el.click());
+await page.locator('.class-btns button', { hasText: '10B2' }).evaluate(el => el.click());
 await page.waitForTimeout(400);
 
 // H3a: giữ nút + Đi muộn, bấm 1 lần + Nhuộm tóc -> cả hai đều giữ đúng số.

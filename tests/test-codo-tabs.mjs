@@ -37,6 +37,7 @@ async function rankTexts(page) {
   let body = await page.locator('body').innerText();
   ok(body.includes('Phiếu bị trả lại') && body.includes('Thiếu số liệu giờ Khá'), 'codo-tabs: đăng nhập vẫn thấy banner trả phiếu ở Nhập điểm');
   ok(body.includes('Trực lớp 10B5'), 'codo-tabs: chip header Trực lớp 10B5');
+  ok(body.includes('Bạn đang nhập cho lớp 10B5 (lớp bạn trực)'), 'codo-tabs: banner nhập lớp trực có "(lớp bạn trực)"');
   // Xếp hạng tuần (mặc định): tuần 5 chỉ 10B1 duyệt.
   await page.getByRole('button', { name: 'Xếp hạng', exact: true }).click();
   await page.waitForTimeout(500);
@@ -104,6 +105,15 @@ async function rankTexts(page) {
   ok(JSON.stringify(await tabNames(page)) === JSON.stringify(['Nhập điểm', 'Xếp hạng']), 'codo-tabs-guard: đổi sang cờ đỏ chỉ còn 2 tab');
   const body = await page.locator('body').innerText();
   ok(body.includes('Phiếu bị trả lại'), 'codo-tabs-guard: sau khi đổi vai trò, Nhập điểm mở ngay với banner trả phiếu (không trang trắng)');
+  await ctx.close();
+}
+
+// ---- D. Cờ đỏ chưa có roster: vào thẳng DutyPicker, không bị khóa vào lớp nào ----
+{
+  const { ctx, page } = await newPage(seedDuty, { role: 'codo', name: 'Đỗ Thuỳ Dương' });
+  const t = await page.locator('main').innerText();
+  ok(t.includes('Chọn lớp trực — Tuần 05'), 'codo-tabs: cờ đỏ chưa có roster thì vào thẳng DutyPicker (không tự khóa vào lớp nào)');
+  ok(t.includes('Tuần này bạn trực lớp nào?'), 'codo-tabs: DutyPicker hỏi lớp trực');
   await ctx.close();
 }
 

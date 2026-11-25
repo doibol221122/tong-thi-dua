@@ -217,9 +217,6 @@ export default function App() {
   const [profile, setProfile] = useState<Profile | null>(null);
   profileRef.current = profile;
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  // Bản mới nhất của profiles (kiểm tra lại khoá ngay trước khi lưu).
-  const profilesRef = useRef(profiles);
-  profilesRef.current = profiles;
   const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
   const [profileErr, setProfileErr] = useState('');
   const [remoteLoaded, setRemoteLoaded] = useState(!isSupabaseConfigured);
@@ -580,13 +577,13 @@ export default function App() {
   const week: Week | undefined = state.weeks.find(w => w.id === weekId) ?? state.weeks[state.weeks.length - 1];
   const effectiveWeekId = week?.id ?? '';
   const currentScore: Score | undefined = state.scores.find(s => s.weekId === effectiveWeekId && s.classId === classId);
-  // Phân công của cờ đỏ — lớp mình học (hồ sơ) khác lớp mình trực:
-  // - Ưu tiên phân công trực của tuần hiện tại (roster): Ban thi đua gán
-  //   theo lịch trực, lớp đó là lớp cờ đỏ phải nhập điểm.
-  // - Chưa có phân công trực thì dùng lớp/tuần gán trong hồ sơ Supabase
-  //   (lớp của chính cờ đỏ) hoặc phân công cũ (roster) theo họ tên.
-  // homeClassId = lớp của chính cờ đỏ (để hiển thị), source cho biết
-  // assignment này là lớp trực (roster) hay lớp của mình (profile).
+  // Phân công của cờ đỏ — lớp của cờ đỏ (hồ sơ, cố định) KHÁC lớp trực:
+  // lớp trong hồ sơ chỉ để biết "cờ đỏ này thuộc lớp nào" (vd Đỗ Thuỳ
+  // Dương — Cờ đỏ lớp 10B1) và để tính lớp trực theo lịch; nó KHÔNG phải
+  // lớp trực. Lớp trực chỉ lấy từ roster (Ban thi đua gán theo lịch trực
+  // hoặc "Gán cả tuần theo lịch trực"); chưa có roster thì cờ đỏ tự chọn
+  // lớp trực ở DutyPicker khi vào Nhập điểm.
+  // homeClassId = lớp của chính cờ đỏ (để hiển thị + gợi ý lịch trực).
   const assignment = useMemo(() => {
     if (session?.role !== 'codo') return undefined;
     const homeClassId = profile?.assigned_class_id ?? null;
@@ -594,9 +591,6 @@ export default function App() {
     if (curWeek) {
       const r = state.roster.find(x => x.name === session.name && x.active && x.weekId === curWeek.id);
       if (r) return { ...r, homeClassId, source: 'roster' as const };
-    }
-    if (profile?.assigned_class_id && profile?.assigned_week_id) {
-      return { id: 'profile', name: session.name, classId: profile.assigned_class_id, weekId: profile.assigned_week_id, active: true, homeClassId, source: 'profile' as const };
     }
     const r = state.roster.find(x => x.name === session.name && x.active);
     return r ? { ...r, homeClassId, source: 'roster' as const } : undefined;
@@ -649,12 +643,13 @@ export default function App() {
 
   const calc = useMemo(() => calcScore(draft ?? emptyDetails()), [draft]);
   const roleLabel = session?.role === 'admin' ? 'Ban thi đua' : session?.role === 'codo' ? 'Cờ đỏ' : 'Chỉ xem';
-  // P1-08: cờ đỏ khác đang giữ (lớp, tuần) này — qua roster hoặc qua hồ
-  // sơ. Người giữ chính mình thì không tính (findDutyHolder loại self).
+  // P1-08 (sửa 25/11): cờ đỏ khác đang giữ (lớp, tuần) này — CHỈ qua
+  // roster (lịch trực). Lớp trong hồ sơ chỉ là lớp của cờ đỏ, không giữ
+  // lớp trực. Người giữ chính mình thì không tính (findDutyHolder loại self).
   const dutyHolder = useMemo(() => {
     if (session?.role !== 'codo') return null;
-    return findDutyHolder(state.roster, profiles, classId, effectiveWeekId, { id: session.id, name: session.name });
-  }, [session, state.roster, profiles, classId, effectiveWeekId]);
+    return findDutyHolder(state.roster, classId, effectiveWeekId, { id: session.id, name: session.name });
+  }, [session, state.roster, classId, effectiveWeekId]);
   const canEdit = useMemo(() => {
     if (!session || session.role === 'viewer' || !draft) return false;
     if (week?.submittedAt) return false;
@@ -832,13 +827,13 @@ export default function App() {
     // P1-08: kiểm tra lại với dữ liệu MỚI NHẤT ngay trước khi lưu — phiếu
     // có thể đã được nộp/duyệt, tuần đã chốt, hoặc lớp đã có cờ đỏ khác
     // giữ trong lúc mình đang sửa (đồng bộ 45 giây chưa kịp về máy này).
-    // Dùng stateRef/profilesRef, không dùng bản render cũ (canEdit).
+    // Dùng stateRef, không dùng bản render cũ (canEdit).
     const latest = stateRef.current;
     const latestScore = latest.scores.find(s => s.weekId === week.id && s.classId === classId);
     if (latestScore && (latestScore.status === 'submitted' || latestScore.status === 'approved')) { setErrs(['Phiếu này vừa được nộp/duyệt (có thể từ máy khác) nên không ghi đè được. Tải lại trang để xem bản mới nhất nhé.']); return; }
     if (latest.weeks.find(w => w.id === week.id)?.submittedAt) { setErrs(['Tuần này vừa được chốt (có thể từ máy khác) nên không lưu được nữa.']); return; }
     if (session?.role === 'codo') {
-      const holder = findDutyHolder(latest.roster, profilesRef.current, classId, week.id, { id: session.id, name: session.name });
+      const holder = findDutyHolder(latest.roster, classId, week.id, { id: session.id, name: session.name });
       if (holder) { setErrs([`Lớp này đã có cờ đỏ ${holder.name} trực ${week.label} — phiếu đang do bạn ấy giữ, bạn không lưu đè được. Liên hệ Ban thi đua nếu trực thay nhé.`]); return; }
     }
     // Chốt khóa: phiếu đã nộp/duyệt hoặc tuần đã chốt thì không ai lưu đè
@@ -919,7 +914,7 @@ export default function App() {
     confirmDirtyAsync(() => {
     // P1-08: kiểm tra lại trước khi ghi phân công — lớp có thể vừa có cờ
     // đỏ khác giữ hoặc vừa có phiếu đã nộp/duyệt trong lúc mình đang chọn.
-    const pickHolder = findDutyHolder(stateRef.current.roster, profilesRef.current, classId, week.id, { id: session.id, name: session.name });
+    const pickHolder = findDutyHolder(stateRef.current.roster, classId, week.id, { id: session.id, name: session.name });
     if (pickHolder) { setErrs([`Lớp ${state.classes.find(c => c.id === classId)?.name ?? ''} đã có cờ đỏ ${pickHolder.name} trực ${week.label} — bạn liên hệ Ban thi đua nếu trực thay nhé.`]); setShowDutyPicker(false); return; }
     const pickScore = stateRef.current.scores.find(s => s.weekId === week.id && s.classId === classId);
     if (pickScore && (pickScore.status === 'submitted' || pickScore.status === 'approved')) { setErrs([`Lớp ${state.classes.find(c => c.id === classId)?.name ?? ''} đã có phiếu ${STATUS_LABEL[pickScore.status]} — phiếu đã khóa, không nhập lại được.`]); setShowDutyPicker(false); return; }
@@ -1153,7 +1148,7 @@ export default function App() {
           <div className="row"><button className="btn grey" type="button" onClick={handleSignOut}>Đăng xuất</button></div></div>
           {profile.status === 'pending' && (profile.role === 'codo' || profile.role === 'viewer') && (
             <div className="card"><h2>Hoàn thiện thông tin của bạn</h2>
-            <p>{profile.role === 'codo' ? 'Trong lúc chờ duyệt, bạn chọn sẵn lớp mình đang học để Ban thi đua khỏi phải hỏi lại nhé. Tuần trực thì Ban thi đua sẽ gán cho bạn khi duyệt.' : 'Trong lúc chờ duyệt, bạn chọn sẵn lớp mình chủ nhiệm để Ban thi đua khỏi phải hỏi lại nhé.'}</p>
+            <p>{profile.role === 'codo' ? 'Trong lúc chờ duyệt, bạn chọn sẵn lớp mình đang học để Ban thi đua khỏi phải hỏi lại nhé. Lớp trực thì theo lịch trực, hoặc bạn tự chọn khi vào nhập điểm.' : 'Trong lúc chờ duyệt, bạn chọn sẵn lớp mình chủ nhiệm để Ban thi đua khỏi phải hỏi lại nhé.'}</p>
             <label>{profile.role === 'codo' ? 'Lớp của bạn' : 'Lớp chủ nhiệm'}</label>
             {state.classes.length === 0 && <p>Danh sách lớp chưa tải được — chọn theo danh sách cố định bên dưới, hệ thống sẽ khớp lớp khi có dữ liệu.</p>}
             {profile.assigned_class_id && !assignedName && <p>Đã gán lớp cho bạn rồi (đang chờ tải danh sách lớp để hiện tên).</p>}
@@ -1244,17 +1239,18 @@ export default function App() {
           ) : (
             syncStatus === 'error' ? <span className="chip sync-err" title={syncErr}>Lỗi lưu trên máy này</span> : <span className="chip">Chỉ lưu trên máy này</span>
           )}
-          {session.role === 'codo' && assignment?.classId && <span className="chip hide-m">{assignment.source === 'roster' ? 'Trực lớp' : 'Lớp'} {state.classes.find(c => c.id === assignment.classId)?.name}</span>}
+          {session.role === 'codo' && assignment?.classId && <span className="chip hide-m">Trực lớp {state.classes.find(c => c.id === assignment.classId)?.name}</span>}
           <span className="chip rolebadge hide-m">{roleLabel}</span>
           <span className="chip hide-m"><span className="who">{session.name}</span></span>
           {showInstall && <button type="button" className="btn logout hide-m" onClick={installApp}>Cài app</button>}
           <button type="button" className="btn logout hide-m" onClick={handleSignOut}>{isSupabaseConfigured ? 'Đăng xuất' : 'Đổi vai trò'}</button>
-          <span className="chip header-summary">{week ? week.label : 'Chưa có tuần'}{session.role === 'codo' && assignment?.classId ? ` • ${assignment.source === 'roster' ? 'Trực lớp' : 'Lớp'} ${state.classes.find(c => c.id === assignment.classId)?.name}` : ''} • {roleLabel} • {session.name}</span>
+          <span className="chip header-summary">{week ? week.label : 'Chưa có tuần'}{session.role === 'codo' && assignment?.classId ? ` • Trực lớp ${state.classes.find(c => c.id === assignment.classId)?.name}` : ''} • {roleLabel}</span>
           <button type="button" className="btn logout menu-btn" aria-label="Mở menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(o => !o)}>⋮</button>
         </div>
         {menuOpen && (<>
           <div className="menu-backdrop" onClick={() => setMenuOpen(false)} />
           <div className="header-menu" role="menu">
+            <div className="menu-who"><b>{session.name}</b><span>{roleLabel}</span></div>
             {showInstall && <button type="button" onClick={() => { setMenuOpen(false); installApp(); }}>Cài app</button>}
             <button type="button" onClick={() => { setMenuOpen(false); handleSignOut(); }}>{isSupabaseConfigured ? 'Đăng xuất' : 'Đổi vai trò'}</button>
           </div>
@@ -1275,7 +1271,7 @@ export default function App() {
             </div>
           </div>
         )}
-        {session.role === 'codo' && assignment && <div className="warn">Bạn đang nhập cho lớp {state.classes.find(c => c.id === assignment.classId)?.name}{assignment.source === 'roster' ? ' (lớp bạn trực)' : ''} — {state.weeks.find(w => w.id === assignment.weekId)?.label}. Chỉ nhập và nộp được lớp này.</div>}
+        {session.role === 'codo' && assignment && <div className="warn">Bạn đang nhập cho lớp {state.classes.find(c => c.id === assignment.classId)?.name} (lớp bạn trực) — {state.weeks.find(w => w.id === assignment.weekId)?.label}. Chỉ nhập và nộp được lớp này.</div>}
         {currentScore?.status === 'returned' && <div className="err">Phiếu bị trả lại — lý do: {currentScore.returnReason}. Sửa lại rồi nộp lại nhé.</div>}
 
         {loadFailed ? (
@@ -1293,7 +1289,7 @@ export default function App() {
         {tab === 'nhap-diem' && (!week ? (
           <div className="card"><h2>Nhập điểm</h2><p>Chưa có tuần nào nên chưa nhập điểm được.</p>{session.role === 'admin' ? <><p>Tạo tuần đầu tiên để bắt đầu chấm thi đua nhé.</p><div className="row"><button className="btn" type="button" onClick={() => setTab('quan-ly')}>Sang tab Quản lý tạo tuần</button></div></> : <p>Nhờ Ban thi đua tạo tuần nhé.</p>}</div>
         ) : session.role === 'codo' && (!assignment || showDutyPicker) ? (
-          <DutyPicker state={state} week={week} homeName={profile?.assigned_class_id ? state.classes.find(c => c.id === profile.assigned_class_id)?.name : undefined} myName={session.name} initialClassId={assignment?.classId} profiles={profiles} onConfirm={confirmDutyPick} onCancel={assignment ? () => setShowDutyPicker(false) : undefined} />
+          <DutyPicker state={state} week={week} homeName={profile?.assigned_class_id ? state.classes.find(c => c.id === profile.assigned_class_id)?.name : undefined} myName={session.name} initialClassId={assignment?.classId} onConfirm={confirmDutyPick} onCancel={assignment ? () => setShowDutyPicker(false) : undefined} />
         ) : draft && (
           <>
             {session.role === 'codo' && assignment && (
@@ -1373,18 +1369,16 @@ export default function App() {
 // lịch trực từ lớp của chính cờ đỏ; chọn lớp khác vẫn được (vd trực thay).
 // Chặn nhập thay: lớp đã có cờ đỏ khác trực, hoặc phiếu đã nộp/duyệt thì
 // không chọn được nữa (phiếu đã duyệt là khóa hẳn, chỉ Ban thi đua mở lại).
-function DutyPicker({ state, week, homeName, myName, initialClassId, profiles, onConfirm, onCancel }: {
+function DutyPicker({ state, week, homeName, myName, initialClassId, onConfirm, onCancel }: {
   state: AppState; week: Week; homeName?: string; myName: string; initialClassId?: string;
-  profiles?: Profile[];
   onConfirm: (classId: string) => void; onCancel?: () => void;
 }) {
   const suggested = homeName ? dutyMonitored(homeName, weekNumberOf(week, state.weeks.indexOf(week) + 1)) : null;
   const [sel, setSel] = useState(initialClassId ?? state.classes.find(c => c.name === suggested)?.id ?? '');
   const existing = sel ? state.scores.find(s => s.weekId === week.id && s.classId === sel) : undefined;
   const otherDuty = sel ? state.roster.find(r => r.weekId === week.id && r.classId === sel && r.active && r.name !== myName) : undefined;
-  // P1-08: cờ đỏ khác giữ lớp này qua hồ sơ (không qua roster) cũng chặn.
-  const otherProfile = sel ? (profiles ?? []).find(p => p.role === 'codo' && p.status === 'active' && p.assigned_class_id === sel && p.assigned_week_id === week.id && p.full_name !== myName) : undefined;
-  const otherHolder = otherDuty ? otherDuty.name : otherProfile?.full_name;
+  // Chỉ roster giữ lớp trực (lớp trong hồ sơ chỉ là lớp của cờ đỏ).
+  const otherHolder = otherDuty?.name;
   const locked = existing && (existing.status === 'submitted' || existing.status === 'approved');
   return (
     <div className="card"><h2>Chọn lớp trực — {week.label}</h2>
@@ -1866,11 +1860,11 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
             {profiles.map(p => {
               const clsName = (p.role === 'codo' || p.role === 'viewer') ? state.classes.find(c => c.id === p.assigned_class_id)?.name : undefined;
               // Gợi ý lớp trực theo lịch cho tuần đã gán (hoặc tuần hiện tại).
-              const dutyWk = p.role === 'codo' && clsName ? (p.assigned_week_id ? state.weeks.find(w => w.id === p.assigned_week_id) : state.weeks[state.weeks.length - 1]) : undefined;
+              const dutyWk = p.role === 'codo' && clsName ? state.weeks[state.weeks.length - 1] : undefined;
               const dutyMon = dutyWk && clsName ? dutyMonitored(clsName, weekNumberOf(dutyWk, state.weeks.indexOf(dutyWk) + 1)) : null;
               return (
               <div key={p.id} className="card" style={{ marginTop: 10 }}>
-                <p><b>{p.full_name}</b>{clsName ? ` — Lớp ${clsName}` : p.role === 'codo' ? <span style={{ color: '#9ca3af' }}> — Chưa gán lớp</span> : ''} — {p.email} {session.id === p.id && <span className="badge">Tài khoản của bạn</span>}</p>
+                <p><b>{p.full_name}</b>{clsName ? (p.role === 'codo' ? ` — Cờ đỏ lớp ${clsName}` : ` — Lớp ${clsName}`) : p.role === 'codo' ? <span style={{ color: '#9ca3af' }}> — Chưa gán lớp</span> : ''} — {p.email} {session.id === p.id && <span className="badge">Tài khoản của bạn</span>}</p>
                 {dutyMon && dutyWk && <p>Theo lịch trực: {dutyWk.label}, cờ đỏ lớp {clsName} trực lớp <b>{dutyMon}</b>.</p>}
                 <div className="prof-grid">
                   <div><label>Vai trò</label><select value={p.role} disabled={session.id === p.id} onChange={e => onProfilePatch(p.id, { role: e.target.value as Role })}><option value="admin">Ban thi đua</option><option value="codo">Cờ đỏ trực</option><option value="viewer">Chỉ xem</option></select></div>
@@ -1879,10 +1873,10 @@ function ManageTab({ state, setState, session, onLog, onExportJson, onImportJson
                 {p.status === 'rejected' && p.reject_reason && <p>Lý do từ chối: {p.reject_reason}</p>}
                 {(p.role === 'codo' || p.role === 'viewer') && (
                   <div className="prof-grid">
-                    <div><label>{p.role === 'viewer' ? 'Lớp chủ nhiệm' : 'Gán lớp'}</label><select value={p.assigned_class_id ?? ''} onChange={e => onProfilePatch(p.id, { assigned_class_id: e.target.value || null })}><option value="">Chưa gán</option>{state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-                    {p.role === 'codo' && <div><label>Gán tuần</label><select value={p.assigned_week_id ?? ''} onChange={e => onProfilePatch(p.id, { assigned_week_id: e.target.value || null })}><option value="">Chưa gán</option>{state.weeks.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}</select></div>}
+                    <div><label>{p.role === 'viewer' ? 'Lớp chủ nhiệm' : 'Lớp của cờ đỏ'}</label><select value={p.assigned_class_id ?? ''} onChange={e => onProfilePatch(p.id, { assigned_class_id: e.target.value || null })}><option value="">Chưa gán</option>{state.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                   </div>
                 )}
+                {p.role === 'codo' && <p>Lớp mà tài khoản cờ đỏ này thuộc về, cố định (vd Đỗ Thuỳ Dương — Cờ đỏ lớp 10B1). Lớp trực tuần này gán theo lịch trực hoặc cờ đỏ tự chọn khi nhập điểm.</p>}
                 <div className="row" style={{ marginTop: 8 }}>
                   {p.status === 'pending' && <button className="btn green" type="button" onClick={() => onProfilePatch(p.id, { status: 'active' })}>Duyệt</button>}
                   {p.status === 'pending' && <button className="btn grey" type="button" onClick={() => { const reason = window.prompt(`Từ chối tài khoản ${p.full_name} (${p.email})? Ghi rõ lý do để người đó biết:`, ''); if (reason === null) return; onProfilePatch(p.id, { status: 'rejected', reject_reason: reason.trim() || 'Không đủ điều kiện.' }); }}>Từ chối</button>}

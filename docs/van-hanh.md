@@ -3,14 +3,14 @@
 > Dành cho Ban thi đua (người quản trị, không cần biết code). App chạy tại
 > https://tong-thi-dua.vercel.app — dữ liệu dùng chung lưu trên Supabase.
 >
-> **Lưu ý trạng thái (25/11/2026):** gói nâng cấp "pro-1" đã làm xong
-> trong code ngày 24/11/2026 nhưng **chưa deploy** — các mục đánh dấu ⏳
-> chỉ chạy được sau khi deploy bản mới (và, với sao lưu/từ chối, sau khi
-> chạy `migration-pro.sql` trong Supabase). Đợt "pro-2" ngày 25/11/2026
-> (cờ đỏ 2 tab, xếp hạng tháng, hộp thoại xác nhận trong app, gọn header
-> trên điện thoại — xem mục 9) cũng đã làm xong trong code và **chưa
-> deploy**. Cho tới lúc đó, làm theo bước "quy trình tay" ghi kèm. Mục
-> không đánh dấu là đã có sẵn trong app.
+> **Lưu ý trạng thái (25/11/2026):** gói nâng cấp "pro-1" đã deploy
+> ngày 24/11/2026 (code đã lên live); các mục cần chạy
+> `migration-pro.sql` trong Supabase (sao lưu/khôi phục, từ chối tài
+> khoản) vẫn chờ thầy chạy SQL mới dùng được. Đợt "pro-2" ngày
+> 25/11/2026 (cờ đỏ 2 tab, xếp hạng tháng, hộp thoại xác nhận trong
+> app, gọn header trên điện thoại, làm rõ "lớp của cờ đỏ" khác "lớp
+> trực" — xem mục 9 và 11) đã deploy đủ qua 2 lần đẩy trong ngày
+> 25/11. Mục không đánh dấu là đã có sẵn trong app.
 
 ## 1. Checklist Supabase Dashboard (kiểm tra sau mỗi lần deploy)
 
@@ -202,5 +202,19 @@ Quảng Phú".
 | D3 | ⏳ Chưa chốt cách tính điểm trung bình tháng khi lớp nộp thiếu tuần. |
 | D5 | ⏳ Chưa chốt trần điểm cộng/trừ đột xuất mỗi dòng (đề xuất: tối đa 20đ/dòng, bắt buộc ghi chú). |
 | D8 | ⏳ Chưa chốt: người xem (GVCN) có được xuất .docx phiếu của lớp khác không — hiện tại được. |
+
+## 11. Lớp của cờ đỏ ≠ lớp trực (làm rõ 25/11/2026)
+
+Hai khái niệm khác nhau, đừng nhầm:
+
+| Khái niệm | Nghĩa | Ở đâu |
+|---|---|---|
+| **Lớp của cờ đỏ** | Lớp mà tài khoản cờ đỏ đó thuộc về, **cố định**. Vd: Đỗ Thuỳ Dương — Cờ đỏ lớp 10B1. | Đăng ký ("Lớp của bạn"), Quản lý → Tài khoản ("Lớp của cờ đỏ"), màn chờ duyệt. |
+| **Lớp trực** | Lớp mà cờ đỏ đó **theo dõi trong tuần này**. Gán sau, theo lịch trực (roster) hoặc cờ đỏ tự chọn khi vào Nhập điểm. | Header ("Trực lớp 10B5"), banner Nhập điểm ("lớp bạn trực"), DutyPicker. |
+
+- Lớp của cờ đỏ dùng để **tính lớp trực theo lịch** (vd cờ đỏ lớp 10B1 trực lớp 10B5 tuần 5) và hiển thị trong Quản lý ("Theo lịch trực: Tuần 5, cờ đỏ lớp 10B1 trực lớp 10B5").
+- **Lớp trong hồ sơ không bao giờ tự thành lớp trực**: cờ đỏ chỉ có lớp của mình mà chưa có lịch trực thì vào Nhập điểm sẽ thấy DutyPicker để tự chọn lớp trực, không bị khóa vào lớp của mình.
+- Khóa "ai giữ lớp trực" (P1-08) chỉ tính theo roster (lịch trực), không tính theo hồ sơ.
+- Trường "Gán tuần" trong hồ sơ cờ đỏ đã bỏ (không còn tác dụng); tuần của lớp trực lấy theo tuần hiện tại.
 
 _Cập nhật lần cuối: 25/11/2026 (đợt pro-2: cờ đỏ 2 tab, xếp hạng tháng, hộp thoại xác nhận, gọn mobile; theo bản audit `tong-thi-dua-tests/audit-pro.md`)._

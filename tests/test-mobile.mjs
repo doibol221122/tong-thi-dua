@@ -28,13 +28,13 @@ const noOverflow = async (page, label) => {
 
 // ---- 390px: admin ----
 {
-  const { ctx, page } = await newPage(seed5, { role: 'admin', name: 'Ban thi đua' }, { width: 390, height: 844 });
+  const { ctx, page } = await newPage(seed5, { role: 'admin', name: 'Y Đôi Bol' }, { width: 390, height: 844 });
   // P2-06: header gọn.
   const hb = await page.locator('header.top').boundingBox();
   ok(!!hb && hb.height <= 120, 'mobile-390: header gọn ≤120px (thấy: ' + (hb ? Math.round(hb.height) : '?') + 'px)');
   ok(await page.locator('.header-summary').isVisible(), 'mobile-390: có dòng tóm tắt header');
   const sum = await page.locator('.header-summary').innerText();
-  ok(sum.includes('Tuần 05') && sum.includes('Ban thi đua'), 'mobile-390: tóm tắt header có tuần + vai trò + tên (thấy: ' + sum.trim() + ')');
+  ok(sum.includes('Tuần 05') && sum.includes('Ban thi đua') && !sum.includes('Y Đôi Bol'), 'mobile-390: tóm tắt header chỉ có tuần + vai trò, KHÔNG nhét tên (thấy: ' + sum.trim() + ')');
   ok((await page.locator('.userbox .chip.hide-m').first().isVisible()) === false, 'mobile-390: chip lẻ trong header bị ẩn, chỉ còn dòng tóm tắt');
   // P2-06: menu đăng xuất.
   ok(await page.locator('.menu-btn').isVisible(), 'mobile-390: có nút menu ⋮');
@@ -42,7 +42,11 @@ const noOverflow = async (page, label) => {
   await page.locator('.menu-btn').click();
   await page.waitForTimeout(300);
   ok((await page.locator('.header-menu').count()) === 1, 'mobile-390: bấm ⋮ mở menu');
-  ok((await page.locator('.header-menu').innerText()).includes('Đổi vai trò'), 'mobile-390: menu có mục Đổi vai trò (chế độ local; ở chế độ Supabase là Đăng xuất)');
+  const menuText = await page.locator('.header-menu').innerText();
+  ok(menuText.includes('Y Đôi Bol'), 'mobile-390: menu hiện đầy đủ tên Y Đôi Bol (không bị cắt)');
+  const whoColor = await page.evaluate(() => { const b = document.querySelector('.menu-who b'); return b ? getComputedStyle(b).color : 'none'; });
+  ok(whoColor !== 'rgb(255, 255, 255)' && whoColor !== 'none', 'mobile-390: tên trong menu có màu chữ tối, không bị chìm trên nền trắng (thấy: ' + whoColor + ')');
+  ok(menuText.includes('Đổi vai trò'), 'mobile-390: menu có mục Đổi vai trò (chế độ local; ở chế độ Supabase là Đăng xuất)');
   await page.locator('.menu-backdrop').click({ position: { x: 195, y: 700 } });
   await page.waitForTimeout(300);
   ok((await page.locator('.header-menu').count()) === 0, 'mobile-390: bấm nền ngoài đóng menu');

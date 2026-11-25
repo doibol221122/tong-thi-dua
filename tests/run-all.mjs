@@ -79,8 +79,14 @@ let code = await run('npx', ['esbuild', `${APP_DIR}/src/lib.ts`, '--bundle', '--
 if (code !== 0) process.exit(code);
 
 console.log('== 2. build app (local) ==');
-code = await run('npm', ['run', 'build'], { cwd: APP_DIR });
-if (code !== 0) process.exit(code);
+// Gỡ hẳn biến Supabase khỏi môi trường của build local: nếu shell chạy
+// test vô tình có VITE_SUPABASE_URL/ANON_KEY (rò từ lần build trước),
+// vite sẽ nhúng Supabase vào bundle và mọi suite local đều thấy màn
+// hình đăng nhập thay vì chọn vai trò (đã gặp 25/11/2026).
+const LOCAL_ENV = { ...process.env };
+delete LOCAL_ENV.VITE_SUPABASE_URL;
+delete LOCAL_ENV.VITE_SUPABASE_ANON_KEY;
+code = await run('npm', ['run', 'build'], { cwd: APP_DIR, env: LOCAL_ENV });
 
 console.log('== 3. preview 4177 (local) ==');
 let preview = startPreview();

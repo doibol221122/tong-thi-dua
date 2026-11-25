@@ -331,6 +331,9 @@ async function newPage(seed, session) {
   // Tổng hợp tháng: độ phủ nộp + lớp chưa có phiếu duyệt không có số hạng.
   await page.getByRole('button', { name: 'Tổng hợp', exact: true }).click();
   await page.waitForTimeout(400);
+  // Chép số liệu làm dirty -> chuyển tab mở hộp thoại xác nhận (P2-05).
+  await page.getByTestId('confirm-ok').click();
+  await page.waitForTimeout(300);
   await page.getByRole('button', { name: 'Theo tháng', exact: true }).click();
   await page.waitForTimeout(400);
   t = await page.locator('main').innerText();

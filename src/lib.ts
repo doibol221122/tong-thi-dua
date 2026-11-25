@@ -163,18 +163,17 @@ export function gateDuty(weekNo: number): { sang: string; chieu: string } {
 // Trả về null khi chưa ai giữ, hoặc người giữ chính là mình (self).
 // Dùng chung cho canEdit, DutyPicker và kiểm tra lại trước khi lưu
 // (P1-08: hai cờ đỏ cùng sửa một phiếu).
-export interface DutyHolderInfo { name: string; source: 'roster' | 'profile'; }
+export interface DutyHolderInfo { name: string; source: 'roster'; }
+// P1-08 (sửa 25/11): ai giữ (lớp, tuần) — CHỈ roster (lịch trực). Lớp trong
+// hồ sơ chỉ là lớp của cờ đỏ (cố định), không phải lớp trực nên không giữ lớp.
 export function findDutyHolder(
   roster: Roster[],
-  profiles: { id: string; full_name: string; role: string; status: string; assigned_class_id: string | null; assigned_week_id: string | null }[],
   classId: string, weekId: string,
   self: { id?: string; name: string } | null,
 ): DutyHolderInfo | null {
   if (!classId || !weekId) return null;
   const r = roster.find(x => x.active && x.weekId === weekId && x.classId === classId && x.name !== self?.name);
   if (r) return { name: r.name, source: 'roster' };
-  const p = profiles.find(x => x.role === 'codo' && x.status === 'active' && x.assigned_class_id === classId && x.assigned_week_id === weekId && x.id !== self?.id && x.full_name !== self?.name);
-  if (p) return { name: p.full_name, source: 'profile' };
   return null;
 }
 
