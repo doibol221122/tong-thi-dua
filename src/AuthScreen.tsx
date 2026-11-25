@@ -29,7 +29,7 @@ function friendlyError(message: string): string {
   return message || 'Có lỗi xảy ra, thử lại sau.';
 }
 
-export default function AuthScreen({ initialMode, onRecoveryDone }: { initialMode?: Mode; onRecoveryDone?: () => void }) {
+export default function AuthScreen({ initialMode, onRecoveryDone, onNotice }: { initialMode?: Mode; onRecoveryDone?: () => void; onNotice?: (text: string) => void }) {
   // Link mời GVCN (?lop=10B1&vai-tro=chi-xem&dang-ky=1) mở thẳng form
   // đăng ký với vai trò + lớp đã chọn sẵn.
   const [mode, setMode] = useState<Mode>(() => {
@@ -135,7 +135,11 @@ export default function AuthScreen({ initialMode, onRecoveryDone }: { initialMod
     // Xóa mã khôi phục khỏi địa chỉ để tải lại trang không mở lại form này.
     window.history.replaceState(null, '', window.location.pathname);
     setPassword(''); setPassword2('');
-    setMsg('Đã đặt mật khẩu mới. Bạn đăng nhập lại nhé.');
+    // Thông báo thành công phải đặt ở App (onNotice): sau signOut, App
+    // chuyển sang màn hình đăng nhập và AuthScreen bị remount, msg cục
+    // bộ của AuthScreen sẽ mất trước khi người dùng kịp thấy.
+    if (onNotice) onNotice('Đã đặt mật khẩu mới. Bạn đăng nhập lại nhé.');
+    else setMsg('Đã đặt mật khẩu mới. Bạn đăng nhập lại nhé.');
     setMode('login');
     onRecoveryDone?.();
   }

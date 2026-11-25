@@ -1181,7 +1181,7 @@ export default function App() {
       }
       return (
         <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header>
-        <main className="wrap"><AuthScreen initialMode={recoveryMode ? 'reset' : undefined} onRecoveryDone={() => setRecoveryMode(false)} />{profileErr && <div className="err">{profileErr}</div>}{authErr && <div className="err">{authErr}</div>}{msg && <div className="ok">{msg}</div>}</main><AppFooter /></div>
+        <main className="wrap"><AuthScreen initialMode={recoveryMode ? 'reset' : undefined} onRecoveryDone={() => setRecoveryMode(false)} onNotice={setMsg} />{profileErr && <div className="err">{profileErr}</div>}{authErr && <div className="err">{authErr}</div>}{msg && <div className="ok">{msg}</div>}</main><AppFooter /></div>
       );
     }
     // --- Chế độ cũ (chưa cấu hình Supabase): chọn vai trò, dữ liệu trên máy này ---
@@ -1207,7 +1207,7 @@ export default function App() {
   if (recoveryMode && isSupabaseConfigured) {
     return (
       <div><header className="top"><div className="top-inner"><div className="brand"><img src={LOGO_DATA_URI} alt="Logo Đoàn trường THPT Hùng Vương" className="logo" /><div className="brand-text"><p className="school">ĐOÀN TRƯỜNG THPT HÙNG VƯƠNG - QUẢNG PHÚ</p><h1>HỆ THỐNG THI ĐUA CỜ ĐỎ</h1><Clock /></div></div></div></header>
-      <main className="wrap"><AuthScreen initialMode="reset" onRecoveryDone={() => setRecoveryMode(false)} /></main><AppFooter /></div>
+      <main className="wrap"><AuthScreen initialMode="reset" onRecoveryDone={() => setRecoveryMode(false)} onNotice={setMsg} />{msg && <div className="ok">{msg}</div>}</main><AppFooter /></div>
     );
   }
 

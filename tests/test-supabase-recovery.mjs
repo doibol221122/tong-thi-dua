@@ -72,11 +72,9 @@ stub.seedProfile({ user: codo, role: 'codo', status: 'active', assigned_class_id
   t = await page.locator('main').innerText();
   ok(t.includes('Hai lần nhập mật khẩu chưa khớp.'), 'recovery-C: nhập lệch báo lỗi');
   ok(!stub.saw('PUT', '/auth/v1/user'), 'recovery-C: nhập lệch thì chưa gọi updateUser');
-  // Đặt đúng: updateUser + về đăng nhập.
-  // Lưu ý: thông báo "Đã đặt mật khẩu mới..." mà onReset() đặt vào msg của
-  // AuthScreen KHÔNG hiện ra — sau signOut, app render thoáng qua màn hình
-  // chính rồi mới về màn hình đăng nhập, AuthScreen bị remount và mất msg.
-  // Test chỉ khẳng định: về đúng màn hình đăng nhập, form reset đã hết.
+  // Đặt đúng: updateUser + về đăng nhập + hiện thông báo thành công.
+  // Thông báo đặt ở App qua onNotice nên không mất khi AuthScreen remount
+  // sau signOut (lỗi cũ: msg cục bộ của AuthScreen bị mất).
   await pw.first().fill('matkhaumoi1');
   await pw.nth(1).fill('matkhaumoi1');
   await page.getByRole('button', { name: 'Đặt mật khẩu mới', exact: true }).click();
@@ -86,7 +84,7 @@ stub.seedProfile({ user: codo, role: 'codo', status: 'active', assigned_class_id
   ok(stub.saw('POST', '/auth/v1/logout'), 'recovery-C: đổi xong đăng xuất khỏi phiên khôi phục (POST /auth/v1/logout)');
   t = await page.locator('main').innerText();
   ok(t.includes('Đăng nhập') && !t.includes('Đặt mật khẩu mới'), 'recovery-C: sau khi đặt xong về màn hình đăng nhập, form reset đã hết');
-  ok(!(await page.locator('.ok').allInnerTexts()).join(' ').includes('Đã đặt mật khẩu mới'), 'recovery-C: (ghi nhận) thông báo xác nhận sau reset không hiện — AuthScreen remount làm mất msg');
+  ok(t.includes('Đã đặt mật khẩu mới. Bạn đăng nhập lại nhé.'), 'recovery-C: hiện thông báo "Đã đặt mật khẩu mới" sau khi đặt xong');
   // Đăng nhập bằng mật khẩu CŨ -> sai; bằng mật khẩu MỚI -> vào được.
   await page.locator('input[type="email"]').fill('codo@example.com');
   await page.locator('input[type="password"]').fill('matkhaucu1');
