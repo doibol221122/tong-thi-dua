@@ -43,7 +43,7 @@ export async function POST(request) {
   // Model mặc định theo tài liệu Gemini hiện hành cho dự án mới; nếu
   // model đầu không dùng được (404/không có quyền), máy chủ tự thử
   // model tiếp theo và báo lại model nào đã trả lời.
-  const models = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'].filter(Boolean))];
+  const models = [...new Set([process.env.GEMINI_MODEL, 'gemini-flash-lite-latest', 'gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'].filter(Boolean))];
 
   let body;
   try { body = await request.json(); } catch { return json(400, { error: 'Dữ liệu gửi lên không đúng định dạng.' }); }
