@@ -40,7 +40,10 @@ export async function POST(request) {
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return json(501, { error: 'Chưa đặt khóa AI trên máy chủ (GEMINI_API_KEY).' });
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  // Model mặc định theo tài liệu Gemini hiện hành cho dự án mới; nếu
+  // model đầu không dùng được (404/không có quyền), máy chủ tự thử
+  // model tiếp theo và báo lại model nào đã trả lời.
+  const models = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'].filter(Boolean))];
 
   let body;
   try { body = await request.json(); } catch { return json(400, { error: 'Dữ liệu gửi lên không đúng định dạng.' }); }
@@ -59,33 +62,38 @@ export async function POST(request) {
     'Trả về đúng JSON dạng {"pros":"...","cons":"..."} không kèm chữ nào khác.',
   ].join('\n');
 
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 25000);
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 600, responseMimeType: 'application/json' },
-      }),
-      signal: ctrl.signal,
-    });
-    if (!res.ok) return json(502, { error: 'AI chưa trả lời được (mã ' + res.status + '). Thử lại sau nhé.' });
-    const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
-    let parsed = null;
-    try { parsed = JSON.parse(text); } catch {
-      const m = text.match(/\{[\s\S]*\}/);
-      if (m) { try { parsed = JSON.parse(m[0]); } catch { /* bỏ qua */ } }
+  let lastStatus = 0;
+  for (const model of models) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 25000);
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.4, maxOutputTokens: 600, responseMimeType: 'application/json' },
+        }),
+        signal: ctrl.signal,
+      });
+      lastStatus = res.status;
+      if (!res.ok) continue; // model này không dùng được, thử model tiếp theo
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+      let parsed = null;
+      try { parsed = JSON.parse(text); } catch {
+        const m = text.match(/\{[\s\S]*\}/);
+        if (m) { try { parsed = JSON.parse(m[0]); } catch { /* bỏ qua */ } }
+      }
+      const pros = String(parsed?.pros || '').trim();
+      const cons = String(parsed?.cons || '').trim();
+      if (!pros && !cons) continue;
+      return json(200, { pros, cons, model });
+    } catch {
+      lastStatus = 0;
+    } finally {
+      clearTimeout(timer);
     }
-    const pros = String(parsed?.pros || '').trim();
-    const cons = String(parsed?.cons || '').trim();
-    if (!pros && !cons) return json(502, { error: 'AI trả về nội dung chưa dùng được. Thử lại nhé.' });
-    return json(200, { pros, cons });
-  } catch {
-    return json(502, { error: 'Không gọi được AI lúc này. App vẫn dùng nhận xét tự soạn từ số liệu.' });
-  } finally {
-    clearTimeout(timer);
   }
+  return json(502, { error: 'AI chưa trả lời được' + (lastStatus ? ' (mã ' + lastStatus + ')' : '') + '. App vẫn dùng nhận xét tự soạn từ số liệu.' });
 }

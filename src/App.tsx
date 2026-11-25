@@ -1496,11 +1496,11 @@ function GeneralCommentCard({ state, weekId, weekLabel, isAdmin, onSave }: { sta
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ weekLabel, facts: commentFacts(state, weekId) }),
       });
-      const data = await res.json().catch(() => ({})) as { pros?: string; cons?: string; error?: string };
+      const data = await res.json().catch(() => ({})) as { pros?: string; cons?: string; error?: string; model?: string };
       if (!res.ok) { setNote(data.error || 'AI chưa trả lời được. App vẫn giữ nhận xét tự soạn từ số liệu.'); return; }
       if (data.pros) setPros(data.pros);
       if (data.cons) setCons(data.cons);
-      setNote('AI đã soạn nhận xét từ số liệu tuần. Thầy sửa lại nếu cần rồi bấm Lưu.');
+      setNote('AI đã soạn nhận xét từ số liệu tuần' + (data.model ? ` (model ${data.model})` : '') + '. Thầy sửa lại nếu cần rồi bấm Lưu.');
     } catch {
       setNote('Không gọi được AI lúc này. App vẫn giữ nhận xét tự soạn từ số liệu.');
     } finally { setAiBusy(false); }

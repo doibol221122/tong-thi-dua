@@ -25,7 +25,7 @@ await page.route('**/api/ai-comment', async route => {
   lastAuth = route.request().headers()['authorization'] || '';
   lastBody = route.request().postDataJSON();
   if (aiMode === 'ok') {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ pros: 'AI: các lớp dẫn đầu giữ phong độ tốt.', cons: 'AI: vẫn còn lớp chưa hoàn thành phiếu.' }) });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ pros: 'AI: các lớp dẫn đầu giữ phong độ tốt.', cons: 'AI: vẫn còn lớp chưa hoàn thành phiếu.', model: 'gemini-3.5-flash-lite' }) });
   } else {
     await route.fulfill({ status: 501, contentType: 'application/json', body: JSON.stringify({ error: 'Chưa đặt khóa AI trên máy chủ (GEMINI_API_KEY).' }) });
   }
@@ -43,7 +43,7 @@ const cons = await card.locator('textarea[aria-label="Nhận xét chung — Như
 ok(pros.includes('AI: các lớp dẫn đầu') && cons.includes('AI: vẫn còn lớp'), 'ai: AI trả về thì điền vào hai ô Ưu điểm/Nhược điểm');
 ok(lastAuth.startsWith('Bearer '), 'ai: app gửi mã phiên đăng nhập cho máy chủ kiểm tra vai trò');
 ok(!!lastBody && String(lastBody.facts || '').includes('Bảng điểm:'), 'ai: app gửi số liệu tổng hợp của tuần (không gửi tên học sinh)');
-ok((await card.innerText()).includes('AI đã soạn nhận xét'), 'ai: có báo AI đã soạn xong');
+ok((await card.innerText()).includes('AI đã soạn nhận xét') && (await card.innerText()).includes('gemini-3.5-flash-lite'), 'ai: có báo AI đã soạn xong kèm tên model đã trả lời');
 
 aiMode = 'nokey';
 await card.getByRole('button', { name: 'Nhờ AI viết nhận xét' }).click();
