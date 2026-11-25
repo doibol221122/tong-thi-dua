@@ -26,6 +26,9 @@ jobs:
       - run: npm --prefix tests ci
       # Trình duyệt cho Playwright (chromium + headless shell). Suite tự
       # tìm binary ở ~/.cache/ms-playwright/chromium_headless_shell-*/...;
-      # đặt CHROMIUM_EXE nếu đường dẫn khác.
-      - run: npx -y playwright@1.65.1 install --with-deps chromium
+      # đặt CHROMIUM_EXE nếu đường dẫn khác. BẮT BUỘC cài cả shell:
+      # lệnh `install chromium` chỉ tải chromium đầy đủ, các suite
+      # dùng executablePath trỏ thẳng vào headless shell nên thiếu
+      # là fail ngay ở bước test (CI lần đầu 25/11 fail đúng chỗ này).
+      - run: npx -y playwright@1.65.1 install --with-deps chromium chromium-headless-shell
       - run: npm --prefix tests test
