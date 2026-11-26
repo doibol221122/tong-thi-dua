@@ -1,5 +1,5 @@
 // Unit: tên HS theo từng mục vi phạm + vắng tự tính + khóa phiếu.
-import { calcScore, sectionSums, validateDetails, validateImportedState, hocTapLines, neNepLines, absentTotalOf, isNoAbsentLate, emptyDetails, emptyState, violLine, compareAvg, classAvg, classCoverage, legacyMixedClusters, dropLegacyWhenSplit, safeFilename, findDutyHolder } from './lib.mjs';
+import { calcScore, sectionSums, validateDetails, validateImportedState, hocTapLines, neNepLines, absentTotalOf, isNoAbsentLate, emptyDetails, emptyState, violLine, compareAvg, classAvg, classCoverage, legacyMixedClusters, dropLegacyWhenSplit, safeFilename, findDutyHolder, autoGeneralComment, commentFacts, classFacts } from './lib.mjs';
 
 const fails = [];
 function ok(c, label) { console.log((c ? 'OK   ' : 'FAIL ') + label); if (!c) fails.push(label); }
@@ -226,6 +226,32 @@ ok(dropLegacyWhenSplit(d).late === 2, 'chỉ có trường gộp -> giữ nguyê
 ok(safeFilename('TONG_HOP_THI_DUA_Tuần 05_20261124-1635.docx') === 'TONG_HOP_THI_DUA_Tuan_05_20261124-1635.docx', 'tên file bỏ dấu: Tuần -> Tuan');
 ok(safeFilename('Tháng 9') === 'Thang_9', 'tên file bỏ dấu: Tháng 9 -> Thang_9');
 ok(safeFilename('PHIEU_10B1_Tuần 05') === 'PHIEU_10B1_Tuan_05', 'tên file phiếu lớp bỏ dấu');
+
+// AI: ghi chú tự do có tên HS không được lọt vào dữ liệu gửi AI.
+{
+  const st = emptyState();
+  st.weeks = [{ id: 'w1', label: 'Tuần 01', dateRange: '' }];
+  st.classes = [{ id: 'c0', name: '10B1' }, { id: 'c1', name: '10B2' }, { id: 'c2', name: '10B3' }];
+  const d0 = { ...emptyDetails(), hoursTot: 20, hoursKha: 2, goodHigh: 5, names: 'Minh', violNames: { lateLate: 'Lan' }, lateLate: 1, extraPlus: [{ points: 5, note: 'Minh ủng hộ phong trào' }], extraMinus: [{ points: 3, note: 'Lan làm hỏng tài sản' }] };
+  const d1 = { ...emptyDetails(), hoursTot: 18, hoursKha: 3, goodHigh: 4 };
+  const d2 = { ...emptyDetails(), hoursTot: 25, allGood: true, goodHigh: 20 };
+  st.scores = [
+    { id: 's0', weekId: 'w1', classId: 'c0', details: d0, status: 'approved' },
+    { id: 's1', weekId: 'w1', classId: 'c1', details: d1, status: 'approved' },
+    { id: 's2', weekId: 'w1', classId: 'c2', details: d2, status: 'submitted' },
+  ];
+  const facts = commentFacts(st, 'w1');
+  ok(!facts.includes('Minh') && !facts.includes('Lan') && !facts.includes('ủng hộ phong trào') && !facts.includes('làm hỏng tài sản'), 'AI tuần: không lọt tên HS/ghi chú tự do');
+  ok(facts.includes('Cộng/trừ khác: cộng 1 dòng (+5đ), trừ 1 dòng (-3đ)'), 'AI tuần: cộng/trừ khác chỉ còn số dòng và điểm');
+  ok(facts.includes('Chưa có lớp đạt 100% giờ học tốt'), 'AI tuần: ca không lớp 100% được ghi rõ');
+  ok(facts.includes('Số lớp chưa có phiếu đã duyệt: 1') && !facts.includes('10B3'), 'AI tuần: lớp chưa duyệt không vào bảng điểm');
+  const auto = autoGeneralComment(st, 'w1');
+  ok(auto.pros.includes('Các lớp dẫn đầu tuần') && !auto.pros.includes('đạt 100% giờ học tốt'), 'dự phòng: không lớp 100% thì nêu lớp dẫn đầu');
+  ok(auto.cons.includes('Còn 1 lớp chưa có phiếu đã duyệt'), 'dự phòng: nêu đúng số lớp chưa duyệt');
+  const one = classFacts(st, st.scores[0]);
+  ok(!one.includes('Minh') && !one.includes('Lan') && !one.includes('ủng hộ phong trào') && !one.includes('làm hỏng tài sản'), 'AI phiếu: không lọt tên HS/ghi chú tự do');
+  ok(one.includes('Cộng khác: +5đ') && one.includes('Trừ khác: -3đ'), 'AI phiếu: cộng/trừ khác chỉ còn điểm');
+}
 
 // Điểm không đổi khi vắng thay đổi cách tính (seed w5 c0).
 import { readFileSync } from 'fs';

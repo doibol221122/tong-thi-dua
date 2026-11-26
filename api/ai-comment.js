@@ -66,8 +66,8 @@ export async function POST(request) {
     'Dưới đây là số liệu tổng hợp của tuần (điểm, giờ học, điểm tốt, phong trào, vắng học, lỗi vi phạm, tiến bộ/tụt điểm theo lớp; không có tên học sinh):',
     facts,
     'Hãy soạn phần Nhận xét chung tổng thể của tuần gồm Ưu điểm và Nhược điểm, đúng văn phong bản Tổng hợp thi đua tuần của trường, chỉ dựa trên số liệu trên, không bịa thêm số liệu hay tên lớp ngoài dữ liệu.',
-    'Ưu điểm (2-3 câu): mở đầu theo mẫu "Các lớp 10B1, 10B2 đạt 100% giờ học tốt." rồi nêu thêm điểm tốt, phong trào hoặc lớp tiến bộ nổi bật nếu có.',
-    'Nhược điểm (2-3 câu): mở đầu theo mẫu "Vẫn còn một số học sinh vi phạm nội quy đi muộn, mang đồ ăn vào lớp." rồi nêu thêm giờ học chưa tốt, lớp giảm điểm hoặc lớp chưa hoàn thành phiếu nếu có. Không nêu tên học sinh.',
+    'Ưu điểm (2-3 câu): nếu dữ liệu có dòng "Lớp đạt 100% giờ học tốt" thì mở đầu bằng "Các lớp [chỉ liệt kê đúng các lớp trong dòng đó] đạt 100% giờ học tốt." Nếu dữ liệu ghi "Chưa có lớp đạt 100% giờ học tốt" thì tuyệt đối không nói lớp nào đạt 100%; hãy mở đầu bằng các lớp dẫn đầu trong Bảng điểm. Không dùng tên lớp mẫu ngoài dữ liệu.',
+    'Nhược điểm (2-3 câu): mở đầu theo mẫu "Vẫn còn một số học sinh vi phạm nội quy [chỉ nêu lỗi có trong dữ liệu]." Nếu dữ liệu không ghi lỗi vi phạm thì không bịa lỗi. Nếu số lớp chưa có phiếu đã duyệt lớn hơn 0, nêu đúng số đó; không xếp hạng, không nêu điểm hay loại của lớp chưa duyệt. Không nêu tên học sinh.',
     'Trả về đúng JSON dạng {"pros":"...","cons":"..."} không kèm chữ nào khác.',
   ].join('\n');
 

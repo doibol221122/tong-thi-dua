@@ -8,6 +8,9 @@ import { EXE, SbStub, newSbPage, waitText } from './sb-stub.mjs';
 const fails = [];
 function ok(c, label) { console.log((c ? 'OK   ' : 'FAIL ') + label); if (!c) fails.push(label); }
 const seed5 = JSON.parse(readFileSync('./seed5.json', 'utf-8'));
+const aiServer = readFileSync('../api/ai-comment.js', 'utf-8');
+ok(!aiServer.includes('Các lớp 10B1, 10B2 đạt 100% giờ học tốt'), 'ai: prompt không còn tên lớp mẫu');
+ok(aiServer.includes('Chưa có lớp đạt 100% giờ học tốt') && aiServer.includes('không xếp hạng'), 'ai: prompt chặn bịa lớp 100% và xếp hạng lớp chưa duyệt');
 const browser = await chromium.launch({ executablePath: EXE });
 
 const stub = new SbStub(seed5);
