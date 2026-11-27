@@ -25,6 +25,7 @@ function friendlyError(message: string): string {
   if (/password should be at least/i.test(message)) return 'Mật khẩu phải từ 6 ký tự trở lên.';
   if (/invalid email/i.test(message)) return 'Email chưa đúng định dạng.';
   if (/email.*confirm/i.test(message)) return 'Tài khoản cần xác nhận email trước. Email có thể đến chậm vài phút; bạn kiểm tra cả Spam/Quảng cáo rồi bấm link xác nhận nhé.';
+  if (/email rate limit exceeded|over_email_send_rate_limit/i.test(message)) return 'Hệ thống email đang quá giới hạn gửi trong giờ này. Bạn đừng đăng ký/gửi lại liên tục; chờ ít phút rồi thử lại nhé.';
   if (/too many requests|rate limit/i.test(message)) return 'Bạn thao tác quá nhanh, chờ một lát rồi thử lại.';
   return message || 'Có lỗi xảy ra, thử lại sau.';
 }
@@ -94,7 +95,7 @@ export default function AuthScreen({ initialMode, onRecoveryDone, onNotice }: { 
       options: { data: { full_name: fullName.trim(), requested_role: requestedRole, requested_class: requestedClass }, emailRedirectTo: window.location.origin },
     });
     setBusy(false);
-    if (error) { setErr(friendlyError(error.message)); return; }
+    if (error) { if (/email rate limit exceeded|over_email_send_rate_limit/i.test(error.message)) { setMode('login'); setResendCooldown(600); } setErr(friendlyError(error.message)); return; }
     if (!data.session) {
       setMode('login'); setResendCooldown(60);
       setMsg('Đã tạo tài khoản. Email xác nhận có thể đến chậm vài phút; bạn kiểm tra cả Spam/Quảng cáo, bấm link xác nhận rồi quay lại đăng nhập nhé. Tài khoản sẽ ở trạng thái chờ Ban thi đua duyệt.');
@@ -114,7 +115,7 @@ export default function AuthScreen({ initialMode, onRecoveryDone, onNotice }: { 
       options: { emailRedirectTo: window.location.origin },
     });
     setBusy(false);
-    if (error) { if (/too many requests|rate limit/i.test(error.message)) setResendCooldown(60); setErr(friendlyError(error.message)); return; }
+    if (error) { if (/email rate limit exceeded|over_email_send_rate_limit/i.test(error.message)) setResendCooldown(600); else if (/too many requests|rate limit/i.test(error.message)) setResendCooldown(60); setErr(friendlyError(error.message)); return; }
     setResendCooldown(60);
     setMsg('Đã gửi lại email xác nhận. Email có thể đến chậm vài phút; bạn kiểm tra cả Spam/Quảng cáo, bấm link xác nhận rồi quay lại đăng nhập nhé.');
   }
