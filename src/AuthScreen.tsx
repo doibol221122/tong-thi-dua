@@ -24,7 +24,7 @@ function friendlyError(message: string): string {
   if (/user already registered|already registered/i.test(message)) return 'Email này đã có tài khoản rồi. Bạn đăng nhập nhé, hoặc bấm "Quên mật khẩu" để đặt lại.';
   if (/password should be at least/i.test(message)) return 'Mật khẩu phải từ 6 ký tự trở lên.';
   if (/invalid email/i.test(message)) return 'Email chưa đúng định dạng.';
-  if (/email.*confirm/i.test(message)) return 'Tài khoản cần xác nhận email trước. Bạn mở hộp thư và bấm link xác nhận nhé.';
+  if (/email.*confirm/i.test(message)) return 'Tài khoản cần xác nhận email trước. Email có thể đến chậm vài phút; bạn kiểm tra cả Spam/Quảng cáo rồi bấm link xác nhận nhé.';
   if (/too many requests|rate limit/i.test(message)) return 'Bạn thao tác quá nhanh, chờ một lát rồi thử lại.';
   return message || 'Có lỗi xảy ra, thử lại sau.';
 }
@@ -52,10 +52,17 @@ export default function AuthScreen({ initialMode, onRecoveryDone, onNotice }: { 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   // Lắng nghe sự kiện khôi phục mật khẩu của Supabase (khi link trong
   // email được bấm): chuyển sang form đặt mật khẩu mới ngay cả khi
   // phiên khôi phục đã tự tạo trong App.
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = window.setTimeout(() => setResendCooldown(v => Math.max(0, v - 1)), 1000);
+    return () => window.clearTimeout(t);
+  }, [resendCooldown]);
+
   useEffect(() => {
     if (!supabase) return;
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {
@@ -89,7 +96,8 @@ export default function AuthScreen({ initialMode, onRecoveryDone, onNotice }: { 
     setBusy(false);
     if (error) { setErr(friendlyError(error.message)); return; }
     if (!data.session) {
-      setMsg('Đã tạo tài khoản. Bạn mở email vừa đăng ký, bấm link xác nhận, rồi quay lại đăng nhập nhé. Tài khoản sẽ ở trạng thái chờ Ban thi đua duyệt.');
+      setMode('login'); setResendCooldown(60);
+      setMsg('Đã tạo tài khoản. Email xác nhận có thể đến chậm vài phút; bạn kiểm tra cả Spam/Quảng cáo, bấm link xác nhận rồi quay lại đăng nhập nhé. Tài khoản sẽ ở trạng thái chờ Ban thi đua duyệt.');
     } else {
       setMsg('Đã tạo tài khoản. Tài khoản đang chờ Ban thi đua duyệt.');
     }
@@ -98,6 +106,7 @@ export default function AuthScreen({ initialMode, onRecoveryDone, onNotice }: { 
   async function onResend() {
     if (!supabase) return;
     if (!email.trim()) { setErr('Bạn nhập email đã đăng ký để gửi lại email xác nhận.'); return; }
+    if (resendCooldown > 0) { setErr(`Email vừa được gửi, bạn chờ ${resendCooldown} giây rồi gửi lại nhé.`); return; }
     setBusy(true); setErr(''); setMsg('');
     const { error } = await supabase.auth.resend({
       type: 'signup',
@@ -105,8 +114,9 @@ export default function AuthScreen({ initialMode, onRecoveryDone, onNotice }: { 
       options: { emailRedirectTo: window.location.origin },
     });
     setBusy(false);
-    if (error) { setErr(friendlyError(error.message)); return; }
-    setMsg('Đã gửi lại email xác nhận. Bạn mở email, bấm link xác nhận rồi quay lại đăng nhập nhé.');
+    if (error) { if (/too many requests|rate limit/i.test(error.message)) setResendCooldown(60); setErr(friendlyError(error.message)); return; }
+    setResendCooldown(60);
+    setMsg('Đã gửi lại email xác nhận. Email có thể đến chậm vài phút; bạn kiểm tra cả Spam/Quảng cáo, bấm link xác nhận rồi quay lại đăng nhập nhé.');
   }
 
   async function onForgot() {
@@ -206,7 +216,7 @@ export default function AuthScreen({ initialMode, onRecoveryDone, onNotice }: { 
           {mode !== 'login' && <button className="btn ghost" type="button" onClick={() => { setMode('login'); setErr(''); setMsg(''); }}>Đã có tài khoản — Đăng nhập</button>}
           {mode !== 'register' && <button className="btn ghost" type="button" onClick={() => { setMode('register'); setErr(''); setMsg(''); }}>Chưa có tài khoản — Đăng ký</button>}
           {mode !== 'forgot' && <button className="btn ghost" type="button" onClick={() => { setMode('forgot'); setErr(''); setMsg(''); }}>Quên mật khẩu</button>}
-          {mode === 'login' && <button className="btn ghost" type="button" disabled={busy} onClick={onResend}>{busy ? 'Đang gửi…' : 'Chưa nhận được email? Gửi lại email xác nhận'}</button>}
+          {mode === 'login' && <button className="btn ghost" type="button" disabled={busy || resendCooldown > 0} onClick={onResend}>{busy ? 'Đang gửi…' : resendCooldown > 0 ? `Gửi lại email sau ${resendCooldown} giây` : 'Chưa nhận được email? Gửi lại email xác nhận'}</button>}
         </div>
       )}
     </div>
