@@ -14,6 +14,7 @@ interface BeforeInstallPromptEvent extends Event {
 
 const LS_KEY = 'tong-thi-dua-v1';
 const LS_SESSION = 'tong-thi-dua-session-v1';
+// Ban thi dua: muc phieu co do da nhap de quan li va sua diem.
 const STATUS_LABEL: Record<string, string> = { draft: 'Nháp', submitted: 'Đã gửi', approved: 'Đã duyệt', returned: 'Bị trả lại' };
 
 // Lỗi đọc dữ liệu local lần khởi động (để hiện ở đầu app, không lặng lẽ mất dữ liệu).
