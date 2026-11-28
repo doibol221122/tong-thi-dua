@@ -1008,14 +1008,14 @@ export default function App() {
   }
   function returnScore() {
     if (!currentScore || session?.role !== 'admin' || !returnReason.trim()) { setErrs(['Trả lại phiếu phải ghi rõ lý do.']); return; }
-    if (currentScore.status !== 'submitted') { setErrs(['Chỉ trả lại được phiếu đang ở trạng thái Chờ duyệt.']); return; }
+    if (currentScore.status !== 'submitted' && currentScore.status !== 'approved') { setErrs(['Chỉ trả lại được phiếu đã gửi.']); return; }
     const clsName = state.classes.find(c => c.id === currentScore.classId)?.name ?? '';
     askConfirm({
       title: `Trả lại phiếu lớp ${clsName}?`,
       body: `Lý do: “${returnReason.trim()}”. Cờ đỏ sẽ sửa lại rồi nộp lại.`,
       confirmLabel: 'Trả lại phiếu',
       onConfirm: () => {
-        update(prev => ({ ...prev, scores: prev.scores.map(s => s.id === currentScore.id ? { ...s, status: 'returned', returnReason: returnReason.trim() } : s) }), 'Trả lại phiếu', `${clsName} — ${week?.label} — Lý do: ${returnReason.trim()}`, currentScore.id);
+        update(prev => ({ ...prev, scores: prev.scores.map(s => s.id === currentScore.id ? { ...s, status: 'returned', returnReason: returnReason.trim(), approvedBy: undefined, approvedAt: undefined } : s), weeks: week?.submittedAt ? prev.weeks.map(w => w.id === week.id ? { ...w, submittedAt: null, submittedBy: null } : w) : prev.weeks }), 'Trả lại phiếu', `${clsName} — ${week?.label} — Lý do: ${returnReason.trim()}`, currentScore.id);
         setMsg(`Đã trả lại phiếu lớp ${clsName}.`); setReturnReason(''); setDraft(currentScore.details);
       },
     });
@@ -1069,6 +1069,20 @@ export default function App() {
       onConfirm: () => {
         update(prev => ({ ...prev, weeks: prev.weeks.map(w => w.id === week.id ? { ...w, submittedAt: null, submittedBy: null } : w) }), 'Mở lại tuần', week.label);
         setMsg(`Đã mở lại ${week.label}.`);
+      },
+    });
+  }
+  function deleteScore() {
+    if (!currentScore || session?.role !== 'admin') return;
+    const clsName = state.classes.find(c => c.id === currentScore.classId)?.name ?? '';
+    askConfirm({
+      title: `Xóa phiếu lớp ${clsName}?`,
+      body: 'Phiếu sẽ bị xóa khỏi hệ thống. Cờ đỏ cần nhập lại từ đầu nếu lớp này vẫn phải có phiếu.',
+      confirmLabel: 'Xóa phiếu',
+      danger: true,
+      onConfirm: () => {
+        update(prev => ({ ...prev, scores: prev.scores.filter(s => s.id !== currentScore.id) }), 'Xóa phiếu', `${clsName} — ${week?.label}`, currentScore.id);
+        setMsg(`Đã xóa phiếu lớp ${clsName}.`); setDraft(emptyDetails()); setDirty(false); setReturnReason('');
       },
     });
   }
@@ -1418,7 +1432,7 @@ export default function App() {
             {session.role === 'admin' && pendingScores.length > 0 && (
               <div className="row" style={{ marginBottom: 10 }}><button className="btn green" type="button" onClick={approveAllScores}>Duyệt tất cả {pendingScores.length} phiếu đã nộp</button><span>Còn {pendingScores.length} phiếu chờ duyệt trong {week.label}.</span></div>
             )}
-            <ScoreForm state={state} week={week} draft={draft} calc={calc} canEdit={canEdit} lockHolder={dutyHolder?.name ?? null} classId={classId} setClassId={switchClass} weekId={effectiveWeekId} setWeekId={(id: string) => confirmDirtyAsync(() => setWeekId(id))} search={search} setSearch={setSearch} classes={visibleClasses} currentScore={currentScore} setD={setD} dirty={dirty} onSaveDraft={() => saveScore('draft')} onSubmit={() => saveScore('submitted')} onApprove={approveScore} onReturn={returnScore} returnReason={returnReason} setReturnReason={setReturnReason} onReopen={reopenScore} onCopyPrev={copyPrevWeek} onShowPhieu={() => setShowPhieu(true)} showPhieu={showPhieu} onExportClass={doExportDocxClass} sessionRole={session.role} />
+            <ScoreForm state={state} week={week} draft={draft} calc={calc} canEdit={canEdit} lockHolder={dutyHolder?.name ?? null} classId={classId} setClassId={switchClass} weekId={effectiveWeekId} setWeekId={(id: string) => confirmDirtyAsync(() => setWeekId(id))} search={search} setSearch={setSearch} classes={visibleClasses} currentScore={currentScore} setD={setD} dirty={dirty} onSaveDraft={() => saveScore('draft')} onSubmit={() => saveScore('submitted')} onApprove={approveScore} onReturn={returnScore} returnReason={returnReason} setReturnReason={setReturnReason} onReopen={reopenScore} onDeleteScore={deleteScore} onCopyPrev={copyPrevWeek} onShowPhieu={() => setShowPhieu(true)} showPhieu={showPhieu} onExportClass={doExportDocxClass} sessionRole={session.role} />
           </>
         ))}
         {tab === 'xep-hang' && (week ? (
@@ -1856,7 +1870,7 @@ function ScoreForm(props: {
   search: string; setSearch: (s: string) => void; classes: ClassItem[]; currentScore?: Score;
   setD: <K extends keyof Details>(k: K, v: Details[K]) => void; dirty: boolean;
   onSaveDraft: () => void; onSubmit: () => void; onApprove: () => void; onReturn: () => void;
-  returnReason: string; setReturnReason: (s: string) => void; onReopen: () => void; onCopyPrev: () => void;
+  returnReason: string; setReturnReason: (s: string) => void; onReopen: () => void; onDeleteScore: () => void; onCopyPrev: () => void;
   onShowPhieu: () => void; showPhieu: boolean; onExportClass: () => void; sessionRole: Role;
   lockHolder?: string | null;
 }) {
@@ -2060,23 +2074,25 @@ function ScoreForm(props: {
             </div>
           </div>
           {props.sessionRole === 'admin' && props.currentScore && (
-            <div className="card" style={{ marginTop: 12 }}><h3>Duyệt phiếu (Ban thi đua)</h3>
+            <div className="card" style={{ marginTop: 12 }}><h3>Xử lý phiếu (Ban thi đua)</h3>
               {props.currentScore.status === 'approved' ? (
                 <>
                   <p><span className="badge approved">Đã duyệt</span> Phiếu này đã được duyệt{props.currentScore.approvedBy ? ` bởi ${props.currentScore.approvedBy}` : ''}{props.currentScore.approvedAt ? ` lúc ${props.currentScore.approvedAt}` : ''}.</p>
-                  <div className="row"><button className="btn grey" type="button" onClick={props.onReopen}>Hủy duyệt (lỡ duyệt nhầm)</button></div>
-                  <p>Lỡ duyệt nhầm thì bấm “Hủy duyệt” — phiếu trở về bản nháp để sửa lại, rồi nộp và duyệt lại như bình thường. Nếu tuần đã chốt thì tuần cũng được mở lại luôn.</p>
+                  <div className="row"><button className="btn grey" type="button" onClick={props.onReopen}>Sửa lại phiếu</button><button className="btn" type="button" onClick={props.onDeleteScore}>Xóa phiếu</button></div>
+                  <label>Lý do trả lại (bắt buộc khi trả)</label><input type="text" value={props.returnReason} onChange={e => props.setReturnReason(e.target.value)} placeholder="Vd: Cờ đỏ nhập sai số giờ Khá" />
+                  <div className="row" style={{ marginTop: 8 }}><button className="btn" type="button" onClick={props.onReturn}>Trả lại phiếu</button></div>
+                  <p>Phiếu gửi lên tính ngay. Nếu cờ đỏ nhập sai, Ban thi đua bấm “Sửa lại phiếu” để sửa trực tiếp, “Trả lại phiếu” để cờ đỏ sửa, hoặc “Xóa phiếu” để nhập lại từ đầu.</p>
                 </>
               ) : props.currentScore.status === 'submitted' ? (
                 <>
-                  <div className="row"><button className="btn green" type="button" onClick={props.onApprove}>Duyệt phiếu</button><button className="btn grey" type="button" onClick={props.onReopen}>Mở lại để sửa</button></div>
+                  <div className="row"><button className="btn grey" type="button" onClick={props.onReopen}>Sửa lại phiếu</button><button className="btn" type="button" onClick={props.onDeleteScore}>Xóa phiếu</button></div>
                   <label>Lý do trả lại (bắt buộc khi trả)</label><input type="text" value={props.returnReason} onChange={e => props.setReturnReason(e.target.value)} placeholder="Vd: Thiếu tên HS đi muộn" />
                   <div className="row" style={{ marginTop: 8 }}><button className="btn" type="button" onClick={props.onReturn}>Trả lại phiếu</button></div>
                 </>
               ) : props.currentScore.status === 'returned' ? (
-                <p><span className="badge returned">Bị trả lại</span> Phiếu bị trả lại — cờ đỏ sửa lại rồi nộp lại, Ban thi đua duyệt sau.</p>
+                <p><span className="badge returned">Bị trả lại</span> Phiếu bị trả lại — cờ đỏ sửa lại rồi gửi lại.</p>
               ) : (
-                <p>Phiếu đang ở trạng thái Nháp — cờ đỏ nộp phiếu rồi Ban thi đua mới duyệt được.</p>
+                <p>Phiếu đang ở trạng thái Nháp — cờ đỏ gửi phiếu là tính ngay.</p>
               )}
             </div>
           )}
