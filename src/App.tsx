@@ -636,8 +636,8 @@ export default function App() {
     const key = `self:${profile.id}:${profile.assigned_class_id}`;
     if (normalizedClassRef.current.has(key)) return;
     normalizedClassRef.current.add(key);
-    updateProfile(profile.id, { assigned_class_id: resolved })
-      .then(() => setProfile(prev => (prev && prev.id === profile.id ? { ...prev, assigned_class_id: resolved } : prev)))
+    updateProfile(profile.id, profile.role === 'codo' && profile.status === 'pending' ? { assigned_class_id: resolved, status: 'active' } : { assigned_class_id: resolved })
+      .then(() => setProfile(prev => (prev && prev.id === profile.id ? { ...prev, assigned_class_id: resolved, status: prev.role === 'codo' && prev.status === 'pending' ? 'active' : prev.status } : prev)))
       .catch(() => { /* chưa đổi được: lần tải sau thử lại */ });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, state.classes]);
@@ -650,8 +650,8 @@ export default function App() {
       const key = `admin:${p.id}:${p.assigned_class_id}`;
       if (normalizedClassRef.current.has(key)) continue;
       normalizedClassRef.current.add(key);
-      updateProfile(p.id, { assigned_class_id: resolved })
-        .then(() => setProfiles(prev => prev.map(pp => (pp.id === p.id ? { ...pp, assigned_class_id: resolved } : pp))))
+      updateProfile(p.id, p.role === 'codo' && p.status === 'pending' ? { assigned_class_id: resolved, status: 'active' } : { assigned_class_id: resolved })
+        .then(() => setProfiles(prev => prev.map(pp => (pp.id === p.id ? { ...pp, assigned_class_id: resolved, status: pp.role === 'codo' && pp.status === 'pending' ? 'active' : pp.status } : pp))))
         .catch(() => { /* chưa đổi được: lần tải sau thử lại */ });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

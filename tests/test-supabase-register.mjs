@@ -63,13 +63,12 @@ async function fillRegister(page, { name, role, className, email, password }) {
   const { ctx, page } = await newSbPage(browser, stub);
   await openRegister(page);
   await fillRegister(page, { name: 'Nguyễn Văn A', role: 'codo', className: '10B1', email: 'codo@example.com', password: 'matkhau1' });
-  await waitText(page, 'Tài khoản đang chờ Ban thi đua duyệt');
-  const t = await page.locator('main').innerText();
-  ok(t.includes('Xin chào Nguyễn Văn A (codo@example.com)'), 'register-B: màn hình chờ duyệt chào đúng tên + email');
-  ok(t.includes('Lưu lớp của tôi'), 'register-B: màn hình chờ duyệt có ô hoàn thiện lớp');
+  await waitText(page, 'Nhập điểm');
+  const t = await page.locator('body').innerText();
+  ok(!t.includes('Tài khoản đang chờ Ban thi đua duyệt'), 'register-B: cờ đỏ không còn màn hình chờ duyệt');
   const p = stub.profileByEmail('codo@example.com');
-  ok(!!p && p.role === 'codo' && p.status === 'pending', 'register-B: stub ghi hồ sơ sau role=codo status=pending (thấy: ' + JSON.stringify(p && { role: p.role, status: p.status }) + ')');
-  ok(p?.assigned_class_id === 'c0', 'register-B: hồ sơ chờ duyệt cũng gán sẵn lớp 10B1 (c0)');
+  ok(!!p && p.role === 'codo' && p.status === 'active', 'register-B: hồ sơ cờ đỏ active ngay sau xác nhận (thấy: ' + JSON.stringify(p && { role: p.role, status: p.status }) + ')');
+  ok(p?.assigned_class_id === 'c0', 'register-B: hồ sơ cờ đỏ gán sẵn lớp 10B1 (c0)');
   await ctx.close();
 }
 
@@ -186,9 +185,8 @@ async function fillRegister(page, { name, role, className, email, password }) {
   ok(stub.profileByEmail('codo-tenlop@example.com')?.assigned_class_id === 'c1', 'register-H: lớp dạng tên name:10B2 tự đổi thành id thật c1');
   const card = page.locator('main .card .card', { hasText: 'Cờ Đỏ Tên Lớp' });
   ok((await card.getByText('Cờ đỏ lớp 10B2').count()) >= 1, 'register-H: thẻ tài khoản hiện “Cờ đỏ lớp 10B2”');
-  await card.getByRole('button', { name: 'Duyệt', exact: true }).click();
   await page.waitForTimeout(1000);
-  ok(stub.profileByEmail('codo-tenlop@example.com')?.status === 'active', 'register-H: duyệt được ngay, không phải gán lớp tay');
+  ok(stub.profileByEmail('codo-tenlop@example.com')?.status === 'active', 'register-H: cờ đỏ tự active khi lớp được chuẩn hóa, không cần duyệt/gán tay');
   await ctx.close();
 }
 

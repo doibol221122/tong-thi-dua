@@ -35,7 +35,7 @@ for (const n of names) { const i = xml.indexOf(n); if (i === -1 || i < prev) { o
 ok(ordered, 'docx không xếp hạng: đủ 14 lớp 10->12 theo thứ tự lớp');
 ok(xml.includes('KHÔNG XẾP HẠNG'), 'docx không xếp hạng: tiêu đề ghi rõ không xếp hạng');
 ok(xml.includes('Chưa nộp'), 'docx không xếp hạng: lớp chưa có phiếu hiện Chưa nộp');
-ok(xml.includes('Chờ duyệt'), 'docx không xếp hạng: phiếu chờ duyệt hiện Chờ duyệt');
+ok(xml.includes('Đã gửi'), 'docx không xếp hạng: phiếu đã gửi hiện Đã gửi');
 ok(xml.includes('Đã duyệt'), 'docx không xếp hạng: phiếu đã duyệt hiện Đã duyệt');
 ok(xml.includes('Bị trả lại'), 'docx không xếp hạng: phiếu bị trả lại hiện Bị trả lại');
 // Điểm từng lớp vẫn có trong bảng (không xếp hạng không có nghĩa là giấu điểm).
@@ -56,7 +56,7 @@ ok(xml.includes('- Nhuộm tóc: 2 lượt (-2)</w:t>'), 'docx: mỗi dòng NỀ
   await dl2.saveAs('./dl-rank.docx');
   const xml2 = execSync(`python3 -c "import zipfile; print(zipfile.ZipFile('dl-rank.docx').read('word/document.xml').decode())"`, { encoding: 'utf-8' });
   ok(xml2.includes('128đ-A'), 'docx xếp hạng: có lớp đã duyệt 10B1');
-  ok(!xml2.includes('Chờ duyệt'), 'docx xếp hạng: không có phiếu chờ duyệt');
+  ok(!xml2.includes('Đã gửi'), 'docx xếp hạng: không có phiếu đã gửi');
   ok(!xml2.includes('10B3'), 'docx xếp hạng: lớp chưa duyệt (10B3) không có trong bảng');
   ok(!xml2.includes('Bị trả lại'), 'docx xếp hạng: phiếu bị trả lại không có trong bảng');
 }

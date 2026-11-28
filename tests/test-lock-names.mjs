@@ -106,7 +106,7 @@ async function newPage(seed, session) {
   await sel.selectOption({ label: '10B4' });
   await page.waitForTimeout(300);
   t = await page.locator('main').innerText();
-  ok(t.includes('đã có phiếu Chờ duyệt — phiếu đã khóa'), 'C: chọn lớp đã nộp phiếu -> báo phiếu đã khóa');
+  ok(t.includes('đã có phiếu Đã gửi — phiếu đã khóa'), 'C: chọn lớp đã nộp phiếu -> báo phiếu đã khóa');
   ok(await confirm.isDisabled(), 'C: chọn lớp đã nộp phiếu -> nút xác nhận bị khóa');
   await sel.selectOption({ label: '10B5' });
   await page.waitForTimeout(300);

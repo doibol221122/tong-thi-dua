@@ -46,7 +46,7 @@ ok(await b.page.getByRole('button', { name: 'Bắt đầu nhập điểm lớp n
 // Chọn 10B3 (đã có phiếu Chờ duyệt) -> khóa phiếu.
 await b.page.locator('.card', { hasText: 'Chọn lớp trực' }).locator('select').selectOption('c2');
 await b.page.waitForTimeout(300);
-ok(await b.page.getByText('đã có phiếu Chờ duyệt — phiếu đã khóa').count() === 1, 'DutyPicker: chọn lớp đã có phiếu Chờ duyệt -> báo phiếu đã khóa');
+ok(await b.page.getByText('đã có phiếu Đã gửi — phiếu đã khóa').count() === 1, 'DutyPicker: chọn lớp đã có phiếu Chờ duyệt -> báo phiếu đã khóa');
 ok(await b.page.getByRole('button', { name: 'Bắt đầu nhập điểm lớp này' }).isDisabled(), 'DutyPicker: chọn lớp đã có phiếu Chờ duyệt -> nút xác nhận bị khóa');
 // Chọn lại lớp mình trực (10B2) -> mở lại, xác nhận được, về lại phiếu của mình.
 await b.page.locator('.card', { hasText: 'Chọn lớp trực' }).locator('select').selectOption('c1');

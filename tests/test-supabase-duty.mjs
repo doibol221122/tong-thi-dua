@@ -83,7 +83,7 @@ async function loginAs(page, email, password) {
   await page.locator('main select').selectOption('c2'); // 10B3 đã nộp
   await page.waitForTimeout(300);
   t = await page.locator('main').innerText();
-  ok(t.includes('đã có phiếu Chờ duyệt — phiếu đã khóa, không nhập lại được.'), 'duty-A: chọn 10B3 (đã nộp) báo phiếu đã khóa');
+  ok(t.includes('đã có phiếu Đã gửi — phiếu đã khóa, không nhập lại được.'), 'duty-A: chọn 10B3 (đã nộp) báo phiếu đã khóa');
   ok(await page.getByRole('button', { name: 'Bắt đầu nhập điểm lớp này' }).isDisabled(), 'duty-A: nút bắt đầu nhập bị khóa khi chọn lớp đã nộp');
   await page.getByRole('button', { name: 'Hủy' }).click();
   await page.waitForTimeout(400);
