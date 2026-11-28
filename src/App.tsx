@@ -801,13 +801,13 @@ export default function App() {
       if (!found) {
         // Chưa tải được danh sách lớp thật: lưu tạm dạng tên, app tự đổi
         // thành id lớp thật khi Ban thi đua mở app (không phải gán tay).
-        if (profile.assigned_class_id === cid) { setPendingMsg(`Đã lưu lớp của bạn: ${nm}. Ban thi đua duyệt tài khoản là bạn vào nhập điểm được ngay.`); return; }
+        if (profile.assigned_class_id === cid) { setPendingMsg(`Đã lưu lớp của bạn: ${nm}. Bạn tải lại trang là vào được ngay.`); return; }
         setPendingBusy(true); setPendingErr(''); setPendingMsg('');
         try {
           await updateProfile(profile.id, { assigned_class_id: cid });
           setProfile({ ...profile, assigned_class_id: cid });
           setPendingClassId(cid);
-          setPendingMsg(`Đã lưu lớp của bạn: ${nm}. Ban thi đua duyệt tài khoản là bạn vào nhập điểm được ngay.`);
+          setPendingMsg(`Đã lưu lớp của bạn: ${nm}. Bạn tải lại trang là vào được ngay.`);
         } catch (e) {
           setPendingErr(`Chưa lưu được: ${e instanceof Error ? e.message : 'lỗi không rõ'}. Bạn thử lại nhé.`);
         }
@@ -822,7 +822,7 @@ export default function App() {
       await updateProfile(profile.id, { assigned_class_id: cid });
       setProfile({ ...profile, assigned_class_id: cid });
       setPendingClassId(cid);
-      setPendingMsg(`Đã lưu lớp của bạn: ${state.classes.find(c => c.id === cid)?.name ?? ''}. Ban thi đua duyệt tài khoản là bạn vào nhập điểm được ngay.`);
+      setPendingMsg(`Đã lưu lớp của bạn: ${state.classes.find(c => c.id === cid)?.name ?? ''}. Bạn tải lại trang là vào được ngay.`);
     } catch (e) {
       setPendingErr(`Chưa lưu được: ${e instanceof Error ? e.message : 'lỗi không rõ'}. Bạn thử lại nhé.`);
     }

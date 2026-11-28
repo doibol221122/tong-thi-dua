@@ -58,9 +58,9 @@ export async function fetchProfile(userId: string): Promise<Profile | null> {
 
 // Tạo hồ sơ cho tài khoản vừa đăng ký / vừa đăng nhập lần đầu.
 // Quy tắc khởi tạo: hồ sơ ĐẦU TIÊN từng được tạo sẽ là Ban thi đua
-// (role='admin', status='active'). Mọi tài khoản đăng ký sau đó đều
-// là status='pending' với vai trò đã chọn (cờ đỏ / chỉ xem) và phải
-// chờ Ban thi đua duyệt mới được vào xem dữ liệu.
+// (role='admin', status='active'). Cờ đỏ xác nhận email xong đăng
+// nhập lần đầu là vào được ngay (status='active'); Chỉ xem vẫn chờ
+// Ban thi đua duyệt.
 export async function ensureProfile(user: User): Promise<Profile> {
   if (!supabase) throw new Error('Chưa cấu hình Supabase.');
   const existing = await fetchProfile(user.id);
@@ -98,7 +98,7 @@ export async function ensureProfile(user: User): Promise<Profile> {
     email: user.email ?? '',
     full_name: fullName,
     role: isFirst ? ('admin' as Role) : requested,
-    status: isFirst ? ('active' as ProfileStatus) : ('pending' as ProfileStatus),
+    status: isFirst || requested === 'codo' ? ('active' as ProfileStatus) : ('pending' as ProfileStatus),
     assigned_class_id: assignedClassId,
     assigned_week_id: null,
   };
@@ -114,7 +114,7 @@ export async function ensureProfile(user: User): Promise<Profile> {
     if (isFirst && ((error as { code?: string }).code === '42501' || /row-level security|permission/i.test(error.message))) {
       const { data: retry, error: retryErr } = await supabase
         .from('profiles')
-        .insert({ ...row, role: requested, status: 'pending' as ProfileStatus })
+        .insert({ ...row, role: requested, status: requested === 'codo' ? ('active' as ProfileStatus) : ('pending' as ProfileStatus) })
         .select('*')
         .single();
       if (!retryErr && retry) return retry as Profile;

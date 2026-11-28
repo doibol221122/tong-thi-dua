@@ -98,9 +98,9 @@ export default function AuthScreen({ initialMode, onRecoveryDone, onNotice }: { 
     if (error) { if (/email rate limit exceeded|over_email_send_rate_limit/i.test(error.message)) { setMode('login'); setResendCooldown(600); } setErr(friendlyError(error.message)); return; }
     if (!data.session) {
       setMode('login'); setResendCooldown(60);
-      setMsg('Đã tạo tài khoản. Email xác nhận có thể đến chậm vài phút; bạn kiểm tra cả Spam/Quảng cáo, bấm link xác nhận rồi quay lại đăng nhập nhé. Tài khoản sẽ ở trạng thái chờ Ban thi đua duyệt.');
+      setMsg(requestedRole === 'codo' ? 'Đã tạo tài khoản. Email xác nhận có thể đến chậm vài phút; bạn kiểm tra cả Spam/Quảng cáo, bấm link xác nhận rồi quay lại đăng nhập là vào được ngay.' : 'Đã tạo tài khoản. Email xác nhận có thể đến chậm vài phút; bạn kiểm tra cả Spam/Quảng cáo, bấm link xác nhận rồi quay lại đăng nhập nhé. Tài khoản sẽ ở trạng thái chờ Ban thi đua duyệt.');
     } else {
-      setMsg('Đã tạo tài khoản. Tài khoản đang chờ Ban thi đua duyệt.');
+      setMsg(requestedRole === 'codo' ? 'Đã tạo tài khoản. Bạn vào được hệ thống ngay.' : 'Đã tạo tài khoản. Tài khoản đang chờ Ban thi đua duyệt.');
     }
   }
 
@@ -160,9 +160,9 @@ export default function AuthScreen({ initialMode, onRecoveryDone, onNotice }: { 
       <h2>{mode === 'login' ? 'Đăng nhập' : mode === 'register' ? 'Đăng ký tài khoản' : mode === 'forgot' ? 'Quên mật khẩu' : 'Đặt mật khẩu mới'}</h2>
       {mode === 'reset' && <p>Bạn vừa bấm link đặt lại mật khẩu trong email. Nhập mật khẩu mới bên dưới nhé.</p>}
       {mode === 'register' && (
-        <p>Tài khoản đầu tiên đăng ký sẽ là <b>Ban thi đua</b> (quản trị). Các tài khoản đăng ký sau đều ở trạng thái <b>chờ duyệt</b> và chỉ được vào hệ thống sau khi Ban thi đua duyệt.</p>
+        <p>Tài khoản đầu tiên đăng ký sẽ là <b>Ban thi đua</b> (quản trị). <b>Cờ đỏ</b> xác nhận email xong là vào được ngay; tài khoản <b>Chỉ xem</b> vẫn chờ Ban thi đua duyệt.</p>
       )}
-      {mode === 'login' && <p>Đăng nhập bằng email và mật khẩu đã đăng ký. Tài khoản chưa được Ban thi đua duyệt thì chưa vào được.</p>}
+      {mode === 'login' && <p>Đăng nhập bằng email và mật khẩu đã đăng ký. Cờ đỏ xác nhận email xong vào được ngay; Chỉ xem cần Ban thi đua duyệt.</p>}
       {mode === 'register' && (
         <>
           <label>Họ và tên</label>
