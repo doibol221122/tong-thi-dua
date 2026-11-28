@@ -262,23 +262,11 @@ async function newPage(seed, session) {
   await page.waitForTimeout(400);
   await page.locator('.class-select-wrap select').selectOption({ label: '10B3' });
   await page.waitForTimeout(400);
-  await page.getByRole('button', { name: 'Duyệt phiếu', exact: true }).click();
-  await page.waitForTimeout(500);
-  let t = await page.locator('main').innerText();
-  ok(t.includes('Phiếu chưa đủ điều kiện duyệt'), 'G2: phiếu 0 giờ -> báo chưa đủ điều kiện duyệt');
+  ok((await page.getByRole('button', { name: 'Duyệt phiếu', exact: true }).count()) === 0, 'G2: phiếu đã gửi -> không có nút Duyệt phiếu');
+  ok((await page.getByRole('button', { name: 'Sửa lại phiếu', exact: true }).count()) === 1, 'G2: phiếu đã gửi -> có nút Sửa lại phiếu');
   let st = JSON.parse(await page.evaluate(() => localStorage.getItem('tong-thi-dua-v1')));
-  ok(st.scores.find(x => x.weekId === 'w5' && x.classId === 'c2')?.status === 'submitted', 'G2: phiếu 0 giờ -> vẫn ở Chờ duyệt');
-  // G4: duyệt tất cả -> bỏ qua phiếu chưa đủ điều kiện, báo rõ từng phiếu.
-  await page.getByRole('button', { name: 'Duyệt tất cả 2 phiếu đã nộp' }).click();
-  await page.waitForTimeout(300);
-  await page.getByTestId('confirm-ok').click();
-  await page.waitForTimeout(500);
-  t = await page.locator('main').innerText();
-  ok(t.includes('Đã duyệt 1 phiếu của Tuần 05'), 'G4: duyệt tất cả -> chỉ duyệt 1 phiếu đủ điều kiện');
-  ok(t.includes('Bỏ qua 1 phiếu chưa đủ điều kiện: 10B3'), 'G4: duyệt tất cả -> báo rõ phiếu bị bỏ qua');
-  st = JSON.parse(await page.evaluate(() => localStorage.getItem('tong-thi-dua-v1')));
-  ok(st.scores.find(x => x.weekId === 'w5' && x.classId === 'c3')?.status === 'approved', 'G4: phiếu đủ điều kiện được duyệt');
-  ok(st.scores.find(x => x.weekId === 'w5' && x.classId === 'c2')?.status === 'submitted', 'G4: phiếu chưa đủ điều kiện vẫn Chờ duyệt');
+  ok(st.scores.find(x => x.weekId === 'w5' && x.classId === 'c2')?.status === 'submitted', 'G2: phiếu cũ vẫn giữ trạng thái đã gửi');
+  ok((await page.getByRole('button', { name: /Duyệt tất cả/ }).count()) === 0, 'G4: không còn nút Duyệt tất cả');
   await ctx.close();
 }
 {
@@ -288,15 +276,15 @@ async function newPage(seed, session) {
   await page.waitForTimeout(400);
   await page.locator('.class-select-wrap select').selectOption({ label: '10B4' });
   await page.waitForTimeout(400);
-  await page.getByRole('button', { name: 'Duyệt phiếu', exact: true }).click();
+  await page.getByRole('button', { name: 'Sửa lại phiếu', exact: true }).click();
   await page.waitForTimeout(300);
   await page.getByTestId('confirm-ok').click();
   await page.waitForTimeout(500);
   let st = JSON.parse(await page.evaluate(() => localStorage.getItem('tong-thi-dua-v1')));
-  ok(st.scores.find(x => x.weekId === 'w5' && x.classId === 'c3')?.status === 'approved', 'G3: phiếu Chờ duyệt đủ điều kiện -> duyệt được');
+  ok(st.scores.find(x => x.weekId === 'w5' && x.classId === 'c3')?.status === 'draft', 'G3: sửa lại phiếu đã gửi -> về Nháp');
   await page.locator('.class-select-wrap select').selectOption({ label: '10B3' });
   await page.waitForTimeout(400);
-  await page.getByRole('button', { name: 'Mở lại để sửa', exact: true }).click();
+  await page.getByRole('button', { name: 'Sửa lại phiếu', exact: true }).click();
   await page.waitForTimeout(300);
   await page.getByTestId('confirm-ok').click();
   await page.waitForTimeout(500);
@@ -307,7 +295,7 @@ async function newPage(seed, session) {
   await page.waitForTimeout(400);
   ok((await page.getByRole('button', { name: 'Duyệt phiếu', exact: true }).count()) === 0, 'G6: phiếu Bị trả lại -> không có nút Duyệt phiếu');
   ok((await page.getByRole('button', { name: 'Trả lại phiếu', exact: true }).count()) === 0, 'G6: phiếu Bị trả lại -> không có nút Trả lại phiếu');
-  ok((await page.locator('main').innerText()).includes('Phiếu bị trả lại — cờ đỏ sửa lại rồi nộp lại'), 'G6: phiếu Bị trả lại -> ghi chú đúng');
+  ok((await page.locator('main').innerText()).includes('Phiếu bị trả lại — cờ đỏ sửa lại rồi gửi lại'), 'G6: phiếu Bị trả lại -> ghi chú đúng');
   await ctx.close();
 }
 

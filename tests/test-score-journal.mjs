@@ -43,12 +43,12 @@ async function pickClass(page, name) {
   ok(j.includes('Ban thi đua'), 'journal: nhật ký ghi người thực hiện');
   // 10B3: phiếu chờ duyệt -> duyệt -> nhật ký của phiếu 10B3 có dòng duyệt.
   await pickClass(page, '10B3');
-  await page.getByRole('button', { name: 'Duyệt phiếu', exact: true }).click();
+  await page.getByRole('button', { name: 'Sửa lại phiếu', exact: true }).click();
   await page.waitForTimeout(400);
   await page.getByTestId('confirm-ok').click();
   await page.waitForTimeout(600);
   j = await page.locator('.score-journal').innerText();
-  ok(j.includes('Duyệt phiếu') && j.includes('10B3'), 'journal: duyệt phiếu ghi vào nhật ký của đúng phiếu 10B3');
+  ok(j.includes('Hủy duyệt phiếu') && j.includes('10B3'), 'journal: sửa lại phiếu ghi vào nhật ký của đúng phiếu 10B3');
   ok(!j.includes('Tổng điểm tốt (≥5): 12 → 13'), 'journal: nhật ký 10B3 không lẫn thay đổi của 10B5');
   // Lịch sử chung: không lộ mã gắn phiếu.
   await page.getByRole('button', { name: 'Lịch sử', exact: true }).click();

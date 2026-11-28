@@ -30,14 +30,14 @@ await pageA.click('text=Nhập điểm');
 await pageA.waitForTimeout(500);
 await pageA.click('.class-btns button:has-text("10B3")');
 await pageA.waitForTimeout(500);
-await pageA.click('button:has-text("Duyệt phiếu")');
+await pageA.click('button:has-text("Sửa lại phiếu")');
 await pageA.waitForTimeout(400);
 await pageA.click('[data-testid="confirm-ok"]');
 await pageA.waitForTimeout(2000);
 const c2 = stub.tables.scores.find(s => s.class_id === 'c2');
-check('duyệt phiếu ghi PATCH /rest/v1/scores', stub.sawTable('PATCH', 'scores'));
-check('phiếu 10B3 thành approved trong bảng scores', c2?.status === 'approved');
-check('version phiếu tăng sau khi duyệt', (c2?.version ?? 1) > 1);
+check('sửa lại phiếu ghi PATCH /rest/v1/scores', stub.sawTable('PATCH', 'scores'));
+check('phiếu 10B3 về draft trong bảng scores', c2?.status === 'draft');
+check('version phiếu tăng sau khi sửa lại', (c2?.version ?? 1) > 1);
 await ctxA.close();
 
 // --- Cờ đỏ: lưu nháp phiếu trực bằng PATCH scores ---

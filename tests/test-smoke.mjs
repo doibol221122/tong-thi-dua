@@ -44,13 +44,9 @@ async function newPage(seed, session) {
   ok(!t.includes('Cảnh báo lớp vi phạm') && !t.includes('Quy trình làm việc'), 'admin: Tổng quan không còn thẻ Cảnh báo lớp vi phạm và Quy trình làm việc');
   await page.getByRole('button', { name: 'Nhập điểm' }).click();
   await page.waitForTimeout(400);
-  ok(await page.getByRole('button', { name: 'Duyệt tất cả 2 phiếu đã nộp' }).count() === 1, 'admin: có nút Duyệt tất cả 2 phiếu');
-  await page.getByRole('button', { name: 'Duyệt tất cả 2 phiếu đã nộp' }).click();
-  await page.waitForTimeout(300);
-  await page.getByTestId('confirm-ok').click();
-  await page.waitForTimeout(500);
+  ok(await page.getByRole('button', { name: /Duyệt tất cả/ }).count() === 0, 'admin: không còn nút Duyệt tất cả');
   t = await page.locator('main').innerText();
-  ok(t.includes('Đã duyệt 2 phiếu của Tuần 05'), 'admin: duyệt tất cả -> báo đã duyệt 2 phiếu');
+  ok(t.includes('Sửa lại phiếu') && t.includes('Xóa phiếu'), 'admin: phiếu đã gửi có nút sửa/xóa');
   // Quản lý chia mục: mặc định mở "Tuần & lớp" (đổi tên lớp ở đây).
   await page.getByRole('button', { name: 'Quản lý' }).click();
   await page.waitForTimeout(400);
@@ -103,24 +99,17 @@ async function newPage(seed, session) {
 
 // ---- Xếp hạng gọn: danh sách 1 dòng/lớp, lọc khối viên thuốc, xuất file lưới 2x2 ----
 {
-  const { ctx, page } = await newPage(seed5, { role: 'admin', name: 'Ban thi đua' });
+  const seedApproved = JSON.parse(JSON.stringify(seed5));
+  seedApproved.scores.forEach(x => { if (x.status === 'submitted') x.status = 'approved'; });
+  const { ctx, page } = await newPage(seedApproved, { role: 'admin', name: 'Ban thi đua' });
   await page.getByRole('button', { name: 'Xếp hạng', exact: true }).click();
   await page.waitForTimeout(400);
   ok((await page.locator('.podium').count()) === 0, 'xep-hang: không còn 3 thẻ podium to');
-  ok((await page.locator('.ranklist li').count()) === 1, 'xep-hang: tuần 5 có 1 lớp đã duyệt');
+  ok((await page.locator('.ranklist li').count()) === 3, 'xep-hang: tuần 5 có 3 lớp đã gửi');
   ok((await page.getByRole('button', { name: 'Tất cả', exact: true }).count()) === 1, 'xep-hang: lọc khối là viên thuốc Tất cả');
   ok((await page.locator('.exportgrid .btn').count()) === 6, 'xep-hang: 6 nút xuất file/in/ảnh trong lưới');
   ok((await page.locator('.exportgrid button', { hasText: 'Nộp & chốt' }).count()) === 0, 'xep-hang: nút chốt tuần tách khỏi nhóm xuất file');
-  // Duyệt hết phiếu chờ rồi kiểm tra thứ tự + lọc khối.
-  await page.getByRole('button', { name: 'Nhập điểm' }).click();
-  await page.waitForTimeout(400);
-  await page.getByRole('button', { name: 'Duyệt tất cả 2 phiếu đã nộp' }).click();
-  await page.waitForTimeout(300);
-  await page.getByTestId('confirm-ok').click();
-  await page.waitForTimeout(500);
-  await page.getByRole('button', { name: 'Xếp hạng', exact: true }).click();
-  await page.waitForTimeout(400);
-  ok((await page.locator('.ranklist li').count()) === 3, 'xep-hang: duyệt hết -> 3 lớp trong danh sách');
+  ok((await page.locator('.ranklist li').count()) === 3, 'xep-hang: phiếu gửi tính ngay -> 3 lớp trong danh sách');
   const first = await page.locator('.ranklist li').first().innerText();
   ok(first.includes('10B1') && first.includes('128đ'), 'xep-hang: hạng 1 là 10B1 128đ');
   ok((await page.locator('.ranklist li.top1').count()) === 1, 'xep-hang: hạng 1 có huy hiệu top1');

@@ -957,31 +957,6 @@ export default function App() {
       },
     });
   }
-  // Duyệt tất cả phiếu đã nộp của tuần hiện tại (chỉ Ban thi đua).
-  // Phiếu chưa đủ điều kiện thì bỏ qua và báo rõ từng phiếu.
-  function approveAllScores() {
-    if (!week || session?.role !== 'admin') return;
-    const ids = pendingScores.map(s => s.id);
-    if (!ids.length) return;
-    askConfirm({
-      title: `Duyệt tất cả ${ids.length} phiếu đã nộp?`,
-      body: `${week.label} — các phiếu chưa đủ điều kiện sẽ được kiểm tra lại lúc duyệt và bỏ qua nếu chưa đủ.`,
-      confirmLabel: 'Duyệt tất cả',
-      onConfirm: () => {
-        const okIds: string[] = [];
-        const skipped: string[] = [];
-        for (const s of pendingScores) {
-          const errs = validateDetails(s.details);
-          if (errs.length) skipped.push(`${state.classes.find(c => c.id === s.classId)?.name ?? s.classId} (${errs[0]})`);
-          else okIds.push(s.id);
-        }
-        if (!okIds.length) { setErrs([`Không duyệt được phiếu nào: ${skipped.join('; ')}`]); return; }
-        const idSet = new Set(okIds);
-        update(prev => ({ ...prev, scores: prev.scores.map(s => idSet.has(s.id) ? { ...s, status: 'approved', approvedBy: session?.name, approvedAt: nowStr() } : s) }), 'Duyệt tất cả phiếu', `${week.label} — ${okIds.length} phiếu`, okIds);
-        setMsg(`Đã duyệt ${okIds.length} phiếu của ${week.label}.${skipped.length ? ` Bỏ qua ${skipped.length} phiếu chưa đủ điều kiện: ${skipped.join('; ')}.` : ''}`);
-      },
-    });
-  }
   // Cờ đỏ tự chọn lớp trực tuần hiện tại: ghi thành phân công (roster) để
   // Ban thi đua thấy trong Quản lý; chọn lại thì cập nhật dòng cũ, không
   // nhân đôi. Sau khi chọn, phân công này được ưu tiên như gán tay.
@@ -1229,7 +1204,6 @@ export default function App() {
 
   const approvedScores = useMemo(() => week ? state.scores.filter(s => s.weekId === week.id && s.status === 'approved').sort((a, b) => calcScore(b.details).final - calcScore(a.details).final) : [], [state.scores, week]);
   const rankedScores = useMemo(() => rankGroup === 'all' ? approvedScores : approvedScores.filter(s => classGroup(state.classes.find(c => c.id === s.classId)?.name ?? '') === rankGroup), [approvedScores, rankGroup, state.classes]);
-  const pendingScores = useMemo(() => week ? state.scores.filter(s => s.weekId === week.id && s.status === 'submitted') : [], [state.scores, week]);
   // Các tháng có tuần (khối 4 tuần, như tab Tổng hợp) + xếp hạng tháng theo
   // điểm trung bình các phiếu đã duyệt — chỉ tính phiếu đã duyệt.
   const rankMonths = useMemo(() => {
@@ -1429,16 +1403,13 @@ export default function App() {
             {session.role === 'codo' && assignment && (
               <div className="row" style={{ marginBottom: 10 }}><button className="btn ghost" type="button" onClick={() => setShowDutyPicker(true)}>Đổi lớp trực</button><span>Bạn đang trực lớp {state.classes.find(c => c.id === assignment.classId)?.name} — {week.label}.</span></div>
             )}
-            {session.role === 'admin' && pendingScores.length > 0 && (
-              <div className="row" style={{ marginBottom: 10 }}><button className="btn green" type="button" onClick={approveAllScores}>Duyệt tất cả {pendingScores.length} phiếu đã nộp</button><span>Còn {pendingScores.length} phiếu chờ duyệt trong {week.label}.</span></div>
-            )}
             <ScoreForm state={state} week={week} draft={draft} calc={calc} canEdit={canEdit} lockHolder={dutyHolder?.name ?? null} classId={classId} setClassId={switchClass} weekId={effectiveWeekId} setWeekId={(id: string) => confirmDirtyAsync(() => setWeekId(id))} search={search} setSearch={setSearch} classes={visibleClasses} currentScore={currentScore} setD={setD} dirty={dirty} onSaveDraft={() => saveScore('draft')} onSubmit={() => saveScore('submitted')} onApprove={approveScore} onReturn={returnScore} returnReason={returnReason} setReturnReason={setReturnReason} onReopen={reopenScore} onDeleteScore={deleteScore} onCopyPrev={copyPrevWeek} onShowPhieu={() => setShowPhieu(true)} showPhieu={showPhieu} onExportClass={doExportDocxClass} sessionRole={session.role} />
           </>
         ))}
         {tab === 'xep-hang' && (week ? (
           <div className="card print-area"><h2>Xếp hạng — {week.label} {week.submittedAt ? <span className="badge approved">Đã nộp {week.submittedAt}</span> : <span className="badge draft">Chưa chốt tuần</span>}</h2>
             {rankMode === 'week' ? (
-              <p>Chỉ phiếu <b>đã duyệt</b> mới vào xếp hạng chính thức. Còn {pendingScores.length} phiếu chờ duyệt, {state.classes.length - approvedScores.length} lớp chưa có phiếu duyệt.</p>
+              <p>Phiếu gửi lên tính vào xếp hạng ngay. Còn {state.classes.length - approvedScores.length} lớp chưa gửi phiếu.</p>
             ) : (
               <p>Điểm trung bình tháng của các phiếu <b>đã duyệt</b>. Cứ 4 tuần là 1 tháng (tuần 1–4 là Tháng 9, tuần 5–8 là Tháng 10…).</p>
             )}
@@ -2084,7 +2055,7 @@ function ScoreForm(props: {
                 </>
               ) : props.currentScore.status === 'submitted' ? (
                 <>
-                  <div className="row"><button className="btn green" type="button" onClick={props.onApprove}>Duyệt phiếu</button><button className="btn grey" type="button" onClick={props.onReopen}>Sửa lại phiếu</button><button className="btn" type="button" onClick={props.onDeleteScore}>Xóa phiếu</button></div>
+                  <div className="row"><button className="btn grey" type="button" onClick={props.onReopen}>Sửa lại phiếu</button><button className="btn" type="button" onClick={props.onDeleteScore}>Xóa phiếu</button></div>
                   <label>Lý do trả lại (bắt buộc khi trả)</label><input type="text" value={props.returnReason} onChange={e => props.setReturnReason(e.target.value)} placeholder="Vd: Thiếu tên HS đi muộn" />
                   <div className="row" style={{ marginTop: 8 }}><button className="btn" type="button" onClick={props.onReturn}>Trả lại phiếu</button></div>
                 </>
