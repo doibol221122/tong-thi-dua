@@ -54,7 +54,7 @@ async function loginAs(page, email, password) {
   await page.getByRole('button', { name: 'Đổi lớp trực' }).click();
   await page.waitForTimeout(500);
   t = await page.locator('main').innerText();
-  ok(t.includes('Theo lịch trực, cờ đỏ lớp 10B1 trực lớp 10B5 tuần này.'), 'duty-A: DutyPicker gợi ý theo lịch trực (10B1 -> 10B5)');
+  ok(!t.includes('Theo lịch trực, cờ đỏ lớp 10B1 trực lớp 10B5 tuần này.'), 'duty-A: DutyPicker không hiện dòng lịch trực (10B1 -> 10B5)');
   ok(t.includes('Chọn lớp trực — Tuần 05'), 'duty-A: DutyPicker mở đúng tuần 05');
 
   // Chọn lớp khác (10B2, chưa có phiếu): ghi thành 1 dòng roster, đồng bộ remote.
@@ -102,7 +102,7 @@ async function loginAs(page, email, password) {
   await loginAs(page, 'codo2@example.com', 'matkhau1');
   await waitText(page, 'Chọn lớp trực — Tuần 05');
   const t = await page.locator('body').innerText();
-  ok(t.includes('Theo lịch trực, cờ đỏ lớp 10B3 trực lớp 10B2 tuần này.'), 'duty-B: chưa có roster -> vào thẳng DutyPicker, gợi ý theo lịch trực từ lớp của mình (10B3 -> 10B2)');
+  ok(!t.includes('Theo lịch trực, cờ đỏ lớp 10B3 trực lớp 10B2 tuần này.'), 'duty-B: chưa có roster -> vào thẳng DutyPicker, không hiện dòng lịch trực (10B3 -> 10B2)');
   ok(!t.includes('Bạn đang nhập cho lớp 10B3'), 'duty-B: KHÔNG tự khóa vào lớp của mình (10B3 chỉ là lớp của cờ đỏ, không phải lớp trực)');
   ok(!t.includes('Lớp 10B3'), 'duty-B: header không hiện chip "Lớp 10B3" (không còn phân công theo hồ sơ)');
   // Chọn đúng lớp gợi ý (10B2, chưa có phiếu) -> chip trực đổi theo.
@@ -125,7 +125,7 @@ async function loginAs(page, email, password) {
   await waitText(page, 'Chọn lớp trực — Tuần 05');
   let t = await page.locator('main').innerText();
   ok(t.includes('Tuần này bạn trực lớp nào?'), 'duty-C: cờ đỏ chưa gán gì thì vào thẳng DutyPicker chọn lớp trực');
-  ok(t.includes('Theo lịch trực, cờ đỏ lớp 10B2 trực lớp 10B1 tuần này.'), 'duty-C: DutyPicker gợi ý theo lịch trực từ lớp của mình (10B2 -> 10B1)');
+  ok(!t.includes('Theo lịch trực, cờ đỏ lớp 10B2 trực lớp 10B1 tuần này.'), 'duty-C: DutyPicker không hiện dòng lịch trực (10B2 -> 10B1)');
   // Chưa chọn lớp thì nút bắt đầu nhập bị khóa.
   ok(await page.getByRole('button', { name: 'Bắt đầu nhập điểm lớp này' }).isDisabled(), 'duty-C: chưa chọn lớp thì nút bắt đầu nhập bị khóa');
   if (stub.unhandled.length) { console.log('UNHANDLED: ' + JSON.stringify(stub.unhandled)); fails.push('duty-C: có request supabase không được stub'); }

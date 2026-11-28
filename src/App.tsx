@@ -1520,7 +1520,6 @@ function DutyPicker({ state, week, homeName, myName, initialClassId, onConfirm, 
   return (
     <div className="card"><h2>Chọn lớp trực — {week.label}</h2>
       <p>Tuần này bạn trực lớp nào? Chọn lớp rồi nhập điểm cho lớp đó nhé. Lớp đã chọn sẽ lưu lại để Ban thi đua thấy.</p>
-      {suggested && <p>Theo lịch trực, cờ đỏ lớp {homeName} trực lớp <b>{suggested}</b> tuần này.</p>}
       <label>Lớp trực</label>
       <select value={sel} onChange={e => setSel(e.target.value)}>
         <option value="">— Chọn lớp —</option>
@@ -2085,7 +2084,7 @@ function ScoreForm(props: {
                 </>
               ) : props.currentScore.status === 'submitted' ? (
                 <>
-                  <div className="row"><button className="btn grey" type="button" onClick={props.onReopen}>Sửa lại phiếu</button><button className="btn" type="button" onClick={props.onDeleteScore}>Xóa phiếu</button></div>
+                  <div className="row"><button className="btn green" type="button" onClick={props.onApprove}>Duyệt phiếu</button><button className="btn grey" type="button" onClick={props.onReopen}>Sửa lại phiếu</button><button className="btn" type="button" onClick={props.onDeleteScore}>Xóa phiếu</button></div>
                   <label>Lý do trả lại (bắt buộc khi trả)</label><input type="text" value={props.returnReason} onChange={e => props.setReturnReason(e.target.value)} placeholder="Vd: Thiếu tên HS đi muộn" />
                   <div className="row" style={{ marginTop: 8 }}><button className="btn" type="button" onClick={props.onReturn}>Trả lại phiếu</button></div>
                 </>

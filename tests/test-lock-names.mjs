@@ -152,9 +152,9 @@ async function newPage(seed, session) {
   await page.waitForTimeout(400);
   await page.locator('.class-select-wrap select').selectOption({ label: '10B1' });
   await page.waitForTimeout(400);
-  ok((await page.getByRole('button', { name: 'Hủy duyệt (lỡ duyệt nhầm)' }).count()) === 1, 'E: phiếu đã duyệt hiện nút Hủy duyệt');
+  ok((await page.getByRole('button', { name: 'Sửa lại phiếu' }).count()) === 1, 'E: phiếu đã duyệt hiện nút Sửa lại phiếu');
   ok((await page.getByRole('button', { name: 'Duyệt phiếu', exact: true }).count()) === 0, 'E: phiếu đã duyệt không còn nút Duyệt phiếu');
-  await page.getByRole('button', { name: 'Hủy duyệt (lỡ duyệt nhầm)' }).click();
+  await page.getByRole('button', { name: 'Sửa lại phiếu' }).click();
   await page.waitForTimeout(300);
   await page.getByTestId('confirm-ok').click();
   await page.waitForTimeout(500);
@@ -176,7 +176,7 @@ async function newPage(seed, session) {
   await page.locator('.class-select-wrap select').selectOption({ label: '10B1' });
   await page.waitForTimeout(400);
   ok(await page.getByRole('button', { name: 'Lưu & nộp phiếu từng lớp' }).isDisabled(), 'E2: tuần đã chốt -> phiếu chưa sửa được');
-  await page.getByRole('button', { name: 'Hủy duyệt (lỡ duyệt nhầm)' }).click();
+  await page.getByRole('button', { name: 'Sửa lại phiếu' }).click();
   await page.waitForTimeout(300);
   await page.getByTestId('confirm-ok').click();
   await page.waitForTimeout(500);

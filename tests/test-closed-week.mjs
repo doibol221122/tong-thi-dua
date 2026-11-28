@@ -59,7 +59,7 @@ function seedCtx(page, session) {
   await page.waitForTimeout(400);
   await page.getByRole('button', { name: '10B1', exact: true }).click();
   await page.waitForTimeout(400);
-  await page.getByRole('button', { name: 'Hủy duyệt (lỡ duyệt nhầm)', exact: true }).click();
+  await page.getByRole('button', { name: 'Sửa lại phiếu', exact: true }).click();
   await page.waitForTimeout(400);
   await page.getByTestId('confirm-ok').click();
   await page.waitForTimeout(600);
