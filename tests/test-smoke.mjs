@@ -45,8 +45,10 @@ async function newPage(seed, session) {
   await page.getByRole('button', { name: 'Nhập điểm' }).click();
   await page.waitForTimeout(400);
   ok(await page.getByRole('button', { name: /Duyệt tất cả/ }).count() === 0, 'admin: không còn nút Duyệt tất cả');
+  await page.getByRole('button', { name: 'Phiếu cờ đỏ', exact: true }).click();
+  await page.waitForTimeout(400);
   t = await page.locator('main').innerText();
-  ok(t.includes('Sửa lại phiếu') && t.includes('Xóa phiếu'), 'admin: phiếu đã gửi có nút sửa/xóa');
+  ok(t.includes('Phiếu cờ đỏ') && t.includes('Đã gửi') && t.includes('Sửa điểm') && t.includes('Xóa'), 'admin: tab Phiếu cờ đỏ có thống kê và nút sửa/xóa');
   // Quản lý chia mục: mặc định mở "Tuần & lớp" (đổi tên lớp ở đây).
   await page.getByRole('button', { name: 'Quản lý' }).click();
   await page.waitForTimeout(400);

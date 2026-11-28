@@ -82,10 +82,10 @@ async function rankTexts(page) {
   await ctx.close();
 }
 
-// ---- B. Admin đủ 6 tab, Chỉ xem đủ 4 tab ----
+// ---- B. Admin đủ 7 tab, Chỉ xem đủ 4 tab ----
 {
   const { ctx, page } = await newPage(seed5, { role: 'admin', name: 'Ban thi đua' });
-  ok(JSON.stringify(await tabNames(page)) === JSON.stringify(['Tổng quan', 'Nhập điểm', 'Xếp hạng', 'Tổng hợp', 'Quản lý', 'Lịch sử']), 'codo-tabs: admin vẫn đủ 6 tab (thấy: ' + (await tabNames(page)).join(' / ') + ')');
+  ok(JSON.stringify(await tabNames(page)) === JSON.stringify(['Tổng quan', 'Nhập điểm', 'Phiếu cờ đỏ', 'Xếp hạng', 'Tổng hợp', 'Quản lý', 'Lịch sử']), 'codo-tabs: admin đủ 7 tab (thấy: ' + (await tabNames(page)).join(' / ') + ')');
   await ctx.close();
 }
 {

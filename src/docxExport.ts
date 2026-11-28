@@ -96,7 +96,7 @@ export async function exportWeekDocx(s: AppState, week: Week, approvedOnly: bool
         cellLines(hocTapLines(sc.details), WEEK_COLS[2]),
         cellLines(neNepLines(sc.details), WEEK_COLS[3]),
         cell(`${c.final}đ-${c.cls}`, { bold: true, align: AlignmentType.CENTER, w: WEEK_COLS[4] }),
-        cell(sc.status === 'approved' ? 'Đã duyệt' : sc.status === 'submitted' ? 'Chờ duyệt' : sc.status === 'returned' ? 'Bị trả lại' : 'Nháp', { w: WEEK_COLS[5] }),
+        cell(sc.status === 'approved' ? 'Đã duyệt' : sc.status === 'submitted' ? 'Đã gửi' : sc.status === 'returned' ? 'Bị trả lại' : 'Nháp', { w: WEEK_COLS[5] }),
       ]});
     }),
   ];
@@ -122,7 +122,7 @@ export async function exportWeekDocx(s: AppState, week: Week, approvedOnly: bool
 // duyệt — liệt kê đủ các lớp từ khối 10 đến khối 12 theo thứ tự lớp,
 // kèm trạng thái từng phiếu (kể cả lớp chưa nộp), không sắp theo điểm.
 export async function exportWeekDocxNoRank(s: AppState, week: Week): Promise<Blob> {
-  const statusLabel = (st: Score['status']) => st === 'approved' ? 'Đã duyệt' : st === 'submitted' ? 'Chờ duyệt' : st === 'returned' ? 'Bị trả lại' : 'Nháp';
+  const statusLabel = (st: Score['status']) => st === 'approved' ? 'Đã duyệt' : st === 'submitted' ? 'Đã gửi' : st === 'returned' ? 'Bị trả lại' : 'Nháp';
   const tableRows = [
     weekHeaderRow(),
     ...s.classes.map((c, i) => {
@@ -215,7 +215,7 @@ export async function exportClassDocx(s: AppState, sc: Score): Promise<Blob> {
   const week = s.weeks.find(w => w.id === sc.weekId);
   const clsName = s.classes.find(c => c.id === sc.classId)?.name ?? sc.classId;
   const c = calcScore(sc.details);
-  const statusLabel = sc.status === 'approved' ? 'Đã duyệt' : sc.status === 'submitted' ? 'Chờ duyệt' : sc.status === 'returned' ? 'Bị trả lại' : 'Nháp';
+  const statusLabel = sc.status === 'approved' ? 'Đã duyệt' : sc.status === 'submitted' ? 'Đã gửi' : sc.status === 'returned' ? 'Bị trả lại' : 'Nháp';
   const doc = new Document({
     sections: [{ children: [
       ...headerRows(s, `TỔNG HỢP THI ĐUA ${(week ?? { label: 'Tuần' }).label.toUpperCase()}`, '1. Tổng kết tuần', week?.dateRange),

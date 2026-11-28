@@ -74,7 +74,7 @@ async function newPage(seed, session) {
   await page.waitForTimeout(500);
   st = JSON.parse(await page.evaluate(() => localStorage.getItem('tong-thi-dua-v1')));
   sc = st.scores.find(x => x.weekId === 'w5' && x.classId === 'c4');
-  ok(sc.status === 'submitted', 'A: vi phạm không ghi tên HS vẫn nộp được');
+  ok(sc.status === 'approved', 'A: vi phạm không ghi tên HS vẫn nộp được và tính ngay');
   await ctx.close();
 }
 
@@ -139,7 +139,7 @@ async function newPage(seed, session) {
   await page.waitForTimeout(500);
   const st = JSON.parse(await page.evaluate(() => localStorage.getItem('tong-thi-dua-v1')));
   const sc = st.scores.find(x => x.weekId === 'w5' && x.classId === 'c1');
-  ok(sc?.status === 'submitted', 'D: tích 100% + 0 giờ -> nộp được');
+  ok(sc?.status === 'approved', 'D: tích 100% + 0 giờ -> nộp được và tính ngay');
   ok(sc?.details.allGood === true, 'D: phiếu đã lưu có tích 100% giờ Tốt');
   await ctx.close();
 }
@@ -232,7 +232,7 @@ async function newPage(seed, session) {
   await page.waitForTimeout(500);
   const st = JSON.parse(await page.evaluate(() => localStorage.getItem('tong-thi-dua-v1')));
   const sc = st.scores.find(x => x.weekId === 'w5' && x.classId === 'c1');
-  ok(sc?.status === 'submitted', 'F: nộp được phiếu có tích 100%');
+  ok(sc?.status === 'approved', 'F: nộp được phiếu có tích 100% và tính ngay');
   ok(sc?.details.allGood === true && sc?.details.noAbsLate === true, 'F: phiếu đã lưu giữ cả hai ô tích');
   ok(sc?.details.hoursKha === 3 && sc?.details.lateLate === 2, 'F: giá trị lỡ nhập vẫn lưu (chỉ không tính điểm)');
   await ctx.close();
