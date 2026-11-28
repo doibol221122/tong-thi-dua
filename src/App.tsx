@@ -238,10 +238,10 @@ export default function App() {
   // lỗi "rendered fewer hooks" khi đổi vai trò/đăng xuất.
   // Cờ đỏ chỉ thấy Nhập điểm + Xếp hạng; Chỉ xem không thấy Quản lý lẫn Lịch
   // sử; Quản lý chỉ Ban thi đua.
-  const allTabs: [string, string][] = [['tong-quan', 'Tổng quan'], ['nhap-diem', 'Nhập điểm'], ['xep-hang', 'Xếp hạng'], ['tong-hop', 'Tổng hợp'], ['quan-ly', 'Quản lý'], ['lich-su', 'Lịch sử']];
+  const allTabs: [string, string][] = [['tong-quan', 'Tổng quan'], ['nhap-diem', 'Nhập điểm'], ['phieu-co-do', 'Phiếu cờ đỏ'], ['xep-hang', 'Xếp hạng'], ['tong-hop', 'Tổng hợp'], ['quan-ly', 'Quản lý'], ['lich-su', 'Lịch sử']];
   const tabs: [string, string][] = session ? allTabs.filter(([k]) => {
     if (session.role === 'codo') return k === 'nhap-diem' || k === 'xep-hang';
-    if (k === 'quan-ly') return session.role === 'admin';
+    if (k === 'quan-ly' || k === 'phieu-co-do') return session.role === 'admin';
     if (k === 'lich-su') return session.role !== 'viewer';
     return true;
   }) : [];
@@ -1071,7 +1071,7 @@ export default function App() {
       confirmLabel: 'Sửa lại phiếu',
       onConfirm: () => {
         update(prev => ({ ...prev, weeks: prev.weeks.map(w => w.id === score.weekId ? { ...w, submittedAt: null, submittedBy: null } : w), scores: prev.scores.map(x => x.id === score.id ? { ...x, status: 'draft', approvedBy: undefined, approvedAt: undefined, submittedBy: undefined, submittedAt: undefined, returnReason: undefined } : x) }), 'Sửa lại phiếu', `${clsName} — ${week?.label}`, score.id);
-        setClassId(score.classId); setDraft(score.details); setDirty(false); setReturnReason(''); setMsg(`Đã mở phiếu lớp ${clsName} để sửa điểm.`);
+        setClassId(score.classId); setDraft(score.details); setDirty(false); setReturnReason(''); setTab('nhap-diem'); setMsg(`Đã mở phiếu lớp ${clsName} để sửa điểm.`);
       },
     });
   }
@@ -1432,35 +1432,36 @@ export default function App() {
             {session.role === 'codo' && assignment && (
               <div className="row" style={{ marginBottom: 10 }}><button className="btn ghost" type="button" onClick={() => setShowDutyPicker(true)}>Đổi lớp trực</button><span>Bạn đang trực lớp {state.classes.find(c => c.id === assignment.classId)?.name} — {week.label}.</span></div>
             )}
-            {session.role === 'admin' && (
-              <div className="card admin-score-list">
-                <h3>Phiếu cờ đỏ đã nhập — {week.label}</h3>
-                <p>Ban thi đua mở từng phiếu tại đây để quản lí, sửa lỗi hoặc chỉnh sửa điểm số.</p>
-                {state.scores.filter(sc => sc.weekId === week.id).length === 0 ? <p>Chưa có phiếu nào được nhập trong tuần này.</p> : (
-                  <div className="log-list always">
-                    {state.classes.map(cls => {
-                      const sc = state.scores.find(x => x.weekId === week.id && x.classId === cls.id);
-                      if (!sc) return null;
-                      const c = calcScore(sc.details);
-                      return (
-                        <div className="log-item" key={sc.id}>
-                          <b>{cls.name}</b> <span className={`badge ${sc.status}`}>{STATUS_LABEL[sc.status]}</span> {c.final}đ — Loại {c.cls}
-                          <div className="meta">{sc.submittedBy ? `Người gửi: ${sc.submittedBy}` : 'Chưa gửi'}{sc.submittedAt ? ` • ${sc.submittedAt}` : ''}{sc.updatedAt ? ` • Cập nhật: ${sc.updatedAt}` : ''}</div>
-                          <div className="row" style={{ marginTop: 6 }}>
-                            <button className="btn ghost" type="button" onClick={() => switchClass(cls.id)}>Mở phiếu</button>
-                            {(sc.status === 'approved' || sc.status === 'submitted') && <button className="btn grey" type="button" onClick={() => reopenScoreById(sc)}>Sửa điểm</button>}
-                            <button className="btn" type="button" onClick={() => deleteScoreById(sc)}>Xóa phiếu</button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
             <ScoreForm state={state} week={week} draft={draft} calc={calc} canEdit={canEdit} lockHolder={dutyHolder?.name ?? null} classId={classId} setClassId={switchClass} weekId={effectiveWeekId} setWeekId={(id: string) => confirmDirtyAsync(() => setWeekId(id))} search={search} setSearch={setSearch} classes={visibleClasses} currentScore={currentScore} setD={setD} dirty={dirty} onSaveDraft={() => saveScore('draft')} onSubmit={() => saveScore('submitted')} onApprove={approveScore} onReturn={returnScore} returnReason={returnReason} setReturnReason={setReturnReason} onReopen={reopenScore} onDeleteScore={deleteScore} onCopyPrev={copyPrevWeek} onShowPhieu={() => setShowPhieu(true)} showPhieu={showPhieu} onExportClass={doExportDocxClass} sessionRole={session.role} />
           </>
         ))}
+        {tab === 'phieu-co-do' && session.role === 'admin' && (week ? (
+          <div className="card admin-score-list">
+            <h2>Phiếu cờ đỏ đã nhập — {week.label}</h2>
+            <p>Mục riêng để Ban thi đua quản lí phiếu cờ đỏ đã nhập, sửa lỗi hoặc chỉnh sửa điểm số.</p>
+            <div className="row" style={{ marginBottom: 10 }}><label>Tuần</label><select value={effectiveWeekId} onChange={e => confirmDirtyAsync(() => setWeekId(e.target.value))}>{state.weeks.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}</select></div>
+            {state.scores.filter(sc => sc.weekId === week.id).length === 0 ? <p>Chưa có phiếu nào được nhập trong tuần này.</p> : (
+              <div className="log-list always">
+                {state.classes.map(cls => {
+                  const sc = state.scores.find(x => x.weekId === week.id && x.classId === cls.id);
+                  if (!sc) return null;
+                  const c = calcScore(sc.details);
+                  return (
+                    <div className="log-item" key={sc.id}>
+                      <b>{cls.name}</b> <span className={`badge ${sc.status}`}>{STATUS_LABEL[sc.status]}</span> {c.final}đ — Loại {c.cls}
+                      <div className="meta">{sc.submittedBy ? `Người gửi: ${sc.submittedBy}` : 'Chưa gửi'}{sc.submittedAt ? ` • ${sc.submittedAt}` : ''}{sc.updatedAt ? ` • Cập nhật: ${sc.updatedAt}` : ''}</div>
+                      <div className="row" style={{ marginTop: 6 }}>
+                        <button className="btn ghost" type="button" onClick={() => confirmDirtyAsync(() => { setClassId(cls.id); setTab('nhap-diem'); })}>Mở phiếu</button>
+                        {(sc.status === 'approved' || sc.status === 'submitted') && <button className="btn grey" type="button" onClick={() => reopenScoreById(sc)}>Sửa điểm</button>}
+                        <button className="btn" type="button" onClick={() => deleteScoreById(sc)}>Xóa phiếu</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : <div className="card"><h2>Phiếu cờ đỏ</h2><p>Chưa có tuần nào nên chưa có phiếu cờ đỏ.</p></div>)}
         {tab === 'xep-hang' && (week ? (
           <div className="card print-area"><h2>Xếp hạng — {week.label} {week.submittedAt ? <span className="badge approved">Đã nộp {week.submittedAt}</span> : <span className="badge draft">Chưa chốt tuần</span>}</h2>
             {rankMode === 'week' ? (
