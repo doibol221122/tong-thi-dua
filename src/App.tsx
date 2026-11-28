@@ -1061,6 +1061,34 @@ export default function App() {
       },
     });
   }
+  function reopenScoreById(score: Score) {
+    if (session?.role !== 'admin') return;
+    const clsName = state.classes.find(c => c.id === score.classId)?.name ?? '';
+    askConfirm({
+      title: `Sửa lại phiếu lớp ${clsName}?`,
+      body: 'Phiếu sẽ về trạng thái Nháp để Ban thi đua chỉnh sửa điểm số ngay. Sửa xong bấm Lưu & nộp phiếu để tính lại.',
+      confirmLabel: 'Sửa lại phiếu',
+      onConfirm: () => {
+        update(prev => ({ ...prev, weeks: prev.weeks.map(w => w.id === score.weekId ? { ...w, submittedAt: null, submittedBy: null } : w), scores: prev.scores.map(x => x.id === score.id ? { ...x, status: 'draft', approvedBy: undefined, approvedAt: undefined, submittedBy: undefined, submittedAt: undefined, returnReason: undefined } : x) }), 'Sửa lại phiếu', `${clsName} — ${week?.label}`, score.id);
+        setClassId(score.classId); setDraft(score.details); setDirty(false); setReturnReason(''); setMsg(`Đã mở phiếu lớp ${clsName} để sửa điểm.`);
+      },
+    });
+  }
+  function deleteScoreById(score: Score) {
+    if (session?.role !== 'admin') return;
+    const clsName = state.classes.find(c => c.id === score.classId)?.name ?? '';
+    askConfirm({
+      title: `Xóa phiếu lớp ${clsName}?`,
+      body: 'Phiếu sẽ bị xóa khỏi hệ thống. Cờ đỏ cần nhập lại từ đầu nếu lớp này vẫn phải có phiếu.',
+      confirmLabel: 'Xóa phiếu',
+      danger: true,
+      onConfirm: () => {
+        update(prev => ({ ...prev, scores: prev.scores.filter(x => x.id !== score.id) }), 'Xóa phiếu', `${clsName} — ${week?.label}`, score.id);
+        if (classId === score.classId) { setDraft(emptyDetails()); setDirty(false); }
+        setMsg(`Đã xóa phiếu lớp ${clsName}.`);
+      },
+    });
+  }
   function copyPrevWeek() {
     if (!draft || !classId) return;
     if (state.weeks.length < 2) { setMsg('Chưa có tuần trước để chép.'); return; }
@@ -1402,6 +1430,32 @@ export default function App() {
           <>
             {session.role === 'codo' && assignment && (
               <div className="row" style={{ marginBottom: 10 }}><button className="btn ghost" type="button" onClick={() => setShowDutyPicker(true)}>Đổi lớp trực</button><span>Bạn đang trực lớp {state.classes.find(c => c.id === assignment.classId)?.name} — {week.label}.</span></div>
+            )}
+            {session.role === 'admin' && (
+              <div className="card admin-score-list">
+                <h3>Phiếu cờ đỏ đã nhập — {week.label}</h3>
+                <p>Ban thi đua mở từng phiếu tại đây để quản lí, sửa lỗi hoặc chỉnh sửa điểm số.</p>
+                {state.scores.filter(sc => sc.weekId === week.id).length === 0 ? <p>Chưa có phiếu nào được nhập trong tuần này.</p> : (
+                  <div className="log-list always">
+                    {state.classes.map(cls => {
+                      const sc = state.scores.find(x => x.weekId === week.id && x.classId === cls.id);
+                      if (!sc) return null;
+                      const c = calcScore(sc.details);
+                      return (
+                        <div className="log-item" key={sc.id}>
+                          <b>{cls.name}</b> <span className={`badge ${sc.status}`}>{STATUS_LABEL[sc.status]}</span> {c.final}đ — Loại {c.cls}
+                          <div className="meta">{sc.submittedBy ? `Người gửi: ${sc.submittedBy}` : 'Chưa gửi'}{sc.submittedAt ? ` • ${sc.submittedAt}` : ''}{sc.updatedAt ? ` • Cập nhật: ${sc.updatedAt}` : ''}</div>
+                          <div className="row" style={{ marginTop: 6 }}>
+                            <button className="btn ghost" type="button" onClick={() => switchClass(cls.id)}>Mở phiếu</button>
+                            {(sc.status === 'approved' || sc.status === 'submitted') && <button className="btn grey" type="button" onClick={() => reopenScoreById(sc)}>Sửa điểm</button>}
+                            <button className="btn" type="button" onClick={() => deleteScoreById(sc)}>Xóa phiếu</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             )}
             <ScoreForm state={state} week={week} draft={draft} calc={calc} canEdit={canEdit} lockHolder={dutyHolder?.name ?? null} classId={classId} setClassId={switchClass} weekId={effectiveWeekId} setWeekId={(id: string) => confirmDirtyAsync(() => setWeekId(id))} search={search} setSearch={setSearch} classes={visibleClasses} currentScore={currentScore} setD={setD} dirty={dirty} onSaveDraft={() => saveScore('draft')} onSubmit={() => saveScore('submitted')} onApprove={approveScore} onReturn={returnScore} returnReason={returnReason} setReturnReason={setReturnReason} onReopen={reopenScore} onDeleteScore={deleteScore} onCopyPrev={copyPrevWeek} onShowPhieu={() => setShowPhieu(true)} showPhieu={showPhieu} onExportClass={doExportDocxClass} sessionRole={session.role} />
           </>
