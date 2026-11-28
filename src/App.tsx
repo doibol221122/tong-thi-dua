@@ -14,7 +14,7 @@ interface BeforeInstallPromptEvent extends Event {
 
 const LS_KEY = 'tong-thi-dua-v1';
 const LS_SESSION = 'tong-thi-dua-session-v1';
-const STATUS_LABEL: Record<string, string> = { draft: 'Nháp', submitted: 'Chờ duyệt', approved: 'Đã duyệt', returned: 'Bị trả lại' };
+const STATUS_LABEL: Record<string, string> = { draft: 'Nháp', submitted: 'Đã gửi', approved: 'Đã duyệt', returned: 'Bị trả lại' };
 
 // Lỗi đọc dữ liệu local lần khởi động (để hiện ở đầu app, không lặng lẽ mất dữ liệu).
 let loadStateError = '';
@@ -921,9 +921,11 @@ export default function App() {
     update(prev => {
       const ex = prev.scores.find(s => s.weekId === week.id && s.classId === classId);
       const base: Score = ex ?? { id: scoreId, weekId: week.id, classId, details: draft, status: 'draft' };
-      const ns: Score = { ...base, details: draft, status, updatedBy: session?.name, updatedAt: nowStr(),
+      const ns: Score = { ...base, details: draft, status: status === 'submitted' ? 'approved' : status, updatedBy: session?.name, updatedAt: nowStr(),
         submittedBy: status === 'submitted' ? session?.name : base.submittedBy,
         submittedAt: status === 'submitted' ? nowStr() : base.submittedAt,
+        approvedBy: status === 'submitted' ? session?.name : base.approvedBy,
+        approvedAt: status === 'submitted' ? nowStr() : base.approvedAt,
         returnReason: status === 'submitted' ? undefined : base.returnReason };
       return { ...prev, scores: ex ? prev.scores.map(s => s.id === ex.id ? ns : s) : [...prev.scores, ns] };
     }, status === 'submitted' ? 'Nộp phiếu' : 'Lưu nháp', `${clsName} — ${week.label}: ${c.final}đ-${c.cls}${diff.length ? `; thay đổi: ${diff.join('; ')}` : '; không thay đổi số liệu'}`, scoreId);
@@ -931,7 +933,7 @@ export default function App() {
     // "Đã lưu" chỉ hiện sau khi máy chủ xác nhận (đồng bộ xong) — trước
     // đó chỉ báo "đang đồng bộ". Chế độ máy này (không Supabase) thì lưu
     // trên máy là xong ngay.
-    const doneMsg = status === 'submitted' ? `Đã lưu & nộp phiếu lớp ${clsName}: ${c.final}đ, loại ${c.cls}.` : `Đã lưu nháp phiếu lớp ${clsName}.`;
+    const doneMsg = status === 'submitted' ? `Đã gửi phiếu lớp ${clsName}: ${c.final}đ, loại ${c.cls}. Phiếu tính vào xếp hạng ngay, không cần duyệt.` : `Đã lưu nháp phiếu lớp ${clsName}.`;
     if (isSupabaseConfigured) {
       lastSaveNoteRef.current = doneMsg;
       setMsg(`Đã ghi phiếu lớp ${clsName}${status === 'submitted' ? ` (${c.final}đ, loại ${c.cls})` : ' (nháp)'} — đang đồng bộ lên máy chủ…`);
@@ -1046,7 +1048,7 @@ export default function App() {
   function closeWeek() {
     if (!week || session?.role !== 'admin') return;
     const missing = state.classes.filter(c => !state.scores.some(s => s.weekId === week.id && s.classId === c.id && s.status === 'approved'));
-    if (missing.length) { setErrs([`Chưa chốt được tuần: còn ${missing.length} lớp chưa có phiếu đã duyệt (${missing.map(c => c.name).join(', ')}).`]); return; }
+    if (missing.length) { setErrs([`Chưa chốt được tuần: còn ${missing.length} lớp chưa gửi phiếu (${missing.map(c => c.name).join(', ')}).`]); return; }
     askConfirm({
       title: `Nộp & chốt ${week.label}?`,
       body: 'Sau khi chốt, các lớp không sửa phiếu được nữa (Ban thi đua vẫn mở lại được).',
